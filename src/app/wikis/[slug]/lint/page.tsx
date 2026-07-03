@@ -81,6 +81,36 @@ export default async function LintPage({
       <Section title="나가는 링크 없는 페이지" items={report.noOutLinks} base={base} />
       <Section title="소스 노트 없는 원문" items={report.untreatedSources} base={base} />
 
+      {/* 원문 중복 페이지: 원문을 사실상 복붙한 페이지 — 검색 근거가 중복 노출되는 원인 */}
+      <section className="border rounded-lg p-4">
+        <h2 className="font-semibold mb-2">
+          원문 중복 의심 페이지 <span className="text-sm text-gray-400">({report.sourceDupPages.length})</span>
+        </h2>
+        {report.sourceDupPages.length === 0 ? (
+          <p className="text-sm text-gray-400">없음</p>
+        ) : (
+          <>
+            <p className="mb-2 text-xs text-gray-400">
+              본문이 원문과 사실상 동일한 페이지입니다. 검색·AI 답변에서 같은 내용이 근거로 중복 노출되니, 요약으로 고쳐 쓰거나 삭제를 검토하세요.
+            </p>
+            <ul className="space-y-1 text-sm">
+              {report.sourceDupPages.map((d) => (
+                <li key={d.pageSlug} className="flex flex-wrap items-center gap-1.5">
+                  <Link href={`${base}/${encodeURIComponent(d.pageSlug)}`} className="text-blue-600 hover:underline">
+                    {d.pageTitle}
+                  </Link>
+                  <span className="text-gray-400">≈ 원문</span>
+                  <Link href={`${base}/sources/${encodeURIComponent(d.sourceSlug)}`} className="text-blue-600 hover:underline">
+                    {d.sourceTitle}
+                  </Link>
+                  <span className="text-xs text-gray-400">{(d.sim * 100).toFixed(0)}%</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
       {/* 카테고리 건강 (거버넌스) */}
       <section className="border rounded-lg p-4 space-y-4">
         <h2 className="font-semibold">카테고리 건강</h2>

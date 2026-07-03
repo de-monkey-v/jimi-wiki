@@ -5,7 +5,7 @@ import { getWikiForUser } from "@/lib/wiki";
 import { getOntology } from "@/lib/ontology";
 import { NewPageForm } from "./NewPageForm";
 
-/** 새 페이지 수동 생성 전용 화면. 만들면 바로 편집 화면으로 이동한다. */
+/** 새 페이지 수동 생성 전용 화면. 제목·종류·카테고리·본문을 한 화면에서 받아 저장하고 페이지 뷰로 이동한다. */
 export default async function NewPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug: rawSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
@@ -21,7 +21,7 @@ export default async function NewPage({ params }: { params: Promise<{ slug: stri
     .map((c) => ({ slug: c.slug, label: c.label, itemCount: c.itemCount ?? 0 }));
 
   return (
-    <main className="mx-auto max-w-xl px-6 py-10">
+    <main className="mx-auto max-w-2xl px-6 py-10">
       <div className="mb-1 text-sm text-gray-400">
         <Link href="/wikis" className="hover:underline">
           내 위키

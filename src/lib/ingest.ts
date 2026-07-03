@@ -8,6 +8,7 @@ import { normalizeSlug } from "@/lib/markdown";
 import { getPage, listPages, upsertPage, addPageSource } from "@/lib/wiki";
 import { hybridSearch, reindexSource, reindexEmbeddings, indexCategory, matchCategorySemantic, deleteCategoryChunk } from "@/lib/search";
 import { generateWithTools, geminiEnabled, type ToolSpec } from "@/lib/gemini";
+import { PAGE_KINDS } from "@/lib/kinds";
 import { getOntology, matchCategory, isReservedSlug, syncOntologyWithPages, sanitizeCategorySlug } from "@/lib/ontology";
 import type { PageKind } from "@/generated/prisma/client";
 
@@ -23,7 +24,6 @@ export interface IngestResult {
   pagesTouched: string[];
 }
 
-const PAGE_KINDS: PageKind[] = ["note", "concept", "entity", "answer", "meta"];
 const MAX_SOURCE_CHARS = 200_000;
 const MAX_PROMPT_CHARS = 60_000;
 

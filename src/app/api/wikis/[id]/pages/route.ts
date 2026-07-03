@@ -3,11 +3,11 @@ import { apiWikiGate } from "@/lib/api-gate";
 import { listPages, upsertPage, getSource, addPageSource } from "@/lib/wiki";
 import { reindexEmbeddings } from "@/lib/search";
 import { normalizeCategoryForWrite } from "@/lib/governance";
+import { PAGE_KINDS } from "@/lib/kinds";
 import type { PageKind } from "@/generated/prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const PAGE_KINDS: PageKind[] = ["note", "concept", "entity", "answer", "meta"];
 const coerceKind = (v: unknown): PageKind => (PAGE_KINDS.includes(v as PageKind) ? (v as PageKind) : "note");
 
 /** GET /api/wikis/:id/pages — 페이지 목록. */

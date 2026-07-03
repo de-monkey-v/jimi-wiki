@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
-import { createWiki, getWikiForUser, createPage, updatePage } from "@/lib/wiki";
+import { createWiki, getWikiForUser, getPage, createPage, updatePage } from "@/lib/wiki";
+import { MANUAL_KINDS } from "@/lib/kinds";
 import { hasRole } from "@/lib/api-gate";
 import { createIngestRun, runIngestJob, reapStaleRuns } from "@/lib/ingest";
 import { reindexEmbeddings } from "@/lib/search";
@@ -11,9 +12,6 @@ import { answerQuery } from "@/lib/query";
 import { normalizeCategoryForWrite } from "@/lib/governance";
 import { prisma } from "@/lib/db";
 import type { PageKind, WikiKind } from "@/generated/prisma/client";
-
-// 수동 새 페이지 폼에서 만들 수 있는 kind. note는 ingest, answer는 채팅 저장, meta는 온톨로지 전용.
-const MANUAL_KINDS: PageKind[] = ["concept", "entity"];
 
 // 쓰기 액션 공통: 멤버십 + editor 이상 역할 확인
 async function requireWriteAccess(userId: string, wikiSlug: string) {
@@ -42,8 +40,10 @@ export async function createPageAction(formData: FormData) {
   // 카테고리는 서버측 정규화(sanitize + 강한 문자열 매치면 canonical 흡수) — 표기 분기 예방
   const catRaw = String(formData.get("category") ?? "").trim();
   const category = catRaw ? await normalizeCategoryForWrite(wiki.id, catRaw) : null;
-  const page = await createPage(wiki.id, { title, kind, category });
-  redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(page.slug)}/edit`);
+  const body = String(formData.get("body") ?? "");
+  // 제목·종류·카테고리·본문을 한 화면에서 받아 곧바로 저장하고 페이지 뷰로 이동한다(별도 편집 단계 없음).
+  const page = await createPage(wiki.id, { title, kind, category, body });
+  redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(page.slug)}`);
 }
 
 export async function savePageAction(formData: FormData) {
@@ -52,8 +52,11 @@ export async function savePageAction(formData: FormData) {
   const pageSlug = String(formData.get("pageSlug"));
   const wiki = await requireWriteAccess(userId, wikiSlug);
   const title = String(formData.get("title") ?? "");
-  const kind = String(formData.get("kind") ?? "note") as PageKind;
+  const submittedKind = String(formData.get("kind") ?? "") as PageKind;
   const body = String(formData.get("body") ?? "");
+  // kind는 수동 kind(concept/entity)로만 변경 허용. 시스템 kind(note/answer/meta)면 기존 값을 유지한다.
+  const current = await getPage(wiki.id, pageSlug);
+  const kind: PageKind = MANUAL_KINDS.includes(submittedKind) ? submittedKind : (current?.kind ?? "concept");
   await updatePage(wiki.id, pageSlug, { title, kind, body });
   revalidatePath(`/wikis/${wikiSlug}/${pageSlug}`);
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(pageSlug)}`);

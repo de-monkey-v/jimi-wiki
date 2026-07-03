@@ -3,8 +3,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getPage } from "@/lib/wiki";
 import { savePageAction } from "../../../actions";
-
-const KINDS = ["note", "concept", "entity", "answer", "meta"] as const;
+import { MANUAL_KIND_OPTIONS, MANUAL_KINDS, KIND_LABEL } from "@/lib/kinds";
 
 export default async function EditPage({
   params,
@@ -39,9 +38,13 @@ export default async function EditPage({
             className="flex-1 border rounded px-3 py-2 font-semibold"
           />
           <select name="kind" defaultValue={page.kind} className="border rounded px-3 py-2">
-            {KINDS.map((k) => (
-              <option key={k} value={k}>{k}</option>
+            {MANUAL_KIND_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
+            {/* 시스템 kind(note/answer/meta)는 새로 지정할 수 없지만, 이미 그 kind인 페이지는 값을 보존한다 */}
+            {!MANUAL_KINDS.includes(page.kind) && (
+              <option value={page.kind}>{KIND_LABEL[page.kind]}</option>
+            )}
           </select>
         </div>
 

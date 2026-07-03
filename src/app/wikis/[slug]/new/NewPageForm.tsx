@@ -3,6 +3,7 @@ import { useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { createPageAction } from "../../actions";
+import { MANUAL_KIND_OPTIONS } from "@/lib/kinds";
 
 type WikiKind = "personal" | "project" | "channel";
 export type CategoryOption = { slug: string; label: string; itemCount: number };
@@ -25,7 +26,7 @@ function SubmitButton() {
       disabled={pending}
       className="rounded bg-stone-900 px-5 py-2 text-white hover:bg-stone-700 disabled:opacity-50"
     >
-      {pending ? "만드는 중…" : "만들고 편집 →"}
+      {pending ? "만드는 중…" : "만들기"}
     </button>
   );
 }
@@ -199,8 +200,11 @@ export function NewPageForm({
           종류
         </label>
         <select id="new-kind" name="kind" defaultValue="concept" className="w-full rounded border px-3 py-2">
-          <option value="concept">개념 — 아이디어·패턴·이론·문서</option>
-          <option value="entity">개체 — 인물·조직·도구·제품</option>
+          {MANUAL_KIND_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </select>
         <p className="mt-1 text-xs text-stone-400">
           원문을 정리한 소스 노트는{" "}
@@ -212,6 +216,19 @@ export function NewPageForm({
       </div>
 
       <CategoryPicker categories={categories} quickCats={guide.quickCats} />
+
+      <div>
+        <label htmlFor="new-body" className="mb-1 block text-sm font-medium text-stone-600">
+          내용 <span className="font-normal text-stone-400">(선택 · 나중에 편집 가능)</span>
+        </label>
+        <textarea
+          id="new-body"
+          name="body"
+          rows={16}
+          placeholder="마크다운으로 작성. 위키링크는 [[페이지-슬러그]] 또는 [[슬러그|표시명]]"
+          className="w-full rounded border px-3 py-2 font-mono text-sm"
+        />
+      </div>
 
       <div className="flex items-center gap-3 pt-2">
         <SubmitButton />

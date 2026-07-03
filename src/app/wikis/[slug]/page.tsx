@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, listPages, KIND_LABEL } from "@/lib/wiki";
 import { prisma } from "@/lib/db";
-import { reindexAction } from "../actions";
 import { IngestPanel } from "./IngestPanel";
+import { ReindexForm } from "./ReindexForm";
 import { RunStatusBadge } from "./RunStatusBadge";
 
 export default async function WikiHome({
@@ -103,13 +103,7 @@ export default async function WikiHome({
       </div>
 
       {/* 시맨틱 재색인: 수동으로 올린 페이지의 임베딩(선택적 AI)을 채운다 */}
-      <form action={reindexAction} className="mt-4 flex items-center gap-3">
-        <input type="hidden" name="wikiSlug" value={slug} />
-        <button type="submit" className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50">
-          시맨틱 재색인
-        </button>
-        <span className="text-xs text-gray-400">수동 저장한 페이지는 FTS만 색인됩니다. 이 버튼으로 임베딩을 채워 시맨틱 검색을 활성화하세요.</span>
-      </form>
+      <ReindexForm wikiSlug={slug} />
       </>
       )}
 

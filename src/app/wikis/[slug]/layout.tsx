@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { getWikiForUser, getWikiToc } from "@/lib/wiki";
 import { WikiToc } from "@/components/WikiToc";
 import { ChatModalProvider } from "./chat/ChatModal";
+import { JobsIndicator } from "./JobsIndicator";
 
 // 위키 안에서는 좌측 사이드바가 그 위키의 책 목차(TOC)로 전환된다.
 export default async function WikiLayout({
@@ -26,6 +27,7 @@ export default async function WikiLayout({
         <WikiToc slug={slug} title={wiki.title} email={user.email} role={wiki.role} sections={sections} />
         <div className="flex-1 overflow-y-auto">{children}</div>
       </div>
+      <JobsIndicator slug={slug} />
     </ChatModalProvider>
   );
 }

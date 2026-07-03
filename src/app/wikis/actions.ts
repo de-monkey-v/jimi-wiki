@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { createWiki, getWikiForUser, createPage, updatePage } from "@/lib/wiki";
 import { hasRole } from "@/lib/api-gate";
-import { createIngestRun, runIngestJob } from "@/lib/ingest";
+import { createIngestRun, runIngestJob, reapStaleRuns } from "@/lib/ingest";
 import { reindexEmbeddings } from "@/lib/search";
 import { answerQuery } from "@/lib/query";
 import { prisma } from "@/lib/db";
@@ -67,6 +67,44 @@ export async function ingestAction(formData: FormData) {
     ),
   );
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}?run=${run.id}`);
+}
+
+export type RunListItem = {
+  id: string;
+  type: string;
+  status: string;
+  title: string;
+  createdAt: string;
+  finishedAt: string | null;
+  error: string | null;
+  pagesTouched: number;
+};
+
+/** 최근 에이전트 잡 목록(전역 잡 인디케이터 폴링용). 세션 인증 + wiki 스코프. */
+export async function listRunsAction(wikiSlug: string): Promise<RunListItem[] | null> {
+  const userId = await getCurrentUserId();
+  const wiki = await getWikiForUser(userId, wikiSlug);
+  if (!wiki) return null;
+  await reapStaleRuns(wiki.id).catch(() => {}); // 크래시로 고착된 잡 기회적 회수
+  const runs = await prisma.agentRun.findMany({
+    where: { wikiId: wiki.id },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+  });
+  return runs.map((r) => {
+    const input = (r.input ?? {}) as { title?: string; url?: string; text?: string };
+    const output = (r.output ?? {}) as { pagesTouched?: string[] };
+    return {
+      id: r.id,
+      type: r.type,
+      status: r.status,
+      title: input.title?.trim() || input.url || input.text?.slice(0, 40) || r.type,
+      createdAt: r.createdAt.toISOString(),
+      finishedAt: r.finishedAt?.toISOString() ?? null,
+      error: r.error,
+      pagesTouched: Array.isArray(output.pagesTouched) ? output.pagesTouched.length : 0,
+    };
+  });
 }
 
 /** ingest 잡 상태 조회(진행 배지 폴링용). 세션 인증 + wiki 스코프. */

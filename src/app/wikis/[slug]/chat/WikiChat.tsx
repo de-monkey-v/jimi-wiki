@@ -31,6 +31,28 @@ function citeNumber(href: string | undefined, text: string): number | null {
   return raw ? Number(raw) : null;
 }
 
+// 답변 원문에서 실제 인용된 [번호]들을 추출 — "[1]", "[1, 2]" 형태 모두 처리
+function citedNumbers(text: string): Set<number> {
+  const cited = new Set<number>();
+  for (const m of text.matchAll(/\[([\d,\s]+)\]/g)) {
+    for (const part of m[1].split(",")) {
+      const n = Number(part.trim());
+      if (Number.isInteger(n) && n > 0) cited.add(n);
+    }
+  }
+  return cited;
+}
+
+// 근거를 인용/미인용으로 분리. 인용이 하나도 파싱되지 않으면(모델이 인용 생략) 전부 인용으로 취급.
+function splitByCited(sources: ChatSource[], cited: Set<number>): { cited: ChatSource[]; rest: ChatSource[] } {
+  if (cited.size === 0) return { cited: sources, rest: [] };
+  const c: ChatSource[] = [];
+  const r: ChatSource[] = [];
+  for (const s of sources) (cited.has(s.n) ? c : r).push(s);
+  if (c.length === 0) return { cited: sources, rest: [] };
+  return { cited: c, rest: r };
+}
+
 function MarkdownMessage({
   content,
   sources,
@@ -79,12 +101,13 @@ function MarkdownMessage({
   );
 }
 
-// 모바일 폴백: 답변 아래 인라인 칩(데스크톱은 우측 패널이 대신). 클릭 시 모달.
-function SourceCards({ sources, onOpen }: { sources: ChatSource[]; onOpen: (d: EvidenceDoc) => void }) {
-  if (sources.length === 0) return null;
+// 모바일 폴백: 답변 아래 인라인 칩(데스크톱은 우측 패널이 대신). 인용된 근거만. 클릭 시 모달.
+function SourceCards({ sources, cited, onOpen }: { sources: ChatSource[]; cited: Set<number>; onOpen: (d: EvidenceDoc) => void }) {
+  const { cited: citedSources } = splitByCited(sources, cited);
+  if (citedSources.length === 0) return null;
   return (
     <div className="mt-3 pt-2 border-t border-gray-200 flex flex-wrap gap-2 lg:hidden">
-      {sources.map((s) => (
+      {citedSources.map((s) => (
         <button
           key={s.n}
           onClick={() => onOpen({ kind: s.kind, slug: s.slug, title: s.title, heading: s.heading })}
@@ -98,8 +121,25 @@ function SourceCards({ sources, onOpen }: { sources: ChatSource[]; onOpen: (d: E
   );
 }
 
-// 데스크톱 우측 근거 패널: 최근 답변의 근거 문서. 클릭 시 모달.
-function EvidencePanel({ sources, onOpen }: { sources: ChatSource[]; onOpen: (d: EvidenceDoc) => void }) {
+function EvidenceItem({ s, onOpen }: { s: ChatSource; onOpen: (d: EvidenceDoc) => void }) {
+  return (
+    <li>
+      <button
+        onClick={() => onOpen({ kind: s.kind, slug: s.slug, title: s.title, heading: s.heading })}
+        className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-left text-xs hover:border-blue-400 hover:bg-stone-50"
+      >
+        <span className="text-stone-400">[{s.n}]</span>{" "}
+        <span className="font-medium text-stone-700">{s.title}</span>
+        {s.kind === "source" && <span className="ml-1 rounded bg-stone-100 px-1 text-[10px] text-stone-500">원문</span>}
+        {s.heading ? <span className="block pl-4 text-stone-400">{s.heading}</span> : null}
+      </button>
+    </li>
+  );
+}
+
+// 데스크톱 우측 근거 패널: 답변에 실제 인용된 근거를 우선 표시, 미인용 검색 결과는 접어둔다. 클릭 시 모달.
+function EvidencePanel({ sources, cited, onOpen }: { sources: ChatSource[]; cited: Set<number>; onOpen: (d: EvidenceDoc) => void }) {
+  const { cited: citedSources, rest } = splitByCited(sources, cited);
   return (
     <aside className="hidden lg:block w-72 shrink-0">
       <div className="rounded-lg border bg-white p-3">
@@ -107,23 +147,25 @@ function EvidencePanel({ sources, onOpen }: { sources: ChatSource[]; onOpen: (d:
         {sources.length === 0 ? (
           <p className="text-xs text-stone-400">질문하면 답변의 근거 문서가 여기 표시됩니다.</p>
         ) : (
-          <ul className="space-y-1.5">
-            {sources.map((s) => (
-              <li key={s.n}>
-                <button
-                  onClick={() => onOpen({ kind: s.kind, slug: s.slug, title: s.title, heading: s.heading })}
-                  className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-left text-xs hover:border-blue-400 hover:bg-stone-50"
-                >
-                  <span className="text-stone-400">[{s.n}]</span>{" "}
-                  <span className="font-medium text-stone-700">{s.title}</span>
-                  {s.kind === "source" && (
-                    <span className="ml-1 rounded bg-stone-100 px-1 text-[10px] text-stone-500">원문</span>
-                  )}
-                  {s.heading ? <span className="block pl-4 text-stone-400">{s.heading}</span> : null}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="space-y-1.5">
+              {citedSources.map((s) => (
+                <EvidenceItem key={s.n} s={s} onOpen={onOpen} />
+              ))}
+            </ul>
+            {rest.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-stone-400 hover:text-stone-600">
+                  함께 검색된 문서 {rest.length}건 (답변에 인용되지 않음)
+                </summary>
+                <ul className="mt-1.5 space-y-1.5">
+                  {rest.map((s) => (
+                    <EvidenceItem key={s.n} s={s} onOpen={onOpen} />
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
         )}
       </div>
     </aside>
@@ -171,9 +213,10 @@ export function WikiChat({ slug, canWrite }: { slug: string; canWrite: boolean }
   const busy = status === "submitted" || status === "streaming";
   const endRef = useRef<HTMLDivElement>(null);
   const [activeDoc, setActiveDoc] = useState<EvidenceDoc | null>(null);
-  // 우측 패널 기본값: 마지막 assistant 답변의 근거 문서(최근 답변 기준)
+  // 우측 패널 기본값: 마지막 assistant 답변의 근거 문서(최근 답변 기준) + 실제 인용된 번호
   const lastAssistant = [...messages].reverse().find((m) => m.role !== "user");
   const latestSources = lastAssistant ? sourcesOf(lastAssistant) : [];
+  const latestCited = lastAssistant ? citedNumbers(textOf(lastAssistant)) : new Set<number>();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -225,7 +268,7 @@ export function WikiChat({ slug, canWrite }: { slug: string; canWrite: boolean }
                   <span className="text-gray-400 text-sm">검색 중…</span>
                 ) : null}
 
-                {!isUser && <SourceCards sources={sources} onOpen={setActiveDoc} />}
+                {!isUser && <SourceCards sources={sources} cited={citedNumbers(text)} onOpen={setActiveDoc} />}
 
                 {!isUser && canWrite && text.trim() && !busy && (
                   <div className="mt-2 pt-2 border-t border-gray-200">
@@ -282,7 +325,7 @@ export function WikiChat({ slug, canWrite }: { slug: string; canWrite: boolean }
         )}
       </form>
       </div>
-      <EvidencePanel sources={latestSources} onOpen={setActiveDoc} />
+      <EvidencePanel sources={latestSources} cited={latestCited} onOpen={setActiveDoc} />
       <DocModal doc={activeDoc} wikiSlug={slug} onClose={() => setActiveDoc(null)} />
     </div>
   );

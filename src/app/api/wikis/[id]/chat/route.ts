@@ -53,15 +53,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const maxSim = Math.max(0, ...hits.map((h) => h.similarity ?? 0));
   const relevant = !hasSemantic || maxSim >= RELEVANCE_MIN;
 
-  const context = hits
+  // 건별 관련도 컷오프: top-K 채우기용으로 끌려온 무관 문서를 패널·컨텍스트에서 제외.
+  // FTS 단독 히트(similarity undefined)는 키워드 일치이므로 유지. 컷오프 후 번호를 다시 매긴다.
+  const ITEM_MIN = 0.5;
+  const kept = hits.filter((h) => h.similarity === undefined || h.similarity >= ITEM_MIN);
+
+  const context = kept
     .map((h, i) => `[${i + 1}] ${h.pageTitle ?? h.refType}${h.heading ? " › " + h.heading : ""}\n${h.snippet}`)
     .join("\n\n");
 
   // 원문(source) 히트의 refId(=Source id) → slug/title 해소(page는 hybridSearch가 이미 해소).
   const srcById = new Map(
-    (await getSourcesByIds(wiki.id, hits.filter((h) => h.refType === "source").map((h) => h.refId))).map((s) => [s.id, s]),
+    (await getSourcesByIds(wiki.id, kept.filter((h) => h.refType === "source").map((h) => h.refId))).map((s) => [s.id, s]),
   );
-  const sources: ChatSource[] = hits
+  const sources: ChatSource[] = kept
     .map((h, i): ChatSource | null => {
       if (h.refType === "page" && h.pageSlug) {
         return { n: i + 1, kind: "page", slug: h.pageSlug, title: h.pageTitle ?? h.pageSlug, heading: h.heading || undefined };

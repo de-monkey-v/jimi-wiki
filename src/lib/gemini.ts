@@ -129,7 +129,10 @@ export interface ToolLoopResult {
   calls: string[];
 }
 
-/** 수동 function-calling 루프. functionCalls 없을 때까지 반복(최대 maxTurns). model로 GEN_MODEL 오버라이드 가능. */
+/**
+ * 수동 function-calling 루프. functionCalls 없을 때까지 반복(최대 maxTurns). model로 GEN_MODEL 오버라이드 가능.
+ * model이 claude-* 면 동일 계약의 Claude 루프(lib/claude.ts)로 위임한다.
+ */
 export async function generateWithTools(opts: {
   system: string;
   userPrompt: string;
@@ -138,6 +141,10 @@ export async function generateWithTools(opts: {
   model?: string;
 }): Promise<ToolLoopResult> {
   const model = opts.model ?? GEN_MODEL;
+  if (model.startsWith("claude")) {
+    const { claudeGenerateWithTools } = await import("@/lib/claude");
+    return claudeGenerateWithTools({ ...opts, model });
+  }
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
   const contents: Content[] = [{ role: "user", parts: [{ text: opts.userPrompt }] }];
   const called: string[] = [];

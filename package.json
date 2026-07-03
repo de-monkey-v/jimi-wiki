@@ -16,6 +16,7 @@
   "dependencies": {
     "@ai-sdk/google": "^3.0.88",
     "@ai-sdk/react": "^3.0.220",
+    "@anthropic-ai/sdk": "^0.110.0",
     "@auth/prisma-adapter": "^2.11.2",
     "@google/genai": "^2.10.0",
     "@prisma/adapter-pg": "^7.8.0",

@@ -384,6 +384,8 @@ export async function runIngestJob(run: {
         userPrompt,
         tools: buildTools(wikiId, touched, source.id),
         maxTurns: 24,
+        // ingest는 위키 본문을 "쓰는" 에이전트라 품질 레버리지가 가장 큼 — Pro 사용 (chat/lint는 flash 유지)
+        model: process.env.INGEST_MODEL || "gemini-3.1-pro-preview",
       });
       summary = loop.text || "(요약 없음)";
 

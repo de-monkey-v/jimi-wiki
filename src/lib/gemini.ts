@@ -129,13 +129,15 @@ export interface ToolLoopResult {
   calls: string[];
 }
 
-/** 수동 function-calling 루프. functionCalls 없을 때까지 반복(최대 maxTurns). */
+/** 수동 function-calling 루프. functionCalls 없을 때까지 반복(최대 maxTurns). model로 GEN_MODEL 오버라이드 가능. */
 export async function generateWithTools(opts: {
   system: string;
   userPrompt: string;
   tools: ToolSpec[];
   maxTurns?: number;
+  model?: string;
 }): Promise<ToolLoopResult> {
+  const model = opts.model ?? GEN_MODEL;
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
   const contents: Content[] = [{ role: "user", parts: [{ text: opts.userPrompt }] }];
   const called: string[] = [];
@@ -145,7 +147,7 @@ export async function generateWithTools(opts: {
     const res = await withRetry(
       () =>
         client().models.generateContent({
-          model: GEN_MODEL,
+          model,
           contents,
           config: {
             systemInstruction: opts.system,
@@ -186,7 +188,7 @@ export async function generateWithTools(opts: {
   const finalRes = await withRetry(
     () =>
       client().models.generateContent({
-        model: GEN_MODEL,
+        model,
         contents: [
           ...contents,
           { role: "user", parts: [{ text: "이제 도구 호출을 멈추고, 지금까지 만들고 수정한 페이지를 한국어로 요약 보고하라." }] },

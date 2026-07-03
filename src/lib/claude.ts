@@ -1,6 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import type { ToolSpec, ToolLoopResult } from "@/lib/gemini";
+import type { ToolSpec, ToolLoopResult, LoopUsage } from "@/lib/gemini";
 
 let _client: Anthropic | null = null;
 function client(): Anthropic {
@@ -33,6 +33,27 @@ function textOf(res: Anthropic.Message): string {
     .join("\n");
 }
 
+// ---------- prompt caching ----------
+// 프리픽스 캐시 브레이크포인트를 "마지막 메시지의 마지막 블록"으로 매 턴 옮긴다.
+// (system 1개 + 이동식 1개 = 총 2개, 한도 4개 이내. 이전 마커를 지우지 않으면 한도 초과)
+type CacheableBlock = { cache_control?: { type: "ephemeral" } | null };
+function moveCacheBreakpoint(messages: Anthropic.MessageParam[]): void {
+  for (const m of messages) {
+    if (Array.isArray(m.content)) for (const b of m.content) delete (b as CacheableBlock).cache_control;
+  }
+  const last = messages[messages.length - 1];
+  if (last && Array.isArray(last.content) && last.content.length > 0) {
+    (last.content[last.content.length - 1] as CacheableBlock).cache_control = { type: "ephemeral" };
+  }
+}
+
+function addUsage(acc: LoopUsage, u: Anthropic.Usage): void {
+  acc.inputTokens += u.input_tokens;
+  acc.outputTokens += u.output_tokens;
+  acc.cacheReadTokens += u.cache_read_input_tokens ?? 0;
+  acc.cacheWriteTokens += u.cache_creation_input_tokens ?? 0;
+}
+
 /**
  * Claude용 function-calling 루프 — gemini.ts의 generateWithTools와 동일 계약(ToolSpec/ToolLoopResult).
  * stop_reason이 tool_use가 아닐 때까지 반복(최대 maxTurns). 병렬 tool_use는 결과를 한 user 메시지로 반환.
@@ -50,22 +71,29 @@ export async function claudeGenerateWithTools(opts: {
     description: t.decl.description ?? "",
     input_schema: toJsonSchema(t.decl.parameters) as Anthropic.Tool.InputSchema,
   }));
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: opts.userPrompt }];
+  // system은 안정 프리픽스 — 캐시 브레이크포인트 고정 (Sonnet 5 최소 캐시 프리픽스 2048토큰 충족: 실측 ~3.1K)
+  const system: Anthropic.TextBlockParam[] = [
+    { type: "text", text: opts.system, cache_control: { type: "ephemeral" } },
+  ];
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: [{ type: "text", text: opts.userPrompt }] }];
   const called: string[] = [];
+  const usage: LoopUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const maxTurns = opts.maxTurns ?? 12;
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    moveCacheBreakpoint(messages);
     const res = await client().messages.create({
       model: opts.model,
       max_tokens: 16000,
-      system: opts.system,
+      system,
       tools,
       messages,
     });
+    addUsage(usage, res.usage);
 
     const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
     if (res.stop_reason !== "tool_use" || toolUses.length === 0) {
-      return { text: textOf(res), turns: turn, calls: called };
+      return { text: textOf(res), turns: turn, calls: called, usage };
     }
 
     messages.push({ role: "assistant", content: res.content });
@@ -94,11 +122,12 @@ export async function claudeGenerateWithTools(opts: {
   const finalRes = await client().messages.create({
     model: opts.model,
     max_tokens: 16000,
-    system: opts.system,
+    system,
     messages: [
       ...messages,
       { role: "user", content: "이제 도구 호출을 멈추고, 지금까지 만들고 수정한 페이지를 한국어로 요약 보고하라." },
     ],
   });
-  return { text: textOf(finalRes) || "(요약 없음 · maxTurns 도달)", turns: maxTurns, calls: called };
+  addUsage(usage, finalRes.usage);
+  return { text: textOf(finalRes) || "(요약 없음 · maxTurns 도달)", turns: maxTurns, calls: called, usage };
 }

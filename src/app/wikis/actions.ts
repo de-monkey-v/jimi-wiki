@@ -78,6 +78,8 @@ export type RunListItem = {
   finishedAt: string | null;
   error: string | null;
   pagesTouched: number;
+  costUSD: number | null;
+  totalTokens: number | null;
 };
 
 /** 최근 에이전트 잡 목록(전역 잡 인디케이터 폴링용). 세션 인증 + wiki 스코프. */
@@ -93,7 +95,12 @@ export async function listRunsAction(wikiSlug: string): Promise<RunListItem[] | 
   });
   return runs.map((r) => {
     const input = (r.input ?? {}) as { title?: string; url?: string; text?: string };
-    const output = (r.output ?? {}) as { pagesTouched?: string[] };
+    const output = (r.output ?? {}) as {
+      pagesTouched?: string[];
+      costUSD?: number;
+      usage?: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+    };
+    const u = output.usage;
     return {
       id: r.id,
       type: r.type,
@@ -103,6 +110,8 @@ export async function listRunsAction(wikiSlug: string): Promise<RunListItem[] | 
       finishedAt: r.finishedAt?.toISOString() ?? null,
       error: r.error,
       pagesTouched: Array.isArray(output.pagesTouched) ? output.pagesTouched.length : 0,
+      costUSD: typeof output.costUSD === "number" ? output.costUSD : null,
+      totalTokens: u ? (u.inputTokens ?? 0) + (u.outputTokens ?? 0) + (u.cacheReadTokens ?? 0) + (u.cacheWriteTokens ?? 0) : null,
     };
   });
 }

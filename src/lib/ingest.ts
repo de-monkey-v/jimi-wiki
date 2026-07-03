@@ -61,6 +61,25 @@ Ingest 절차:
 
 const SYSTEM_PROMPT = ONTOLOGY_RULES ? `${AGENT_PROMPT}\n\n---\n\n## 분류 규칙(정본)\n\n${ONTOLOGY_RULES}` : AGENT_PROMPT;
 
+// ---------- 비용 추정 ----------
+// $/1M 토큰. 표시용 추정치 — 가격 개정 시 여기만 갱신. (Sonnet 5는 2026-08-31까지 인트로 가격)
+const PRICE_PER_MTOK: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  "claude-sonnet-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
+  "gemini-3.1-pro-preview": { input: 2, output: 12, cacheRead: 0.5, cacheWrite: 0 },
+  "gemini-2.5-flash": { input: 0.3, output: 2.5, cacheRead: 0.075, cacheWrite: 0 },
+};
+export function estimateCostUSD(model: string, u: import("@/lib/gemini").LoopUsage): number | null {
+  const p = PRICE_PER_MTOK[model];
+  if (!p) return null;
+  // Anthropic: inputTokens는 캐시 제외분, 캐시 읽기/쓰기는 별도 단가.
+  // Gemini: inputTokens가 캐시분 포함 합계라 캐시 읽기 할인만큼 차감.
+  const cacheAdjust = model.startsWith("claude")
+    ? u.cacheReadTokens * p.cacheRead + u.cacheWriteTokens * p.cacheWrite
+    : -(u.cacheReadTokens * Math.max(0, p.input - p.cacheRead));
+  const usd = (u.inputTokens * p.input + u.outputTokens * p.output + cacheAdjust) / 1_000_000;
+  return Math.round(usd * 10000) / 10000;
+}
+
 function coerceKind(v: unknown): PageKind {
   return PAGE_KINDS.includes(v as PageKind) ? (v as PageKind) : "note";
 }
@@ -274,7 +293,8 @@ function todayStamp(): string {
 }
 
 // slug 경합 안전: P2002면 다음 접미로 재시도(check-then-create TOCTOU 회피)
-async function createSourceUnique(
+/** 원문 저장(불변, slug 경합 안전). ingest 파이프라인과 REST /sources가 공용. */
+export async function createSourceUnique(
   wikiId: string,
   title: string,
   url: string | undefined,
@@ -356,6 +376,8 @@ export async function runIngestJob(run: {
 
     const touched = new Set<string>();
     let summary: string;
+    let loopUsage: import("@/lib/gemini").LoopUsage | undefined;
+    const ingestModel = process.env.INGEST_MODEL || "gemini-3.1-pro-preview";
 
     if (!geminiEnabled()) {
       const res = await upsertPage(wikiId, {
@@ -384,10 +406,11 @@ export async function runIngestJob(run: {
         userPrompt,
         tools: buildTools(wikiId, touched, source.id),
         maxTurns: 24,
-        // ingest는 위키 본문을 "쓰는" 에이전트라 품질 레버리지가 가장 큼 — Pro 사용 (chat/lint는 flash 유지)
-        model: process.env.INGEST_MODEL || "gemini-3.1-pro-preview",
+        // ingest는 위키 본문을 "쓰는" 에이전트라 품질 레버리지가 가장 큼 — 상위 모델 사용 (chat/lint는 flash 유지)
+        model: ingestModel,
       });
       summary = loop.text || "(요약 없음)";
+      loopUsage = loop.usage;
 
       // 온톨로지 ↔ 실제 category 양방향 동기화(신규 추가 + 고아 제거) + 재사용 코퍼스 갱신. 비치명적.
       try {
@@ -414,7 +437,16 @@ export async function runIngestJob(run: {
     });
     await prisma.agentRun.update({
       where: { id },
-      data: { status: "done", output: { summary, sourceSlug, pagesTouched: [...touched] }, finishedAt: new Date() },
+      data: {
+        status: "done",
+        output: {
+          summary,
+          sourceSlug,
+          pagesTouched: [...touched],
+          ...(loopUsage ? { model: ingestModel, usage: { ...loopUsage }, costUSD: estimateCostUSD(ingestModel, loopUsage) } : {}),
+        },
+        finishedAt: new Date(),
+      },
     });
   } catch (e) {
     await prisma.agentRun.update({

@@ -86,6 +86,12 @@ export function JobsIndicator({ slug }: { slug: string }) {
                   <div className="mt-0.5 text-xs text-stone-400">
                     {ACTIVE.has(r.status) ? "실행 중" : r.status === "done" ? "완료" : "실패"} · {elapsedLabel(r.createdAt, r.finishedAt, now)}
                     {r.status === "done" && r.pagesTouched > 0 && <> · 페이지 {r.pagesTouched}개</>}
+                    {r.costUSD !== null && (
+                      <>
+                        {" "}· ${r.costUSD.toFixed(3)}
+                        {r.totalTokens !== null && <> ({Math.round(r.totalTokens / 1000)}K tok)</>}
+                      </>
+                    )}
                   </div>
                   {r.error && <p className="mt-0.5 truncate text-xs text-red-600">{r.error}</p>}
                 </div>

@@ -123,10 +123,17 @@ export interface ToolSpec {
   decl: FunctionDeclaration;
   handler: (args: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
+export interface LoopUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
 export interface ToolLoopResult {
   text: string;
   turns: number;
   calls: string[];
+  usage?: LoopUsage;
 }
 
 /**
@@ -148,6 +155,13 @@ export async function generateWithTools(opts: {
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
   const contents: Content[] = [{ role: "user", parts: [{ text: opts.userPrompt }] }];
   const called: string[] = [];
+  const usage: LoopUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  const addUsage = (m?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number }) => {
+    if (!m) return;
+    usage.inputTokens += m.promptTokenCount ?? 0; // Gemini는 캐시분 포함 프롬프트 합계
+    usage.outputTokens += m.candidatesTokenCount ?? 0;
+    usage.cacheReadTokens += m.cachedContentTokenCount ?? 0; // 암묵 캐시 적중분(참고용)
+  };
   const maxTurns = opts.maxTurns ?? 12;
 
   for (let turn = 0; turn < maxTurns; turn++) {
@@ -164,10 +178,11 @@ export async function generateWithTools(opts: {
         }),
       "generateContent",
     );
+    addUsage(res.usageMetadata);
 
     const calls: FunctionCall[] | undefined = res.functionCalls;
     if (!calls || calls.length === 0) {
-      return { text: res.text ?? "", turns: turn, calls: called };
+      return { text: res.text ?? "", turns: turn, calls: called, usage };
     }
 
     // 모델 턴을 먼저 히스토리에 추가 (thoughtSignature 포함, 누락 시 오류)
@@ -204,5 +219,6 @@ export async function generateWithTools(opts: {
       }),
     "generateContent(final)",
   );
-  return { text: finalRes.text ?? "(요약 없음 · maxTurns 도달)", turns: maxTurns, calls: called };
+  addUsage(finalRes.usageMetadata);
+  return { text: finalRes.text ?? "(요약 없음 · maxTurns 도달)", turns: maxTurns, calls: called, usage };
 }

@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Prisma(및 런타임 유틸)를 서버 번들에서 external 처리 — node_modules에서 직접 로드
+  serverExternalPackages: [
+    "@prisma/client",
+    "@prisma/adapter-pg",
+    "@prisma/client-runtime-utils",
+  ],
+  // dev 서버를 localhost가 아닌 호스트명으로 접속할 때 HMR/정적 리소스가 차단되지 않도록 허용.
+  // (oss-wsl = 이 WSL 머신의 호스트명 — Windows 브라우저에서 이 이름으로 접속)
+  allowedDevOrigins: ["oss-wsl", "*.oss-wsl", "localhost", "127.0.0.1"],
 };
 
 export default nextConfig;

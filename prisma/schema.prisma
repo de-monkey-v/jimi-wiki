@@ -1,0 +1,284 @@
+// jimi-wiki 플랫폼 데이터 모델 — design/jimi-wiki-platform.md §4 참조
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  output          = "../src/generated/prisma"
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+// ---------- enums ----------
+enum Role {
+  owner
+  editor
+  viewer
+}
+
+enum Visibility {
+  private
+  unlisted
+  public
+}
+
+enum WikiKind {
+  personal
+  project
+  channel
+}
+
+enum PageKind {
+  note
+  concept
+  entity
+  answer
+  meta
+}
+
+enum LogKind {
+  ingest
+  query
+  lint
+  ontology
+}
+
+enum AgentType {
+  ingest
+  query
+  lint
+}
+
+enum AgentStatus {
+  pending
+  running
+  done
+  error
+}
+
+// ---------- 인증 (Auth.js) ----------
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+  createdAt     DateTime     @default(now())
+  accounts      Account[]
+  sessions      Session[]
+  memberships   Membership[]
+  createdWikis  Wiki[]       @relation("WikiCreatedBy")
+  apiKeys       ApiKey[]
+}
+
+// ---------- API 키 인증 (프로그램적 호출용 Bearer 토큰) ----------
+// 브라우저는 세션(위 Session/Account) 유지, API 라우트는 이 토큰으로 인증.
+// 원문 키는 저장하지 않는다 — sha256(hashedKey)만 저장, prefix는 노출용 식별자.
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String // 사람이 식별하는 라벨 ("ingest-bot" 등)
+  hashedKey  String    @unique // sha256(token) hex, 조회·비교 대상
+  prefix     String // 토큰 앞부분(비밀 아님) — UI 표시/키 구분용
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------- 테넌트 ----------
+model Wiki {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  title       String
+  description String?
+  visibility  Visibility   @default(private)
+  kind        WikiKind     @default(personal)
+  createdById String
+  createdBy   User         @relation("WikiCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+  pages       Page[]
+  pageLinks   PageLink[]
+  sources     Source[]
+  chunks      SearchChunk[]
+  logs        LogEntry[]
+  shareLinks  ShareLink[]
+  agentRuns   AgentRun[]
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  wikiId    String
+  userId    String
+  role      Role     @default(owner)
+  createdAt DateTime @default(now())
+  wiki      Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([wikiId, userId])
+  @@index([userId])
+}
+
+model ShareLink {
+  id        String    @id @default(cuid())
+  wikiId    String
+  token     String    @unique
+  role      Role      @default(viewer)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  wiki      Wiki      @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+}
+
+// ---------- 콘텐츠 ----------
+model Page {
+  id          String     @id @default(cuid())
+  wikiId      String
+  slug        String
+  title       String
+  kind        PageKind   @default(note)
+  frontmatter Json       @default("{}")
+  body        String     @default("")
+  sortOrder   Int        @default(0) // 형제 페이지 간 순서(책 목차)
+  parentId    String? // 상위 페이지(챕터). 루트는 null
+  category    String? // 자유형 폴더 경로(예: "ai/architectures"). 온톨로지 조직 축
+  sourceId    String? // 이 페이지가 파생된 원문(provenance). note에 주로 연결
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  wiki        Wiki       @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  parent      Page?      @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Page[]     @relation("PageTree")
+  source      Source?    @relation("PageSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  outLinks    PageLink[] @relation("PageOut")
+  inLinks     PageLink[] @relation("PageIn")
+  contributions PageContribution[] // 이 파생 페이지에 기여한 원본들(M:N provenance)
+
+  @@unique([wikiId, slug])
+  @@index([wikiId, kind])
+  @@index([wikiId, parentId, sortOrder])
+  @@index([wikiId, category])
+}
+
+model PageLink {
+  id         String  @id @default(cuid())
+  wikiId     String
+  fromPageId String
+  toSlug     String
+  toPageId   String?
+  wiki       Wiki    @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  from       Page    @relation("PageOut", fields: [fromPageId], references: [id], onDelete: Cascade)
+  to         Page?   @relation("PageIn", fields: [toPageId], references: [id], onDelete: SetNull)
+
+  @@index([wikiId, toPageId])
+  @@index([wikiId, toSlug])
+  @@index([fromPageId])
+}
+
+model Source {
+  id         String   @id @default(cuid())
+  wikiId     String
+  slug       String
+  title      String
+  url        String?
+  body       String?
+  storageKey String?
+  ingestedAt DateTime @default(now())
+  wiki       Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  pages      Page[]   @relation("PageSource")
+  contributions PageContribution[] @relation("SourceContribs") // 이 원본이 기여한 파생 페이지들
+
+  @@unique([wikiId, slug])
+}
+
+// 파생 페이지(concept/entity/answer) ↔ 기여 원본(Source)의 M:N. note의 단일 Page.sourceId와 별개.
+model PageContribution {
+  id       String @id @default(cuid())
+  wikiId   String
+  pageId   String
+  sourceId String
+  page     Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  source   Source @relation("SourceContribs", fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, sourceId])
+  @@index([sourceId])
+}
+
+model SearchChunk {
+  id        String                       @id @default(cuid())
+  wikiId    String
+  refType   String // 'page' | 'source'
+  refId     String
+  heading   String                       @default("")
+  text      String
+  hash      String
+  embedding Unsupported("vector(768)")?
+  wiki      Wiki                         @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@index([wikiId])
+  @@index([refType, refId])
+}
+
+model LogEntry {
+  id        String   @id @default(cuid())
+  wikiId    String
+  kind      LogKind
+  title     String
+  detail    String   @default("")
+  createdAt DateTime @default(now())
+  wiki      Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@index([wikiId, createdAt])
+}
+
+model AgentRun {
+  id         String      @id @default(cuid())
+  wikiId     String
+  userId     String?
+  type       AgentType
+  status     AgentStatus @default(pending)
+  input      Json        @default("{}")
+  output     Json?
+  error      String?
+  createdAt  DateTime    @default(now())
+  finishedAt DateTime?
+  wiki       Wiki        @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@index([wikiId, createdAt])
+}

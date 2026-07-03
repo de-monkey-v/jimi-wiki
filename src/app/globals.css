@@ -1,26 +1,87 @@
 @import "tailwindcss";
+/* streamdown(마크다운 렌더) dist 클래스를 Tailwind가 스캔하도록 */
+@source "../../node_modules/streamdown/dist/index.js";
 
+/* 라이트 전용 · 따뜻한 뉴트럴 미니멀 팔레트(레퍼런스: 에어리 화이트) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fafaf9; /* 앱 배경(따뜻한 오프화이트) */
+  --surface: #ffffff; /* 카드 */
+  --foreground: #1c1917; /* 본문(따뜻한 near-black) */
+  --muted: #78716c; /* 보조 텍스트(stone-500) */
+  --border: #e7e5e4; /* stone-200 */
+  --accent: #4f46e5; /* 링크/액센트(절제된 인디고) */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light; /* 브라우저 폼/스크롤바도 라이트 고정 */
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* 재사용 컴포넌트 클래스 (미니멀 통일) */
+.btn-primary {
+  background: #1c1917;
+  color: #fff;
+  border-radius: 0.625rem;
+  padding: 0.5rem 1.1rem;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+.btn-primary:hover { background: #44403c; }
+.btn-secondary {
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  padding: 0.5rem 1rem;
+  transition: background 0.15s;
+}
+.btn-secondary:hover { background: #f5f5f4; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+}
+a.accent, .accent { color: var(--accent); }
+
+/* 위키링크 */
+.wikilink {
+  color: #2563eb;
+  text-decoration: none;
+}
+.wikilink:hover {
+  text-decoration: underline;
+}
+.wikilink-missing {
+  color: #dc2626;
+  border-bottom: 1px dashed #dc2626;
+}
+
+/* 렌더된 페이지 본문 기본 타이포 */
+.wiki-content {
+  line-height: 1.7;
+}
+.wiki-content h1 { font-size: 1.6rem; font-weight: 700; margin: 1.2em 0 0.5em; }
+.wiki-content h2 { font-size: 1.3rem; font-weight: 700; margin: 1.1em 0 0.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.2em; }
+.wiki-content h3 { font-size: 1.1rem; font-weight: 600; margin: 1em 0 0.4em; }
+.wiki-content p { margin: 0.6em 0; }
+.wiki-content ul { list-style: disc; padding-left: 1.4em; margin: 0.6em 0; }
+.wiki-content ol { list-style: decimal; padding-left: 1.4em; margin: 0.6em 0; }
+.wiki-content a { color: #2563eb; }
+.wiki-content code { background: #f3f4f6; padding: 0.1em 0.3em; border-radius: 4px; font-size: 0.9em; }
+.wiki-content pre { background: #f3f4f6; padding: 0.8em; border-radius: 8px; overflow-x: auto; margin: 0.8em 0; }
+.wiki-content pre code { background: none; padding: 0; }
+.wiki-content blockquote { border-left: 3px solid #d1d5db; padding-left: 1em; color: #4b5563; margin: 0.8em 0; }
+.wiki-content table { border-collapse: collapse; margin: 0.8em 0; }
+.wiki-content th, .wiki-content td { border: 1px solid #d1d5db; padding: 0.4em 0.7em; }

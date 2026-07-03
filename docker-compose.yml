@@ -1,0 +1,21 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: jimi-wiki-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jimi
+      POSTGRES_PASSWORD: jimi
+      POSTGRES_DB: jimi
+    ports:
+      - "5433:5432"
+    volumes:
+      - jimi-wiki-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jimi -d jimi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  jimi-wiki-pgdata:

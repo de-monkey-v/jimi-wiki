@@ -94,11 +94,21 @@ export async function lintWiki(wikiId: string, opts?: { deep?: boolean }): Promi
   const orphanPages = pages.filter((p) => !inbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));
   const noOutLinks = pages.filter((p) => !outbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));
 
-  // 소스 노트 없는 원문: sources frontmatter/본문에서 참조되지 않은 Source
-  const sources = await prisma.source.findMany({ where: { wikiId }, select: { slug: true, title: true, body: true } });
-  const pageBodies = await prisma.page.findMany({ where: { wikiId }, select: { slug: true, title: true, body: true } });
+  // 소스 노트 없는 원문. "처리됨" 판정은 세 경로 중 하나면 충분:
+  // (a) note 페이지의 sourceId provenance, (b) 파생 페이지의 PageContribution, (c) 본문 내 slug 언급(구형 위키 호환)
+  const sources = await prisma.source.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true, body: true } });
+  const pageBodies = await prisma.page.findMany({
+    where: { wikiId },
+    select: { slug: true, title: true, body: true, sourceId: true },
+  });
   const allBodies = pageBodies.map((p) => p.body).join("\n");
-  const untreatedSources = sources.filter((s) => !allBodies.includes(s.slug)).map((s) => ({ slug: s.slug, title: s.title }));
+  const treatedSourceIds = new Set(pageBodies.map((p) => p.sourceId).filter((id): id is string => id !== null));
+  for (const c of await prisma.pageContribution.findMany({ where: { wikiId }, select: { sourceId: true } })) {
+    treatedSourceIds.add(c.sourceId);
+  }
+  const untreatedSources = sources
+    .filter((s) => !treatedSourceIds.has(s.id) && !allBodies.includes(s.slug))
+    .map((s) => ({ slug: s.slug, title: s.title }));
 
   // 원문 중복 페이지: 본문이 어떤 Source와 사실상 동일(복붙)한 페이지. 페이지당 최고 유사 원문 1건만 보고.
   const normSources = sources

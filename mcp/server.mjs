@@ -95,7 +95,7 @@ server.registerTool(
   "write_page",
   {
     description:
-      "페이지 생성/수정. kind: note(소스 노트)|concept|entity|answer|meta. note에는 category를 넣지 말 것. sourceSlug를 주면 note는 provenance로, 파생 페이지는 기여 기록으로 연결된다. 본문은 마크다운, 내부 링크는 [[slug]] 또는 [[slug|표시명]].",
+      "페이지 생성/수정. kind: note(소스 노트)|concept|entity|answer|meta. note에는 category를 넣지 말 것. sourceSlug를 주면 note는 provenance로, 파생 페이지는 기여 기록으로 연결된다. 본문은 마크다운, 내부 링크는 [[slug]] 또는 [[slug|표시명]]. 작업의 마지막 write_page에는 embed=true를 포함해 시맨틱 검색 색인을 채워라(위키 단위 1회면 충분).",
     inputSchema: {
       slug: z.string().optional().describe("생략 시 title에서 생성. 기존 slug를 주면 수정"),
       title: z.string().describe("페이지 제목"),
@@ -103,6 +103,7 @@ server.registerTool(
       body: z.string().describe("마크다운 본문"),
       category: z.string().optional().describe("파생 페이지의 분류 경로(예: ai/concepts). 기존 카테고리 재사용 우선"),
       sourceSlug: z.string().optional().describe("근거 원문의 slug (create_source가 반환)"),
+      embed: z.boolean().optional().describe("true면 미색인 청크 전체를 임베딩(시맨틱 검색 반영). 작업 마지막 호출에 1회"),
     },
   },
   async (args) => {

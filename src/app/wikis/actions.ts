@@ -8,8 +8,12 @@ import { hasRole } from "@/lib/api-gate";
 import { createIngestRun, runIngestJob, reapStaleRuns } from "@/lib/ingest";
 import { reindexEmbeddings } from "@/lib/search";
 import { answerQuery } from "@/lib/query";
+import { normalizeCategoryForWrite } from "@/lib/governance";
 import { prisma } from "@/lib/db";
 import type { PageKind, WikiKind } from "@/generated/prisma/client";
+
+// 수동 새 페이지 폼에서 만들 수 있는 kind. note는 ingest, answer는 채팅 저장, meta는 온톨로지 전용.
+const MANUAL_KINDS: PageKind[] = ["concept", "entity"];
 
 // 쓰기 액션 공통: 멤버십 + editor 이상 역할 확인
 async function requireWriteAccess(userId: string, wikiSlug: string) {
@@ -32,8 +36,12 @@ export async function createPageAction(formData: FormData) {
   const wikiSlug = String(formData.get("wikiSlug"));
   const wiki = await requireWriteAccess(userId, wikiSlug);
   const title = String(formData.get("title") ?? "");
-  const kind = String(formData.get("kind") ?? "note") as PageKind;
-  const category = String(formData.get("category") ?? "").trim() || null;
+  // 수동 생성은 concept/entity로 제한(폼 밖에서의 임의 kind 주입 방어). 미허용 값은 concept로 강등.
+  const kindRaw = String(formData.get("kind") ?? "concept") as PageKind;
+  const kind: PageKind = MANUAL_KINDS.includes(kindRaw) ? kindRaw : "concept";
+  // 카테고리는 서버측 정규화(sanitize + 강한 문자열 매치면 canonical 흡수) — 표기 분기 예방
+  const catRaw = String(formData.get("category") ?? "").trim();
+  const category = catRaw ? await normalizeCategoryForWrite(wiki.id, catRaw) : null;
   const page = await createPage(wiki.id, { title, kind, category });
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(page.slug)}/edit`);
 }

@@ -39,7 +39,15 @@ const SLUG_RE = /[^a-z0-9가-힣/_-]/g;
 const LABEL_RE = /[^a-z0-9가-힣 ()/_-]/gi;
 
 export function sanitizeCategorySlug(raw: string): string | null {
-  const s = raw.trim().toLowerCase().replace(/\s+/g, "-").replace(SLUG_RE, "").replace(/-{2,}/g, "-").replace(/^\/+|\/+$/g, "");
+  const s = raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-") // 공백 → 하이픈
+    .replace(SLUG_RE, "") // 허용 외 문자 제거
+    .replace(/-*\/-*/g, "/") // 슬래시 주변 하이픈 제거: "a / b" → "a-/-b" → "a/b"
+    .replace(/\/{2,}/g, "/") // 연속 슬래시 축약
+    .replace(/-{2,}/g, "-") // 연속 하이픈 축약
+    .replace(/^[/-]+|[/-]+$/g, ""); // 앞뒤 슬래시·하이픈 제거
   if (!s) return null;
   if (s.split("/").length > CATEGORY_MAX_DEPTH) return null;
   return s.slice(0, 60);

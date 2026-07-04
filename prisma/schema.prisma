@@ -78,14 +78,40 @@ model User {
 model ApiKey {
   id         String    @id @default(cuid())
   userId     String
+  wikiId     String? // 스코프 위키 — null=전체 위키(레거시). 값이 있으면 그 위키에서만 유효
   name       String // 사람이 식별하는 라벨 ("ingest-bot" 등)
   hashedKey  String    @unique // sha256(token) hex, 조회·비교 대상
   prefix     String // 토큰 앞부분(비밀 아님) — UI 표시/키 구분용
+  maxRole    Role? // 상한 역할 — null=다운그레이드 없음(멤버십 역할 그대로). 유효역할=min(멤버십, maxRole)
+  expiresAt  DateTime? // 만료 시각 — null=무만료. now 이후면 인증 실패
+  revokedAt  DateTime? // 폐기 시각(soft-revoke) — null=활성. 하드삭제 대신 이 값을 채운다
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wiki       Wiki?     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([wikiId])
+}
+
+// ---------- 사용량 계측 (LLM/임베딩 호출 단위 이벤트) ----------
+// 스칼라 위주(관계 미연결) — 계측은 fire-and-forget이라 FK 제약/조인 비용을 피한다.
+// userId/apiKeyId/wikiId는 컨텍스트가 있을 때만 채워지는 소프트 참조.
+model UsageEvent {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  userId       String? // 호출 주체(세션/키 소유자). 컨텍스트 없으면 null
+  apiKeyId     String? // API 키 호출이면 그 키 id
+  wikiId       String? // 대상 위키
+  kind         String // "llm" | "embed"
+  route        String   @default("") // 호출 출처("query"|"ingest"|"chat"|"lint"|"search"|"reindex" 등)
+  model        String? // 사용 모델명
+  inputTokens  Int?
+  outputTokens Int?
+  costUsd      Float?
+
+  @@index([userId, createdAt])
+  @@index([wikiId, createdAt])
 }
 
 model Account {
@@ -142,6 +168,7 @@ model Wiki {
   logs        LogEntry[]
   shareLinks  ShareLink[]
   agentRuns   AgentRun[]
+  apiKeys     ApiKey[]
 }
 
 model Membership {

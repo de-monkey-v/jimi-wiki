@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getApiUser } from "@/lib/apikey";
+import { getApiAuth } from "@/lib/apikey";
 import { createWiki, listWikisForUser } from "@/lib/wiki";
 import type { WikiKind } from "@/generated/prisma/client";
 
@@ -7,11 +7,16 @@ export const dynamic = "force-dynamic";
 
 const KINDS: WikiKind[] = ["personal", "project", "channel"];
 
-/** GET /api/wikis — 내 위키 목록(Bearer). */
+/**
+ * GET /api/wikis — 내 위키 목록(Bearer).
+ * 위키로 스코프된 키(key.wikiId)는 그 위키만 보이게 필터 — 다른 위키 메타데이터 열거 차단.
+ */
 export async function GET(req: Request) {
-  const user = await getApiUser(req);
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { "WWW-Authenticate": "Bearer" } });
-  const wikis = await listWikisForUser(user.id);
+  const auth = await getApiAuth(req);
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { "WWW-Authenticate": "Bearer" } });
+  const { user, key } = auth;
+  const all = await listWikisForUser(user.id);
+  const wikis = key.wikiId ? all.filter((w) => w.id === key.wikiId) : all;
   return NextResponse.json(
     {
       wikis: wikis.map((w) => ({
@@ -27,10 +32,17 @@ export async function GET(req: Request) {
   );
 }
 
-/** POST /api/wikis — 위키 생성(Bearer). body: { title, kind?, description? } */
+/**
+ * POST /api/wikis — 위키 생성(Bearer). body: { title, kind?, description? }
+ * 스코프 키(key.wikiId≠null)나 읽기전용 키(maxRole=viewer)는 위키 생성 불가 — 스코프/상한 우회 차단.
+ */
 export async function POST(req: Request) {
-  const user = await getApiUser(req);
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { "WWW-Authenticate": "Bearer" } });
+  const auth = await getApiAuth(req);
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { "WWW-Authenticate": "Bearer" } });
+  const { user, key } = auth;
+  if (key.wikiId || key.maxRole === "viewer") {
+    return NextResponse.json({ error: "forbidden_scoped_key" }, { status: 403 });
+  }
   let body: { title?: string; kind?: string; description?: string };
   try {
     body = await req.json();

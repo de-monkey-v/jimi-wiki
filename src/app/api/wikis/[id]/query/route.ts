@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiWikiGate, hasRole } from "@/lib/api-gate";
+import { sessionOnlyGate, hasRole } from "@/lib/api-gate";
 import { answerQuery } from "@/lib/query";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ export const maxDuration = 60;
 /** POST /api/wikis/:id/query — 검색+합성 답변. body: { question, save? }. save=true는 editor 이상. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const gate = await apiWikiGate(req, id); // 읽기(질문)는 viewer 허용
+  const gate = await sessionOnlyGate(id); // 내부 LLM 합성 — 세션 전용, 읽기(질문)는 viewer 허용
   if (!gate.ok) return gate.res;
 
   let body: { question?: string; save?: boolean };
@@ -23,7 +23,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   try {
-    const result = await answerQuery(gate.wiki.id, body.question, { save: !!body.save });
+    const result = await answerQuery(gate.wiki.id, body.question, { save: !!body.save, userId: gate.user.id });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

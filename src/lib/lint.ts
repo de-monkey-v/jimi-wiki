@@ -1,7 +1,8 @@
 import "server-only";
 import { Type } from "@google/genai";
 import { prisma } from "@/lib/db";
-import { generateWithTools, geminiEnabled, type ToolSpec } from "@/lib/gemini";
+import { generateWithTools, geminiEnabled, GEN_MODEL, type ToolSpec } from "@/lib/gemini";
+import { recordUsage } from "@/lib/usage";
 import { listPages, getPage } from "@/lib/wiki";
 import { detectCategoryIssues, recountItemCounts, type CategoryIssues } from "@/lib/governance";
 
@@ -142,6 +143,16 @@ export async function lintWiki(wikiId: string, opts?: { deep?: boolean }): Promi
         maxTurns: 12,
       });
       report.llmNotes = loop.text;
+      if (loop.usage) {
+        recordUsage({
+          wikiId,
+          route: "lint",
+          kind: "llm",
+          model: GEN_MODEL,
+          inputTokens: loop.usage.inputTokens,
+          outputTokens: loop.usage.outputTokens,
+        });
+      }
     } catch (e) {
       report.llmNotes = `(LLM 점검 실패: ${(e as Error).message})`;
     }

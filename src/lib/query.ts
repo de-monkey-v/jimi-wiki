@@ -27,7 +27,7 @@ const SYSTEM = `너는 이 위키의 지식으로만 답하는 조수다. 아래
 export async function answerQuery(
   wikiId: string,
   question: string,
-  opts?: { save?: boolean },
+  opts?: { save?: boolean; userId?: string | null; apiKeyId?: string | null },
 ): Promise<QueryResult> {
   const q = question.trim();
   if (!q) return { answer: "질문이 비어 있습니다.", sources: [] };
@@ -44,6 +44,7 @@ export async function answerQuery(
   const answer = await generateText(
     SYSTEM,
     `질문: ${q}\n\n<검색결과>\n${context}\n</검색결과>\n\n위 <검색결과> 근거만으로 답하고 [번호]로 인용하라.`,
+    { userId: opts?.userId ?? null, apiKeyId: opts?.apiKeyId ?? null, wikiId, route: "query" },
   );
 
   const sources: QuerySource[] = hits.map((h) => ({

@@ -9,6 +9,7 @@ import { getPage, listPages, upsertPage, addPageSource } from "@/lib/wiki";
 import { hybridSearch, reindexSource, reindexEmbeddings, indexCategory, matchCategorySemantic, deleteCategoryChunk } from "@/lib/search";
 import { generateWithTools, geminiEnabled, type ToolSpec } from "@/lib/gemini";
 import { PAGE_KINDS } from "@/lib/kinds";
+import { recordUsage } from "@/lib/usage";
 import { getOntology, matchCategory, isReservedSlug, syncOntologyWithPages, sanitizeCategorySlug } from "@/lib/ontology";
 import type { PageKind } from "@/generated/prisma/client";
 
@@ -411,6 +412,19 @@ export async function runIngestJob(run: {
       });
       summary = loop.text || "(요약 없음)";
       loopUsage = loop.usage;
+      // 사용량 계측(fire-and-forget): agentRun.output의 cost 추정과 별개로 UsageEvent에도 남긴다.
+      if (loopUsage) {
+        recordUsage({
+          userId: run.userId,
+          wikiId,
+          route: "ingest",
+          kind: "llm",
+          model: ingestModel,
+          inputTokens: loopUsage.inputTokens,
+          outputTokens: loopUsage.outputTokens,
+          costUsd: estimateCostUSD(ingestModel, loopUsage),
+        });
+      }
 
       // 온톨로지 ↔ 실제 category 양방향 동기화(신규 추가 + 고아 제거) + 재사용 코퍼스 갱신. 비치명적.
       try {

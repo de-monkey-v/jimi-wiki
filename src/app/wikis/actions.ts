@@ -168,7 +168,7 @@ export async function queryAction(formData: FormData) {
   const wiki = await requireWriteAccess(userId, wikiSlug);
   const question = String(formData.get("question") ?? "").trim();
   if (!question) redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
-  const res = await answerQuery(wiki.id, question, { save: true });
+  const res = await answerQuery(wiki.id, question, { save: true, userId });
   if (res.savedSlug) {
     redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(res.savedSlug)}`);
   }

@@ -9,6 +9,7 @@ import {
 import { getCurrentUser } from "@/lib/session";
 import { getWikiForUser, getSourcesByIds } from "@/lib/wiki";
 import { hybridSearch } from "@/lib/search";
+import { recordUsage } from "@/lib/usage";
 import type { WikiUIMessage, ChatSource } from "./types";
 
 export const maxDuration = 60;
@@ -96,6 +97,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         model: google("gemini-2.5-flash"),
         system,
         messages: await convertToModelMessages(messages),
+        // 스트림 완료 시 사용량 계측(fire-and-forget)
+        onFinish: ({ usage }) => {
+          recordUsage({
+            userId: user.id,
+            wikiId: wiki.id,
+            route: "chat",
+            kind: "llm",
+            model: "gemini-2.5-flash",
+            inputTokens: usage?.inputTokens ?? null,
+            outputTokens: usage?.outputTokens ?? null,
+          });
+        },
       });
       writer.merge(result.toUIMessageStream());
     },

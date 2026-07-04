@@ -153,7 +153,7 @@ export async function indexCategory(wikiId: string, slug: string, text: string):
   }
   if (geminiEnabled()) {
     try {
-      const [vec] = await embedTexts([text], "RETRIEVAL_DOCUMENT");
+      const [vec] = await embedTexts([text], "RETRIEVAL_DOCUMENT", { wikiId, route: "ingest" });
       if (vec?.length === EMBED_DIM) {
         await prisma.$executeRawUnsafe(`UPDATE "SearchChunk" SET embedding = $1::vector WHERE id = $2`, `[${vec.join(",")}]`, id);
       }
@@ -193,7 +193,7 @@ export async function matchCategorySemantic(wikiId: string, text: string): Promi
   if (!q || !geminiEnabled()) return [];
   let qv: number[] | undefined;
   try {
-    [qv] = await embedTexts([q], "RETRIEVAL_QUERY");
+    [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "category-match" });
   } catch {
     return [];
   }
@@ -229,6 +229,7 @@ export async function reindexEmbeddings(wikiId: string): Promise<{ embedded: num
   const vecs = await embedTexts(
     rows.map((r) => r.text),
     "RETRIEVAL_DOCUMENT",
+    { wikiId, route: "reindex" },
   );
   for (let i = 0; i < rows.length; i++) {
     const lit = `[${vecs[i].join(",")}]`;
@@ -281,7 +282,7 @@ export async function hybridSearch(wikiId: string, queryText: string, k = RESULT
   let vecRows: VecRow[] = [];
   if (geminiEnabled()) {
     try {
-      const [qv] = await embedTexts([q], "RETRIEVAL_QUERY");
+      const [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "search" });
       if (qv?.length === EMBED_DIM) {
         vecRows = await prisma.$queryRawUnsafe<VecRow[]>(VEC_SQL, wikiId, `[${qv.join(",")}]`, POOL);
       }

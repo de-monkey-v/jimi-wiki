@@ -7,6 +7,7 @@ import {
   type Part,
   type FunctionCall,
 } from "@google/genai";
+import { recordUsage, type UsageMeta } from "@/lib/usage";
 
 export const EMBED_MODEL = "gemini-embedding-001";
 export const EMBED_DIM = 768;
@@ -79,9 +80,11 @@ function batchByBudget(texts: string[]): string[][] {
   return batches;
 }
 
-/** texts → 768차원 L2정규화 벡터. 키 없으면 throw(호출부에서 geminiEnabled로 분기). */
-export async function embedTexts(texts: string[], taskType: EmbedTaskType): Promise<number[][]> {
+/** texts → 768차원 L2정규화 벡터. 키 없으면 throw(호출부에서 geminiEnabled로 분기). meta 주면 사용량 계측. */
+export async function embedTexts(texts: string[], taskType: EmbedTaskType, meta?: UsageMeta): Promise<number[][]> {
   const out: number[][] = [];
+  let inTok = 0;
+  let haveTok = false;
   for (const chunk of batchByBudget(texts)) {
     const res = await withRetry(
       () =>
@@ -92,6 +95,11 @@ export async function embedTexts(texts: string[], taskType: EmbedTaskType): Prom
         }),
       "embedContent",
     );
+    const m = (res as { usageMetadata?: { promptTokenCount?: number } }).usageMetadata;
+    if (m?.promptTokenCount != null) {
+      inTok += m.promptTokenCount;
+      haveTok = true;
+    }
     const embs = res.embeddings ?? [];
     if (embs.length !== chunk.length) {
       throw new Error(`임베딩 개수 불일치 ${embs.length}/${chunk.length}`);
@@ -101,11 +109,13 @@ export async function embedTexts(texts: string[], taskType: EmbedTaskType): Prom
       out.push(l2normalize(e.values));
     }
   }
+  // 성공 경로에서만 계측(부분 실패 시 throw로 빠져나가 기록 안 함)
+  if (meta) recordUsage({ ...meta, kind: "embed", model: EMBED_MODEL, inputTokens: haveTok ? inTok : null });
   return out;
 }
 
-/** 도구 없는 단순 텍스트 생성(질의 답변 등). */
-export async function generateText(system: string, prompt: string): Promise<string> {
+/** 도구 없는 단순 텍스트 생성(질의 답변 등). meta 주면 사용량 계측(성공 경로). */
+export async function generateText(system: string, prompt: string, meta?: UsageMeta): Promise<string> {
   const res = await withRetry(
     () =>
       client().models.generateContent({
@@ -115,6 +125,16 @@ export async function generateText(system: string, prompt: string): Promise<stri
       }),
     "generateContent(text)",
   );
+  if (meta) {
+    const m = res.usageMetadata;
+    recordUsage({
+      ...meta,
+      kind: "llm",
+      model: GEN_MODEL,
+      inputTokens: m?.promptTokenCount ?? null,
+      outputTokens: m?.candidatesTokenCount ?? null,
+    });
+  }
   return res.text ?? "";
 }
 

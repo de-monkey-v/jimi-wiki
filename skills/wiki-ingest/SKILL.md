@@ -10,19 +10,37 @@ ontology_rules_version: 2
 
 ## 접근 방법 (둘 중 하나)
 
-- **MCP (권장)**: 저장소의 `mcp/server.mjs`를 MCP 클라이언트에 등록하면 아래 API가 도구(`create_source`, `write_page`, `search_wiki`, `list_pages`, `read_page`, `list_sources`, `read_source`)로 노출된다.
+- **MCP (권장)**: 저장소의 `mcp/server.mjs`를 MCP 클라이언트에 등록하면 아래 API가 도구(`create_source`, `write_page`, `delete_page`, `search_wiki`, `list_pages`, `read_page`, `list_sources`, `read_source`, `get_ontology`, `match_category`, `run_lint`)로 노출된다.
   ```sh
   claude mcp add jimi-wiki \
     -e JIMI_WIKI_URL=<앱주소> -e JIMI_WIKI_API_KEY=<키> -e JIMI_WIKI_SLUG=<위키슬러그> \
     -- node <repo>/mcp/server.mjs
   ```
-- **REST 직접 호출**: 모든 요청은 `Authorization: Bearer <API_KEY>` 헤더. 키는 위키 화면 > API 키에서 발급(쓰기는 editor 이상).
+- **REST 직접 호출**: 모든 요청은 `Authorization: Bearer <API_KEY>` 헤더. 키는 위키 화면 > API 키에서 발급(쓰기는 editor 이상). 전체 레퍼런스는 `docs/rest-api.md`.
   - `GET  /api/wikis/{slug}/pages` · `GET /pages/{pageSlug}` — 페이지 목록/단건
-  - `POST /api/wikis/{slug}/pages` — 페이지 생성/수정 `{slug?, title, kind, body, category?, sourceSlug?}`
+  - `POST /api/wikis/{slug}/pages` — 페이지 생성/수정 `{slug?, title, kind, body, category?, sourceSlug?, embed?}`
+  - `DELETE /api/wikis/{slug}/pages/{pageSlug}` — 파생 페이지 삭제(concept/entity/answer/meta만; note는 409, system 페이지는 403)
   - `GET  /api/wikis/{slug}/sources` · `GET /sources/{sourceSlug}` — 원문 목록/단건
   - `POST /api/wikis/{slug}/sources` — 원문 불변 저장 `{title, body, url?}` → `{slug}` 반환
   - `GET  /api/wikis/{slug}/search?q=&k=` — 하이브리드 검색
-  - `POST /api/wikis/{slug}/ingest` — (선택) 내부 AI 에이전트에 위임하고 싶을 때만
+  - `GET  /api/wikis/{slug}/ontology` — 카테고리 인스턴스·관계 어휘(재사용 후보 확인)
+  - `POST /api/wikis/{slug}/categories/match` — `{text}` → 가장 가까운 기존 category 후보
+  - `POST /api/wikis/{slug}/lint` — 기계 점검(고아/깨진 링크/index 불일치). `{deep:true}`는 세션 전용(API 키 403)
+
+> **세션 전용(API 키 불가) 라우트**: 내부 AI를 대량 소비하는 `POST /ingest`, `POST /query`, `POST /reindex`, `POST /lint {deep:true}`는 웹 UI(쿠키 세션)에서만 실행된다. **API 키/MCP 경로에서는 이 앱 내부 AI ingest를 쓰지 말고**, 아래 절차대로 `create_source` + `write_page`(primitive)로 직접 작성한다. (내부 AI ingest를 쓰려면 웹 UI를 사용.)
+
+### 비동기 잡 폴링 (GET /runs/{runId})
+
+내부 AI 잡(웹 UI의 ingest, deep lint)은 비동기로 돌며 즉시 `{ runId }`를 반환한다. 진행 상태는 폴링으로 확인한다(읽기라 API 키로도 가능):
+
+```sh
+# status: pending | running | done | error. done이면 output, error면 error 필드.
+curl -sH "Authorization: Bearer $KEY" \
+  "$JIMI_WIKI_URL/api/wikis/$SLUG/runs/$RUN_ID"
+# → {"runId":"...","status":"running"}  (done 될 때까지 몇 초 간격으로 반복)
+```
+
+> API 키/MCP 경로에서는 내부 AI ingest를 트리거할 수 없다(세션 전용). 이 폴링은 웹 UI에서 시작한 잡의 상태를 확인하거나 REST 소비자가 자기 잡을 추적할 때 쓴다.
 
 ## AI 없이 하는 ingest 절차
 

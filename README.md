@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# jimi-wiki-app
 
-## Getting Started
+LLM이 유지보수자 역할을 맡는 협업 위키 플랫폼. 소스를 편입(ingest)하면 앱 내부 AI가 소스 노트·개념/개체 페이지·상호참조를 만들고, 하이브리드 검색(BM25 + 임베딩)과 그래프로 지식을 탐색한다. 외부 에이전트(Claude Code 등)는 REST/MCP로 같은 위키를 직접 유지보수할 수 있다.
 
-First, run the development server:
+## 스택
+
+- **Next.js 16** (App Router, React 19) — 웹 UI + `/api/*` 라우트
+- **PostgreSQL 17 + pgvector** — 데이터 + 임베딩 벡터 검색 (docker compose)
+- **Prisma 7** — ORM, 생성 클라이언트는 `src/generated/prisma`
+- **Auth.js (next-auth v5)** — 세션 인증. 개발 중에는 시드된 dev 계정을 사용
+- **Gemini** (`@ai-sdk/google` / `@google/genai`) — 생성 + 임베딩. (선택) Anthropic 모델로 ingest 오버라이드 가능
+- **pnpm** — 패키지 매니저
+
+## 시작하기
+
+사전 요구: Node 20+, pnpm, Docker.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# 1. 의존성
+pnpm install
+
+# 2. 환경변수 — .env.example을 복사해 값 채우기 (최소 GEMINI_API_KEY)
+cp .env.example .env
+
+# 3. Postgres(pgvector) 기동 — 컨테이너 jimi-wiki-db, 로컬 포트 5433
+pnpm db:up
+
+# 4. 스키마 마이그레이션 적용
+pnpm db:migrate
+
+# 5. 개발용 dev 계정 시드 (DEV_USER_EMAIL 기준)
+pnpm db:seed
+
+# 6. 개발 서버 (포트 3007)
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3007 접속. 원격/다른 호스트에서 접속하려면 `next.config`의 `allowedDevOrigins`를 확인한다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 주요 환경변수 (`.env.example` 참조)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 변수 | 용도 |
+|---|---|
+| `DATABASE_URL` | Postgres 접속 (docker compose 기본값: `postgresql://jimi:jimi@localhost:5433/jimi`) |
+| `AUTH_SECRET` | 세션 서명 키 (`openssl rand -base64 32`) |
+| `GEMINI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | 생성 + 임베딩 (동일 값) |
+| `DEV_USER_EMAIL` | OAuth 붙이기 전 임시 세션 계정 |
+| `ANTHROPIC_API_KEY`, `INGEST_MODEL` | (선택) ingest 모델을 `claude-*`로 오버라이드할 때 |
 
-## Learn More
+## 스크립트
 
-To learn more about Next.js, take a look at the following resources:
+| 명령 | 설명 |
+|---|---|
+| `pnpm dev` | 개발 서버 (포트 3007) |
+| `pnpm build` / `pnpm start` | 프로덕션 빌드 / 서버 |
+| `pnpm db:up` | Postgres 컨테이너 기동 |
+| `pnpm db:migrate` | `prisma migrate dev` |
+| `pnpm db:seed` | dev 계정 시드 |
+| `pnpm apikey:issue` | CLI로 API 키 발급 |
+| `pnpm smoke` | 스모크 테스트 |
+| `pnpm mcp` | MCP 서버 실행 (`mcp/server.mjs`) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 프로그램적 접근 (REST / MCP)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+외부 에이전트가 앱 내부 AI 없이 위키를 유지보수할 수 있다. **웹 UI는 세션(쿠키)으로, 프로그램 호출은 API 키(Bearer)로 인증**한다.
 
-## Deploy on Vercel
+1. **API 키 발급**: 로그인 후 `/keys`에서 발급. 위키 스코프·상한 역할(읽기전용/편집)·만료를 지정할 수 있다. 발급 시 원문 키는 한 번만 노출된다.
+2. **REST**: `Authorization: Bearer <KEY>` 헤더로 `/api/wikis/{slug}/*` 호출. 전체 레퍼런스는 [`docs/rest-api.md`](docs/rest-api.md).
+3. **MCP**: `mcp/server.mjs`를 MCP 클라이언트(Claude Code 등)에 등록하면 콘텐츠 API가 도구로 노출된다. 세부 워크플로우는 [`skills/wiki-ingest/SKILL.md`](skills/wiki-ingest/SKILL.md).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   ```bash
+   claude mcp add jimi-wiki \
+     -e JIMI_WIKI_URL=http://localhost:3007 \
+     -e JIMI_WIKI_API_KEY=<키> \
+     -e JIMI_WIKI_SLUG=<위키슬러그> \
+     -- node <repo>/mcp/server.mjs
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> 내부 AI를 소비하는 라우트(`/ingest`, `/query`, `/reindex`, `/lint?deep`)는 **세션 전용**이다. API 키로는 `create_source` + `write_page` 같은 primitive로 위키를 직접 작성하고, 앱 내부 AI ingest는 웹 UI에서 실행한다. 자세한 정책은 `docs/rest-api.md` 참조.

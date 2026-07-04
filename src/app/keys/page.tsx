@@ -2,8 +2,8 @@ import Link from "next/link";
 import { getCurrentUserId } from "@/lib/session";
 import { listApiKeys } from "@/lib/apikey";
 import { listWikisForUser } from "@/lib/wiki";
-import { revokeKeyAction } from "./actions";
 import { IssueKeyForm } from "./IssueKeyForm";
+import { RevokeButton } from "./RevokeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -45,10 +45,7 @@ export default async function KeysPage() {
                     {k.lastUsedAt ? `마지막 사용 ${k.lastUsedAt.toISOString().slice(0, 10)}` : "미사용"}
                   </span>
                 </span>
-                <form action={revokeKeyAction}>
-                  <input type="hidden" name="id" value={k.id} />
-                  <button className="border rounded px-2 py-1 text-red-600 hover:bg-red-50">폐기</button>
-                </form>
+                <RevokeButton id={k.id} />
               </li>
             ))}
           </ul>

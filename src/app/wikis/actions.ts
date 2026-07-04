@@ -10,6 +10,7 @@ import { createIngestRun, runIngestJob, reapStaleRuns } from "@/lib/ingest";
 import { reindexEmbeddings } from "@/lib/search";
 import { answerQuery } from "@/lib/query";
 import { normalizeCategoryForWrite } from "@/lib/governance";
+import { checkDailyQuota } from "@/lib/usage";
 import { prisma } from "@/lib/db";
 import type { PageKind, WikiKind } from "@/generated/prisma/client";
 
@@ -19,6 +20,12 @@ async function requireWriteAccess(userId: string, wikiSlug: string) {
   if (!wiki) throw new Error("접근 권한이 없습니다");
   if (!hasRole(wiki.role, "editor")) throw new Error("쓰기 권한이 없습니다(editor 이상 필요)");
   return wiki;
+}
+
+// 생성형 LLM 서버액션(query/ingest) 공통: 일일 토큰 쿼터 초과 시 거부.
+async function requireQuota(userId: string) {
+  const q = await checkDailyQuota(userId);
+  if (!q.ok) throw new Error(`일일 토큰 쿼터를 초과했습니다(${q.used}/${q.limit}). 내일 다시 시도하세요.`);
 }
 
 export async function createWikiAction(formData: FormData) {
@@ -66,6 +73,7 @@ export async function ingestAction(formData: FormData) {
   const userId = await getCurrentUserId();
   const wikiSlug = String(formData.get("wikiSlug"));
   const wiki = await requireWriteAccess(userId, wikiSlug);
+  await requireQuota(userId);
   const url = String(formData.get("url") ?? "").trim() || undefined;
   const text = String(formData.get("text") ?? "").trim() || undefined;
   const title = String(formData.get("title") ?? "").trim() || undefined;
@@ -166,6 +174,7 @@ export async function queryAction(formData: FormData) {
   const userId = await getCurrentUserId();
   const wikiSlug = String(formData.get("wikiSlug"));
   const wiki = await requireWriteAccess(userId, wikiSlug);
+  await requireQuota(userId);
   const question = String(formData.get("question") ?? "").trim();
   if (!question) redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
   const res = await answerQuery(wiki.id, question, { save: true, userId });

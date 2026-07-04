@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { getApiAuth } from "@/lib/apikey";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { checkDailyQuota } from "@/lib/usage";
 import { getCurrentUser } from "@/lib/session";
 import { getWikiForUser } from "@/lib/wiki";
 import type { User, Role } from "@/generated/prisma/client";
@@ -86,6 +87,14 @@ export async function sessionOnlyGate(slug: string, opts?: { minRole?: Role }): 
     return {
       ok: false,
       res: NextResponse.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }),
+    };
+  }
+  // 일일 생성형 토큰 쿼터 — 세션 경로의 누적 비용 상한(레이트리밋이 못 막는 저속·지속 소비를 통제).
+  const q = await checkDailyQuota(user.id);
+  if (!q.ok) {
+    return {
+      ok: false,
+      res: NextResponse.json({ error: "daily_quota_exceeded", used: q.used, limit: q.limit }, { status: 429 }),
     };
   }
   return { ok: true, user, wiki };

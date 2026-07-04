@@ -78,7 +78,7 @@ const LINT_SYSTEM = `너는 이 위키의 품질 검수자다. 도구(listPages,
 결과가 없으면 "특이사항 없음"이라고 하라. 장황하지 않게 핵심만.`;
 
 /** 위키 건강검진. 기계적 점검은 항상, deep=true면 LLM 심층 점검 추가. */
-export async function lintWiki(wikiId: string, opts?: { deep?: boolean }): Promise<LintReport> {
+export async function lintWiki(wikiId: string, opts?: { deep?: boolean; userId?: string | null }): Promise<LintReport> {
   const pages = await prisma.page.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true } });
   const links = await prisma.pageLink.findMany({
     where: { wikiId },
@@ -146,6 +146,7 @@ export async function lintWiki(wikiId: string, opts?: { deep?: boolean }): Promi
       if (loop.usage) {
         recordUsage({
           wikiId,
+          userId: opts?.userId ?? null, // 일일 쿼터가 lint-deep 토큰도 유저에 귀속하도록
           route: "lint",
           kind: "llm",
           model: GEN_MODEL,

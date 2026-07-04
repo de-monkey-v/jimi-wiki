@@ -9,7 +9,7 @@ import {
 import { getCurrentUser } from "@/lib/session";
 import { getWikiForUser, getSourcesByIds } from "@/lib/wiki";
 import { hybridSearch } from "@/lib/search";
-import { recordUsage } from "@/lib/usage";
+import { recordUsage, checkDailyQuota } from "@/lib/usage";
 import type { WikiUIMessage, ChatSource } from "./types";
 
 export const maxDuration = 60;
@@ -32,6 +32,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!user) return new Response("unauthorized", { status: 401 });
   const wiki = await getWikiForUser(user.id, decodeURIComponent(id));
   if (!wiki) return new Response("not_found", { status: 404 });
+
+  // 일일 생성형 토큰 쿼터(chat도 streamText로 토큰 소비 — 세션 경로 비용 상한).
+  const quota = await checkDailyQuota(user.id);
+  if (!quota.ok) return Response.json({ error: "daily_quota_exceeded", used: quota.used, limit: quota.limit }, { status: 429 });
 
   let messages: WikiUIMessage[];
   try {

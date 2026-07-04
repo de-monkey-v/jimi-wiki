@@ -43,10 +43,10 @@ export function recordUsage(e: UsageInput): void {
 
 /**
  * 특정 유저의 since 이후 사용량 합산(쿼터/대시보드용).
- * ⚠️ 귀속 주의: 현재 userId가 실리는 이벤트는 generateText(query)·ingest·chat뿐이다.
- * 임베딩(search/reindex/categories-match)과 lint-deep 이벤트는 wikiId만 있고 userId가 없어
- * 이 합산에서 누락된다. 유저별 쿼터를 강제하려면 먼저 embedTexts/lintWiki에 userId를 threading하거나
- * 여기서 userId OR (유저 소유 wikiId 집합) 기준으로 집계하도록 고쳐야 한다. cf. 감사 리포트 finding.
+ * ⚠️ 귀속 주의: userId가 실리는 생성형(kind=llm) 이벤트는 query·ingest·chat·lint-deep이다(일일 쿼터가 이들을 통제).
+ * 임베딩(kind=embed: search/reindex/categories-match)은 아직 wikiId만 있고 userId가 없어 이 합산에서 누락된다 —
+ * 임베딩은 API 키/primitive 경로라 레이트리밋으로 관리하므로 유저 쿼터엔 무관하지만, 유저별 임베딩 비용까지
+ * 집계하려면 embedTexts에 userId를 threading해야 한다. cf. 감사 리포트 finding.
  */
 export async function usageSince(
   userId: string,
@@ -63,4 +63,32 @@ export async function usageSince(
     outputTokens: agg._sum.outputTokens ?? 0,
     costUsd: agg._sum.costUsd ?? 0,
   };
+}
+
+// 유저별 일일 생성형 토큰 상한(입력+출력 합). env로 재정의 가능. 임베딩(kind=embed)은 제외 —
+// 임베딩은 API 키/primitive 경로라 레이트리밋으로 관리하고, 이 쿼터는 세션의 생성형 소비만 통제한다.
+export const DAILY_TOKEN_LIMIT = Number(process.env.DAILY_TOKEN_LIMIT ?? 3_000_000);
+
+/** UTC 오늘 자정 이후 이 유저에게 귀속된 생성형(kind=llm) 토큰 합(입력+출력). */
+export async function dailyGenerativeTokens(userId: string): Promise<number> {
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+  const agg = await prisma.usageEvent.aggregate({
+    where: { userId, kind: "llm", createdAt: { gte: since } },
+    _sum: { inputTokens: true, outputTokens: true },
+  });
+  return (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0);
+}
+
+/**
+ * 일일 생성형 토큰 쿼터 판정. ok=false면 호출부가 429(라우트) 또는 throw(서버액션)로 거부한다.
+ * 집계 실패 시 fail-open(ok:true) — 계측 DB 장애가 사람 UI를 막지 않도록.
+ */
+export async function checkDailyQuota(userId: string): Promise<{ ok: boolean; used: number; limit: number }> {
+  try {
+    const used = await dailyGenerativeTokens(userId);
+    return { ok: used < DAILY_TOKEN_LIMIT, used, limit: DAILY_TOKEN_LIMIT };
+  } catch {
+    return { ok: true, used: 0, limit: DAILY_TOKEN_LIMIT };
+  }
 }

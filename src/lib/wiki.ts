@@ -305,6 +305,26 @@ export async function upsertPage(
 }
 
 /**
+ * 파생 페이지 삭제(에이전트 delete_page용). 호출부가 kind/예약슬러그를 먼저 검사한다
+ * — 소스노트(note)와 원문(Source)은 불변 계층이라 이 경로로 지우지 않는다.
+ * SearchChunk는 Page에 FK가 없어 cascade되지 않으므로 명시 삭제한다.
+ * PageLink(out은 cascade, in은 SetNull)·PageContribution(cascade)은 Page 삭제로 정리된다.
+ * 반환: 삭제했으면 true, 페이지가 없으면 false.
+ */
+export async function deletePage(wikiId: string, slug: string): Promise<boolean> {
+  const page = await prisma.page.findUnique({
+    where: { wikiId_slug: { wikiId, slug } },
+    select: { id: true },
+  });
+  if (!page) return false;
+  await prisma.$transaction([
+    prisma.searchChunk.deleteMany({ where: { wikiId, refType: "page", refId: page.id } }),
+    prisma.page.delete({ where: { id: page.id } }),
+  ]);
+  return true;
+}
+
+/**
  * 이 페이지가 나가는 링크(PageLink)를 재계산하고,
  * 이 페이지 슬러그를 향해 깨져 있던 다른 페이지의 링크를 이 페이지로 연결한다.
  */

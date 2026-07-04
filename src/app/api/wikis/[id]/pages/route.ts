@@ -45,6 +45,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!body || typeof body !== "object" || !body.title || typeof body.body !== "string") {
     return NextResponse.json({ error: "title_and_body_required" }, { status: 400 });
   }
+  // L4: MCP write_page의 kind enum과 정합. 명시된 잘못된 kind는 조용히 note로 강등하지 않고 거부.
+  // (kind 생략 시에는 하위호환으로 note 기본.)
+  if (body.kind !== undefined && !PAGE_KINDS.includes(body.kind as PageKind)) {
+    return NextResponse.json({ error: "invalid_kind" }, { status: 400 });
+  }
 
   const kind = coerceKind(body.kind);
   // S3: raw REST 경로도 거버넌스 우회 못 하게 서버측 정규화. note는 순수성 위해 category 없음.

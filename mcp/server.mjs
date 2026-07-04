@@ -27,15 +27,51 @@ if (!KEY || !WIKI) {
   process.exit(1);
 }
 
-async function api(method, path, body) {
-  const res = await fetch(`${BASE}/api/wikis/${encodeURIComponent(WIKI)}${path}`, {
-    method,
-    headers: { Authorization: `Bearer ${KEY}`, ...(body ? { "content-type": "application/json" } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 500)}`);
-  return text;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 콘텐츠 API 호출. 견고성:
+ *  - AbortController 타임아웃(기본 90s) — 멈춘 요청이 무한 대기하지 않게.
+ *  - 429/5xx·타임아웃·네트워크 오류는 소수회 지수백오프(0.5s→1s→2s) 재시도.
+ *    429는 서버가 준 Retry-After를 우선 존중. 그 외 4xx(인증·검증)는 재시도 없이 즉시 실패.
+ *  - 오류 메시지에 HTTP status를 보존(`HTTP <code>: <body>`).
+ */
+async function api(method, path, body, { retries = 3, timeoutMs = 90_000 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt > 0) {
+      // 429가 Retry-After를 줬으면 그 값(초)을, 아니면 지수백오프.
+      const wait = lastErr?.retryAfterMs ?? 2 ** (attempt - 1) * 500;
+      await sleep(wait);
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${BASE}/api/wikis/${encodeURIComponent(WIKI)}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${KEY}`, ...(body ? { "content-type": "application/json" } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: ctrl.signal,
+      });
+      const text = await res.text();
+      if (res.ok) return text;
+      const err = new Error(`HTTP ${res.status}: ${text.slice(0, 500)}`);
+      // 429/5xx만 재시도 대상. 그 외 4xx는 즉시 실패.
+      if (res.status !== 429 && res.status < 500) throw err;
+      if (res.status === 429) {
+        const ra = Number(res.headers.get("retry-after"));
+        if (Number.isFinite(ra) && ra > 0) err.retryAfterMs = ra * 1000;
+      }
+      lastErr = err;
+    } catch (e) {
+      // 위에서 throw한 비재시도 4xx는 그대로 전파. 그 외(타임아웃·네트워크)는 재시도.
+      if (/^HTTP (?!429|5)/.test(e.message)) throw e;
+      lastErr = e.name === "AbortError" ? new Error(`요청 타임아웃(${timeoutMs}ms): ${method} ${path}`) : e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
 }
 
 const asResult = (text) => ({ content: [{ type: "text", text }] });
@@ -152,6 +188,70 @@ server.registerTool(
   async (args) => {
     try {
       return asResult(await api("POST", "/sources", args));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "get_ontology",
+  {
+    description:
+      "이 위키의 온톨로지(카테고리 인스턴스·관계 어휘). 새 category를 만들기 전 재사용 후보를 확인하는 데 사용.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return asResult(await api("GET", "/ontology"));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "match_category",
+  {
+    description:
+      "텍스트에 가장 가까운 기존 category 재사용 후보를 반환한다(문자열+임베딩 병합, 자동 병합 아님). write_page 전 category 재사용 판단에 사용.",
+    inputSchema: { text: z.string().describe("분류하려는 주제/제목 텍스트") },
+  },
+  async ({ text }) => {
+    try {
+      return asResult(await api("POST", "/categories/match", { text }));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "run_lint",
+  {
+    description:
+      "위키 기계 점검(고아 페이지·깨진 링크·index 불일치 등)을 실행한다. 내부 LLM을 쓰지 않는 얕은 점검만 수행한다(deep 분석은 웹 UI 전용). editor 이상.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return asResult(await api("POST", "/lint", {}));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "delete_page",
+  {
+    description:
+      "파생 페이지(concept/entity/answer/meta)를 삭제한다. 소스노트(note)와 원문(source)은 불변이라 삭제 불가. 상호참조가 깨질 수 있으니 이후 run_lint로 정리. editor 이상.",
+    inputSchema: { slug: z.string().describe("삭제할 페이지 slug") },
+  },
+  async ({ slug }) => {
+    try {
+      return asResult(await api("DELETE", `/pages/${encodeURIComponent(slug)}`));
     } catch (e) {
       return asError(e);
     }

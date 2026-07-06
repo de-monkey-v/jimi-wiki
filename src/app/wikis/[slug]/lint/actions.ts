@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser, getPage, deletePage } from "@/lib/wiki";
+import { getWikiForUser, getPage, deletePage, upsertPage } from "@/lib/wiki";
 import { hasRole } from "@/lib/api-gate";
 import { mergeCategory, renameCategory, retireCategory, setPageCategory } from "@/lib/governance";
 
@@ -21,6 +21,43 @@ export async function deleteJunkNoteAction(formData: FormData) {
   const page = await getPage(wiki.id, pageSlug);
   if (page && page.kind === "note" && page.sourceId == null) {
     await deletePage(wiki.id, page.slug);
+  }
+  revalidatePath(`/wikis/${slug}/lint`);
+}
+
+// 페이지 pageSlug의 "## 관련 문서" 섹션에 [[linkSlugs]]를 추가한다. 이미 링크된 건 제외.
+// 파생 페이지만 대상(note·meta 보호). provenance(sourceId)·category는 upsertPage undefined=미변경으로 보존.
+async function appendRelatedLinks(wikiId: string, pageSlug: string, linkSlugs: string[]): Promise<void> {
+  const page = await getPage(wikiId, pageSlug);
+  if (!page || page.kind === "note" || page.kind === "meta") return;
+  const fresh = linkSlugs.filter((t) => t && t !== pageSlug && !page.body.includes(`[[${t}]]`) && !page.body.includes(`[[${t}|`));
+  if (!fresh.length) return;
+  const linksMd = fresh.map((t) => `- [[${t}]]`).join("\n");
+  // 헤딩 변형(##/### · 공백 유무 · 뒤 텍스트) 허용. 치환 문자열이 아니라 replacer 함수를 써서
+  // linkSlugs 안의 `$` 시퀀스가 치환 패턴으로 해석되어 본문을 오염시키는 것을 막는다.
+  const hasSection = /^#{2,3}\s*관련\s*문서.*$/m.test(page.body);
+  const body = hasSection
+    ? page.body.replace(/^(#{2,3}\s*관련\s*문서.*)$/m, (_m, g1) => `${g1}\n${linksMd}`)
+    : `${page.body.trimEnd()}\n\n## 관련 문서\n${linksMd}\n`;
+  await upsertPage(wikiId, { slug: page.slug, title: page.title, kind: page.kind, body, category: page.category ?? undefined });
+}
+
+// 고립 파생 페이지의 링크 제안 적용(방향 인식). outbound 부족이면 P→후보로, inbound 부족이면 후보→P로
+// [[링크]]를 추가해 실제로 고립을 해소한다. 둘 다 부족하면 양방향 모두.
+export async function applyLinkSuggestionAction(formData: FormData) {
+  const slug = String(formData.get("wikiSlug") ?? "");
+  const wiki = await gate(slug);
+  const pageSlug = String(formData.get("pageSlug") ?? "");
+  const parse = (k: string) =>
+    String(formData.get(k) ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  const needs = parse("needs");
+  const targets = parse("targets");
+  if (targets.length) {
+    if (needs.includes("outbound")) await appendRelatedLinks(wiki.id, pageSlug, targets); // P → 후보
+    if (needs.includes("inbound")) for (const t of targets) await appendRelatedLinks(wiki.id, t, [pageSlug]); // 후보 → P
   }
   revalidatePath(`/wikis/${slug}/lint`);
 }

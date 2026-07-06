@@ -2,6 +2,7 @@ import "server-only";
 import { Type } from "@google/genai";
 import { prisma } from "@/lib/db";
 import { generateWithTools, geminiEnabled, GEN_MODEL, type ToolSpec } from "@/lib/gemini";
+import { hybridSearch } from "@/lib/search";
 import { recordUsage } from "@/lib/usage";
 import { listPages, getPage } from "@/lib/wiki";
 import { detectCategoryIssues, recountItemCounts, type CategoryIssues } from "@/lib/governance";
@@ -15,6 +16,7 @@ export interface LintReport {
   sourceDupPages: { pageSlug: string; pageTitle: string; sourceSlug: string; sourceTitle: string; sim: number }[]; // 원문을 사실상 복붙한 페이지
   junkNotes: { slug: string; title: string }[]; // 출처(sourceId) 없는 정크 노트 — 삭제 대상
   categoryHealth: CategoryIssues; // 중복 의심 category·고아 category·미분류 파생
+  score: number; // 0~100 건강 점수(가중 이슈/페이지수 기반). 트렌드 추적용
   llmNotes?: string; // 심층(deep) 시 LLM이 찾은 모순·누락 개념
 }
 
@@ -79,7 +81,10 @@ const LINT_SYSTEM = `너는 이 위키의 품질 검수자다. 도구(listPages,
 결과가 없으면 "특이사항 없음"이라고 하라. 장황하지 않게 핵심만.`;
 
 /** 위키 건강검진. 기계적 점검은 항상, deep=true면 LLM 심층 점검 추가. */
-export async function lintWiki(wikiId: string, opts?: { deep?: boolean; userId?: string | null }): Promise<LintReport> {
+export async function lintWiki(
+  wikiId: string,
+  opts?: { deep?: boolean; userId?: string | null; persist?: boolean },
+): Promise<LintReport> {
   const pages = await prisma.page.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true, kind: true } });
   const links = await prisma.pageLink.findMany({
     where: { wikiId },
@@ -142,7 +147,15 @@ export async function lintWiki(wikiId: string, opts?: { deep?: boolean; userId?:
   await recountItemCounts(wikiId).catch(() => {});
   const categoryHealth = await detectCategoryIssues(wikiId);
 
-  const report: LintReport = { pageCount: pages.length, brokenLinks, orphanPages, noOutLinks, untreatedSources, sourceDupPages, junkNotes, categoryHealth };
+  // 건강 점수: 이슈를 심각도 가중해 페이지수로 정규화(0~100). 심각한 것(깨진 링크·정크 노트)은 3배,
+  // 중복·미처리 원문은 2배, 그래프 단절·category 이슈는 1배. 이슈 0이면 100.
+  const catIssues =
+    categoryHealth.nearDup.length + categoryHealth.orphanCats.length + categoryHealth.uncategorized.length + categoryHealth.deepSparse.length;
+  const weighted =
+    brokenLinks.length * 3 + junkNotes.length * 3 + sourceDupPages.length * 2 + untreatedSources.length * 2 + orphanPages.length + noOutLinks.length + catIssues;
+  const score = pages.length === 0 ? 100 : Math.max(0, Math.min(100, Math.round(100 - (weighted / pages.length) * 100)));
+
+  const report: LintReport = { pageCount: pages.length, brokenLinks, orphanPages, noOutLinks, untreatedSources, sourceDupPages, junkNotes, categoryHealth, score };
 
   if (opts?.deep && geminiEnabled() && pages.length > 0) {
     try {
@@ -174,9 +187,80 @@ export async function lintWiki(wikiId: string, opts?: { deep?: boolean; userId?:
       wikiId,
       kind: "lint",
       title: "lint",
-      detail: `broken=${brokenLinks.length} orphan=${orphanPages.length} noOut=${noOutLinks.length} srcDup=${sourceDupPages.length} junk=${junkNotes.length}`,
+      detail: `score=${score} broken=${brokenLinks.length} orphan=${orphanPages.length} noOut=${noOutLinks.length} srcDup=${sourceDupPages.length} junk=${junkNotes.length}`,
     },
   });
 
+  // 건강 점수 트렌드: persist=true(명시적 lint 실행·ingest 후)일 때만 AgentRun에 기록.
+  // page.tsx는 매 방문 lintWiki를 호출하므로 여기선 persist를 넘기지 않아 트렌드가 오염되지 않는다.
+  if (opts?.persist) {
+    await prisma.agentRun
+      .create({
+        data: {
+          wikiId,
+          userId: opts.userId ?? null,
+          type: "lint",
+          status: "done",
+          output: {
+            score,
+            broken: brokenLinks.length,
+            orphan: orphanPages.length,
+            noOut: noOutLinks.length,
+            untreated: untreatedSources.length,
+            srcDup: sourceDupPages.length,
+            junk: junkNotes.length,
+            cat: catIssues,
+            pageCount: pages.length,
+          },
+          finishedAt: new Date(),
+        },
+      })
+      .catch(() => {});
+  }
+
   return report;
+}
+
+/**
+ * 고립된 파생 페이지(들어오는/나가는 링크 없음)에 연결할 관련 페이지를 임베딩 유사도로 제안한다.
+ * 자동 수정이 아니라 후보만 제시(승인 루프). note·meta는 대상/후보에서 제외(설계상 잎·system).
+ */
+export async function suggestIsolatedLinks(
+  wikiId: string,
+): Promise<
+  {
+    slug: string;
+    title: string;
+    kind: string;
+    needs: ("inbound" | "outbound")[];
+    candidates: { slug: string; title: string; kind: string; similarity: number }[];
+  }[]
+> {
+  const pages = await prisma.page.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true, kind: true, body: true } });
+  const links = await prisma.pageLink.findMany({ where: { wikiId }, select: { fromPageId: true, toPageId: true } });
+  const inbound = new Set(links.filter((l) => l.toPageId).map((l) => l.toPageId!));
+  const outbound = new Set(links.map((l) => l.fromPageId));
+  const bySlug = new Map(pages.map((p) => [p.slug, p]));
+  const isolated = pages.filter((p) => p.kind !== "note" && p.kind !== "meta" && (!inbound.has(p.id) || !outbound.has(p.id))).slice(0, 8);
+
+  const out: Awaited<ReturnType<typeof suggestIsolatedLinks>> = [];
+  for (const p of isolated) {
+    const needs: ("inbound" | "outbound")[] = [];
+    if (!inbound.has(p.id)) needs.push("inbound");
+    if (!outbound.has(p.id)) needs.push("outbound");
+    const hits = await hybridSearch(wikiId, `${p.title}\n${p.body.slice(0, 500)}`, 8);
+    const seen = new Set<string>([p.slug]);
+    const candidates: { slug: string; title: string; kind: string; similarity: number }[] = [];
+    for (const h of hits) {
+      const slug = h.pageSlug;
+      if (!slug || seen.has(slug)) continue;
+      const cand = bySlug.get(slug);
+      if (!cand || cand.kind === "note" || cand.kind === "meta") continue; // 파생끼리만 연결 제안
+      seen.add(slug);
+      candidates.push({ slug: cand.slug, title: cand.title, kind: cand.kind, similarity: Math.round((h.similarity ?? 0) * 100) / 100 });
+      if (candidates.length >= 3) break;
+    }
+    if (candidates.length) out.push({ slug: p.slug, title: p.title, kind: p.kind, needs, candidates });
+  }
+  return out;
 }

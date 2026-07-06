@@ -8,6 +8,7 @@ import { normalizeSlug } from "@/lib/markdown";
 import { getPage, listPages, upsertPage, addPageSource } from "@/lib/wiki";
 import { hybridSearch, reindexSource, reindexEmbeddings, indexCategory, matchCategorySemantic, deleteCategoryChunk } from "@/lib/search";
 import { generateWithTools, geminiEnabled, type ToolSpec } from "@/lib/gemini";
+import { lintWiki } from "@/lib/lint";
 import { PAGE_KINDS } from "@/lib/kinds";
 import { recordUsage } from "@/lib/usage";
 import { getOntology, matchCategory, isReservedSlug, syncOntologyWithPages, sanitizeCategorySlug } from "@/lib/ontology";
@@ -372,7 +373,7 @@ export async function runIngestJob(run: {
   input: IngestInput;
   userId: string | null;
 }): Promise<void> {
-  const { id, wikiId, input } = run;
+  const { id, wikiId, input, userId } = run;
 
   try {
     // running 전이도 try 안에서(실패 시 error로 기록되게)
@@ -474,6 +475,12 @@ export async function runIngestJob(run: {
         console.error(`[ingest] 임베딩 backfill 실패(다음 /reindex에서 복구): ${(e as Error).message}`),
       );
     }
+
+    // 편입 직후 기계 lint를 돌려 건강 점수를 트렌드(AgentRun)로 남긴다(비치명적). 부채를 사후 청소가
+    // 아니라 편입 시점에 측정 — write-path 품질 원칙. deep 아님(LLM 비용 0).
+    await lintWiki(wikiId, { persist: true, userId }).catch((e) =>
+      console.error(`[ingest] auto-lint 실패(비치명적): ${(e as Error).message}`),
+    );
 
     await prisma.logEntry.create({
       data: { wikiId, kind: "ingest", title: `ingest | ${title}`, detail: [...touched].join(", ") },

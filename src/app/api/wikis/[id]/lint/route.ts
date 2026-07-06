@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   try {
-    const report = await lintWiki(wikiId, { deep: !!body?.deep, userId });
+    const report = await lintWiki(wikiId, { deep: !!body?.deep, userId, persist: true });
     return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

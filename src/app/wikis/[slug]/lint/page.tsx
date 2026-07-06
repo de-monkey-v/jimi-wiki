@@ -3,8 +3,16 @@ import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser } from "@/lib/wiki";
 import { hasRole } from "@/lib/api-gate";
-import { lintWiki } from "@/lib/lint";
-import { mergeCategoryAction, retireCategoryAction, assignCategoryAction, flattenCategoryAction, deleteJunkNoteAction } from "./actions";
+import { lintWiki, suggestIsolatedLinks } from "@/lib/lint";
+import { prisma } from "@/lib/db";
+import {
+  mergeCategoryAction,
+  retireCategoryAction,
+  assignCategoryAction,
+  flattenCategoryAction,
+  deleteJunkNoteAction,
+  applyLinkSuggestionAction,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -44,11 +52,11 @@ export default async function LintPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ deep?: string }>;
+  searchParams: Promise<{ deep?: string; suggest?: string }>;
 }) {
   const { slug: rawSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
-  const { deep } = await searchParams;
+  const { deep, suggest } = await searchParams;
   const userId = await getCurrentUserId();
   const wiki = await getWikiForUser(userId, slug);
   if (!wiki) notFound();
@@ -60,8 +68,27 @@ export default async function LintPage({
     );
   }
 
+  // page 방문 시엔 persist를 넘기지 않아 트렌드가 오염되지 않는다(측정은 API/MCP/ingest 경로에서만 기록).
   const report = await lintWiki(wiki.id, { deep: deep === "1" });
   const base = `/wikis/${slug}`;
+
+  // 건강 점수 추이: persist된 lint 실행(AgentRun type=lint)만. 최신순 조회 후 시간순으로 뒤집어 표시.
+  const runs = await prisma.agentRun.findMany({
+    where: { wikiId: wiki.id, type: "lint" },
+    orderBy: { createdAt: "desc" },
+    take: 12,
+    select: { output: true },
+  });
+  const trend = runs
+    .map((r) => (r.output as { score?: number } | null)?.score)
+    .filter((s): s is number => typeof s === "number")
+    .reverse();
+  // 링크 제안은 고립 페이지당 임베딩 검색이 들어가 비싸므로 ?suggest=1일 때만 계산(매 방문 팬아웃 방지).
+  // 실패는 치명적이지 않으니 빈 목록으로 강등한다.
+  const suggestOn = suggest === "1";
+  const linkSuggestions = suggestOn ? await suggestIsolatedLinks(wiki.id).catch(() => []) : [];
+  const scoreColor = report.score >= 90 ? "text-green-600" : report.score >= 70 ? "text-yellow-600" : "text-red-600";
+  const barColor = (s: number) => (s >= 90 ? "bg-green-500" : s >= 70 ? "bg-yellow-500" : "bg-red-500");
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10 space-y-4">
@@ -70,6 +97,24 @@ export default async function LintPage({
         <h1 className="text-2xl font-bold mt-1">건강검진 (Lint)</h1>
         <p className="text-sm text-gray-500">전체 {report.pageCount} 페이지</p>
       </div>
+
+      {/* 건강 점수 + 추이(트렌드). 점수는 가중 이슈/페이지수 기반(0~100). */}
+      <section className="border rounded-lg p-4 flex items-center gap-6">
+        <div>
+          <div className="text-xs text-gray-400">건강 점수</div>
+          <div className={`text-4xl font-bold ${scoreColor}`}>{report.score}<span className="text-lg text-gray-400"> / 100</span></div>
+        </div>
+        {trend.length > 1 && (
+          <div className="flex-1">
+            <div className="text-xs text-gray-400 mb-1">추이 (최근 {trend.length}회 lint)</div>
+            <div className="flex items-end gap-1 h-12">
+              {trend.map((s, i) => (
+                <div key={i} className={`w-3 rounded-sm ${barColor(s)}`} style={{ height: `${Math.max(6, s)}%` }} title={`${s}`} />
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       <div className="flex gap-2 text-sm">
         <Link href={`${base}/lint`} className="border rounded px-3 py-1 hover:bg-gray-50">기계 점검</Link>
@@ -133,6 +178,47 @@ export default async function LintPage({
                     <input type="hidden" name="wikiSlug" value={slug} />
                     <input type="hidden" name="pageSlug" value={n.slug} />
                     <button className="rounded border px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">삭제</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      {/* 링크 제안: 고립된 파생 페이지에 연결할 관련 페이지(임베딩 유사도). 승인 시 관련 문서로 추가.
+          고립 페이지당 임베딩 검색이라 비싸므로 ?suggest=1일 때만 계산한다. */}
+      <section className="border rounded-lg p-4">
+        <h2 className="font-semibold mb-2">링크 제안 (고립 페이지){suggestOn ? <span className="text-sm text-gray-400"> ({linkSuggestions.length})</span> : null}</h2>
+        {!suggestOn ? (
+          <p className="text-sm text-gray-500">
+            고립된 파생 페이지에 연결할 관련 페이지를 임베딩 유사도로 찾습니다(비용 발생).{" "}
+            <Link href={`${base}/lint?suggest=1${deep === "1" ? "&deep=1" : ""}`} className="text-blue-600 hover:underline">계산하기</Link>
+          </p>
+        ) : linkSuggestions.length === 0 ? (
+          <p className="text-sm text-gray-400">고립된 파생 페이지 없음</p>
+        ) : (
+          <>
+            <p className="mb-2 text-xs text-gray-400">
+              들어오거나 나가는 링크가 없는 파생 페이지입니다. &quot;적용&quot;하면 부족한 방향에 맞춰 &quot;## 관련 문서&quot;에 `[[링크]]`를 추가합니다(아웃바운드 부족→이 페이지에, 인바운드 부족→후보 페이지에).
+            </p>
+            <ul className="space-y-2 text-sm">
+              {linkSuggestions.map((s) => (
+                <li key={s.slug} className="flex flex-wrap items-center gap-2">
+                  <Link href={`${base}/${encodeURIComponent(s.slug)}`} className="text-blue-600 hover:underline">{s.title}</Link>
+                  <span className="text-xs text-gray-400">{[s.needs.includes("inbound") ? "인바운드 없음" : null, s.needs.includes("outbound") ? "아웃바운드 없음" : null].filter(Boolean).join(" · ")}</span>
+                  <span className="text-gray-400">→</span>
+                  {s.candidates.map((c) => (
+                    <Link key={c.slug} href={`${base}/${encodeURIComponent(c.slug)}`} className="rounded bg-gray-100 px-1.5 text-blue-600 hover:underline">
+                      {c.title} <span className="text-gray-400">{(c.similarity * 100).toFixed(0)}%</span>
+                    </Link>
+                  ))}
+                  <form action={applyLinkSuggestionAction} className="inline">
+                    <input type="hidden" name="wikiSlug" value={slug} />
+                    <input type="hidden" name="pageSlug" value={s.slug} />
+                    <input type="hidden" name="needs" value={s.needs.join(",")} />
+                    <input type="hidden" name="targets" value={s.candidates.map((c) => c.slug).join(",")} />
+                    <button className="rounded border px-2 py-0.5 text-xs hover:bg-gray-50">적용</button>
                   </form>
                 </li>
               ))}

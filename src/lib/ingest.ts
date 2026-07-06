@@ -355,15 +355,33 @@ export async function createIngestRun(
 }
 
 /**
- * 정체 잡 리퍼: 프로세스 종료/크래시로 pending·running에 고착된 오래된 run을 error로 회수.
- * 폴링 라우트/페이지에서 기회적으로 호출(별도 크론 불필요). 기본 임계 10분.
+ * 정체 잡 리퍼: 프로세스 종료/크래시로 running에 고착된 오래된 run을 error로 회수.
+ * 폴링 라우트/페이지에서 기회적으로 호출(별도 크론 불필요). 긴 ingest를 고려해 기본 임계 60분.
  */
-export async function reapStaleRuns(wikiId: string, thresholdMs = 10 * 60 * 1000): Promise<void> {
+export async function reapStaleRuns(wikiId?: string, thresholdMs = 60 * 60 * 1000): Promise<void> {
   const cutoff = new Date(Date.now() - thresholdMs);
   await prisma.agentRun.updateMany({
-    where: { wikiId, status: { in: ["pending", "running"] }, createdAt: { lt: cutoff } },
+    where: { ...(wikiId ? { wikiId } : {}), status: "running", createdAt: { lt: cutoff } },
     data: { status: "error", error: "시간 초과 또는 워커 중단으로 회수됨", finishedAt: new Date() },
   });
+}
+
+export type ClaimedIngestRun = { id: string; wikiId: string; input: IngestInput; userId: string | null };
+
+/** worker용: 가장 오래된 pending ingest run 1건을 running으로 원자적으로 claim한다. */
+export async function claimNextIngestRun(): Promise<ClaimedIngestRun | null> {
+  const run = await prisma.agentRun.findFirst({
+    where: { type: "ingest", status: "pending" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, wikiId: true, input: true, userId: true },
+  });
+  if (!run) return null;
+  const claimed = await prisma.agentRun.updateMany({
+    where: { id: run.id, status: "pending" },
+    data: { status: "running" },
+  });
+  if (claimed.count !== 1) return null;
+  return { id: run.id, wikiId: run.wikiId, input: run.input as unknown as IngestInput, userId: run.userId };
 }
 
 /** (2) 실제 처리 — 백그라운드(after)에서 실행. 응답 후라 throw할 곳이 없으므로 예외는 error 상태로 삼킨다. */
@@ -504,6 +522,11 @@ export async function runIngestJob(run: {
       data: { status: "error", error: (e as Error).message, finishedAt: new Date() },
     });
   }
+}
+
+/** worker가 이미 claim한 ingest run 실행. 웹 요청 경로에서는 직접 호출하지 않는다. */
+export function runClaimedIngestJob(run: ClaimedIngestRun): Promise<void> {
+  return runIngestJob(run);
 }
 
 /** (3) 동기 편의(CLI/테스트/하위호환). 시작→완료까지 await하고 IngestResult 반환. 실패 시 throw 유지. */

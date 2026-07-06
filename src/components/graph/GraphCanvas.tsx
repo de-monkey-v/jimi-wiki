@@ -36,12 +36,15 @@ export default function GraphCanvas({
 
   // 리듀서가 최신 컨트롤/호버 상태를 읽도록 ref로 보관(sigma 재생성 없이 refresh만)
   const st = useRef({ hiddenKinds, showBroken, search: "", hovered: null as string | null });
-  st.current.hiddenKinds = hiddenKinds;
-  st.current.showBroken = showBroken;
-  st.current.search = search;
 
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
+
+  useEffect(() => {
+    st.current.hiddenKinds = hiddenKinds;
+    st.current.showBroken = showBroken;
+    st.current.search = search;
+  }, [hiddenKinds, showBroken, search]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -217,7 +220,8 @@ export default function GraphCanvas({
   const toggleKind = (k: PageKind) =>
     setHiddenKinds((prev) => {
       const next = new Set(prev);
-      next.has(k) ? next.delete(k) : next.add(k);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
       return next;
     });
 

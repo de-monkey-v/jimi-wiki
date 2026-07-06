@@ -1,6 +1,6 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { sessionOnlyGate } from "@/lib/api-gate";
-import { createIngestRun, runIngestJob, type IngestInput } from "@/lib/ingest";
+import { createIngestRun, type IngestInput } from "@/lib/ingest";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // 서버리스 대비(self-host Node는 무제한)
@@ -22,11 +22,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const run = await createIngestRun(gate.wiki.id, input, gate.user.id);
-  after(() =>
-    runIngestJob({ id: run.id, wikiId: gate.wiki.id, input, userId: gate.user.id }).catch((e) =>
-      console.error(`[ingest] runIngestJob 실패: ${(e as Error).message}`),
-    ),
-  );
 
   return NextResponse.json({ runId: run.id, status: "pending" }, { status: 202 });
 }

@@ -1,12 +1,11 @@
 "use server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { createWiki, getWikiForUser, getPage, createPage, updatePage } from "@/lib/wiki";
 import { MANUAL_KINDS } from "@/lib/kinds";
 import { hasRole } from "@/lib/api-gate";
-import { createIngestRun, runIngestJob, reapStaleRuns } from "@/lib/ingest";
+import { createIngestRun, reapStaleRuns } from "@/lib/ingest";
 import { reindexEmbeddings } from "@/lib/search";
 import { answerQuery } from "@/lib/query";
 import { normalizeCategoryForWrite } from "@/lib/governance";
@@ -78,13 +77,8 @@ export async function ingestAction(formData: FormData) {
   const text = String(formData.get("text") ?? "").trim() || undefined;
   const title = String(formData.get("title") ?? "").trim() || undefined;
   if (!url && !text) throw new Error("URL 또는 텍스트가 필요합니다");
-  // 비동기: 잡만 생성하고 즉시 반환, 처리는 백그라운드(after). ?run=으로 상태 배지 표시.
+  // 비동기: 잡만 생성하고 즉시 반환, 처리는 별도 worker가 수행. ?run=으로 상태 배지 표시.
   const run = await createIngestRun(wiki.id, { url, text, title }, userId);
-  after(() =>
-    runIngestJob({ id: run.id, wikiId: wiki.id, input: { url, text, title }, userId }).catch((e) =>
-      console.error(`[ingest] runIngestJob 실패: ${(e as Error).message}`),
-    ),
-  );
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}?run=${run.id}`);
 }
 

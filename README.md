@@ -7,7 +7,7 @@ LLM이 유지보수자 역할을 맡는 협업 위키 플랫폼. 소스를 편�
 - **Next.js 16** (App Router, React 19) — 웹 UI + `/api/*` 라우트
 - **PostgreSQL 17 + pgvector** — 데이터 + 임베딩 벡터 검색 (docker compose)
 - **Prisma 7** — ORM, 생성 클라이언트는 `src/generated/prisma`
-- **Auth.js (next-auth v5)** — 세션 인증. 개발 중에는 시드된 dev 계정을 사용
+- **Auth.js (next-auth v5)** — 로컬 이메일+비밀번호(argon2id) 인증. self-host 지향, 외부 OAuth 불필요 (`AUTH_MODE` 참조)
 - **Gemini** (`@ai-sdk/google` / `@google/genai`) — 생성 + 임베딩. (선택) Anthropic 모델로 ingest 오버라이드 가능
 - **pnpm** — 패키지 매니저
 
@@ -28,37 +28,76 @@ pnpm db:up
 # 4. 스키마 마이그레이션 적용
 pnpm db:migrate
 
-# 5. 개발용 dev 계정 시드 (DEV_USER_EMAIL 기준)
-pnpm db:seed
-
-# 6. 개발 서버 (포트 3007)
+# 5. 개발 서버 (포트 3007)
 pnpm dev
+
+# 6. 별도 터미널에서 ingest worker
+pnpm worker
 ```
 
-http://localhost:3007 접속. 원격/다른 호스트에서 접속하려면 `next.config`의 `allowedDevOrigins`를 확인한다.
+http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리자 계정을 만든다**(아래 인증 참조). 원격/다른 호스트에서 접속하려면 `next.config`의 `allowedDevOrigins`를 확인한다.
+
+### 인증 · 계정 (`AUTH_MODE`)
+
+외부 OAuth 없이 앱이 직접 계정을 관리한다. `.env`의 `AUTH_MODE`로 고른다:
+
+| 모드 | 로그인 | 대상 | 계정 관리 |
+|---|---|---|---|
+| `single` | 없음 | 나 혼자 (localhost 전용 권장) | 암묵적 owner 1명 |
+| `local` (기본) | 이메일+비밀번호(argon2id) | 소팀 내부 서버 | 관리자 생성 / 초대 링크 |
+| `oidc` | 외부 OIDC | 사내 IdP 보유 | *phase-2 (미배선)* |
+
+**first-run 관리자 만들기 (`local`):** 둘 중 하나.
+- **웹**: 첫 접속 시 `/setup`에서 관리자 이메일·비밀번호 입력. (유저가 생기면 자동 잠김)
+- **헤드리스**: `.env`에 `ADMIN_EMAIL`/`ADMIN_PASSWORD`를 채우고 `pnpm db:seed`.
+
+이후 관리자는 **`/admin/users`**에서 유저를 직접 생성하거나 **초대 링크**(`/invite/<token>`)를 발급한다. **공개 회원가입은 없다** — 초대받은 사람만 계정을 만들 수 있다.
+
+> **네트워크로 접속한다면** 비밀번호가 오가므로 `single`(로그인 없음)은 피하고 `local`을 쓴다. 집 밖에서도 붙는다면 **Tailscale**(사설 VPN, 포트 노출 없이 안전) 또는 리버스 프록시(Caddy/Cloudflare Tunnel)로 HTTPS를 앞에 둔다.
 
 ### 주요 환경변수 (`.env.example` 참조)
 
 | 변수 | 용도 |
 |---|---|
 | `DATABASE_URL` | Postgres 접속 (docker compose 기본값: `postgresql://jimi:jimi@localhost:5433/jimi`) |
-| `AUTH_SECRET` | 세션 서명 키 (`openssl rand -base64 32`) |
+| `AUTH_SECRET` | 세션/JWT 서명 키 (`openssl rand -base64 32`) |
+| `AUTH_MODE` | 인증 모드: `single` \| `local`(기본) \| `oidc` |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | (선택) `pnpm db:seed` 시 first-run 관리자 부트스트랩. 웹 `/setup`을 쓰면 비워둠 |
+| `APP_URL` | 앱 공개 URL — 초대/공유 링크 절대경로 조립용 |
 | `GEMINI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | 생성 + 임베딩 (동일 값) |
-| `DEV_USER_EMAIL` | OAuth 붙이기 전 임시 세션 계정 |
+| `DAILY_TOKEN_LIMIT` | 유저별 일일 생성형 토큰 상한 |
 | `ANTHROPIC_API_KEY`, `INGEST_MODEL` | (선택) ingest 모델을 `claude-*`로 오버라이드할 때 |
+| `WORKER_POLL_MS` | ingest worker 폴링 주기 |
 
 ## 스크립트
 
 | 명령 | 설명 |
 |---|---|
 | `pnpm dev` | 개발 서버 (포트 3007) |
+| `pnpm worker` | pending ingest 잡 처리 worker |
 | `pnpm build` / `pnpm start` | 프로덕션 빌드 / 서버 |
 | `pnpm db:up` | Postgres 컨테이너 기동 |
 | `pnpm db:migrate` | `prisma migrate dev` |
-| `pnpm db:seed` | dev 계정 시드 |
+| `pnpm db:seed` | first-run 관리자 부트스트랩 (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) |
 | `pnpm apikey:issue` | CLI로 API 키 발급 |
 | `pnpm smoke` | 스모크 테스트 |
+| `pnpm check:rules` | ontology rules ↔ skill parity 검사 |
 | `pnpm mcp` | MCP 서버 실행 (`mcp/server.mjs`) |
+
+## 운영 배포 메모
+
+self-host를 전제로 한다 — 내부 서버(또는 자체 호스트)에 올리고 `AUTH_MODE=local`로 계정을 직접 관리한다. 프로세스는 셋으로 나눈다(같은 repo).
+
+- `web`: `pnpm build` 후 `pnpm start`
+- `worker`: `pnpm worker`
+- `postgres`: `pgvector/pgvector:pg17`
+
+`web`·`worker`는 같은 `DATABASE_URL`, `AUTH_SECRET`, `GEMINI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `AUTH_MODE`를 공유한다. 첫 배포 시 `ADMIN_EMAIL`/`ADMIN_PASSWORD`로 관리자를 부트스트랩하거나 `web`의 `/setup`에서 만든다. 인터넷에 노출한다면 리버스 프록시로 HTTPS를 두거나 Tailscale 같은 사설 네트워크 뒤에 둔다.
+
+Health check:
+
+- `/api/healthz`: 프로세스 생존 확인
+- `/api/readyz`: DB 연결과 필수 환경변수 확인
 
 ## 프로그램적 접근 (REST / MCP)
 

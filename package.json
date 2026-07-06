@@ -7,12 +7,15 @@
     "dev": "next dev -p 3007",
     "build": "next build",
     "start": "next start",
+    "worker": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/worker.ts",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "db:up": "docker compose up -d",
     "db:seed": "tsx prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
     "apikey:issue": "tsx scripts/issue-api-key.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "check:rules": "node scripts/check-rules-parity.mjs",
     "mcp": "node mcp/server.mjs"
   },
   "dependencies": {
@@ -22,6 +25,7 @@
     "@auth/prisma-adapter": "^2.11.2",
     "@google/genai": "^2.10.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@node-rs/argon2": "^2.0.2",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@prisma/client-runtime-utils": "^7.8.0",

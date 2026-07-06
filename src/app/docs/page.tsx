@@ -49,8 +49,8 @@ export default async function DocsPage({
         </Link>
         <h1 className="text-2xl font-bold mt-1">연동 가이드</h1>
         <p className="text-sm text-gray-500">
-          이 위키를 <strong>앱 내부 AI 없이</strong> 외부 도구로 유지보수하는 법 — Claude Code의 MCP·Skill,
-          그리고 REST API. 어느 경로로 쓰든 같은 콘텐츠 API와 분류 규칙을 따르므로 위키의 일관성이 유지됩니다.
+          이 위키를 <strong>앱 내부 AI 없이</strong> 외부 도구로 유지보수하는 법 — 외부 에이전트(Claude Code·Codex 등)의
+          MCP·Skill, 그리고 REST API. 어느 경로로 쓰든 같은 콘텐츠 API와 분류 규칙을 따르므로 위키의 일관성이 유지됩니다.
           {slug ? (
             <>
               {" "}아래 예시의 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">{slug}</code>는 지금
@@ -100,19 +100,28 @@ export default async function DocsPage({
         </p>
       </Section>
 
-      <Section title="3. 방법 B — Claude Code Skill">
+      <Section title="3. 방법 B — 유지보수자 스킬 (Claude Code·Codex 등)">
         <p className="text-sm text-stone-600">
-          저장소의 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">skills/wiki-ingest/SKILL.md</code> 스킬은
-          외부 유지보수자용 ingest 워크플로우입니다. 내부 ingest 에이전트와 <strong>동일한 분류 규칙</strong>(온톨로지/카테고리)을
-          따르도록 정본 규칙이 vendoring되어 있어, 웹 UI로 넣든 스킬로 넣든 위키의 분류가 일관됩니다.
+          저장소의 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">skills/wiki-ingest/</code> 스킬 번들은
+          외부 유지보수자용 워크플로우입니다 — 원문 편입(ingest)뿐 아니라 분류·정리(organize)·기계 점검(lint)·조회(query)까지.
+          특정 에이전트에 묶이지 않아 <strong>MCP를 지원하면 도구로, 아니면 REST로 같은 절차</strong>를 실행합니다. 내부 ingest
+          에이전트와 <strong>동일한 분류 규칙</strong>(온톨로지/카테고리)을 정본에서 복사해 CI로 byte-parity를 강제하므로,
+          웹 UI로 넣든 스킬로 넣든 위키의 분류가 일관됩니다.
         </p>
         <p className="text-sm text-stone-600">
-          절차: ① <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">create_source</code>로 원문 불변 저장 →
+          ingest 절차: ① <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">create_source</code>로 원문 불변 저장 →
           ② <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">search</code>/<code className="rounded bg-stone-100 px-1 py-0.5 text-xs">list_pages</code>로 중복 확인 →
           ③ <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">kind=note</code> 소스 노트 작성(원문 복붙 금지, 요약) →
           ④ 영향받는 concept/entity 갱신(<code className="rounded bg-stone-100 px-1 py-0.5 text-xs">[[slug]]</code> 링크·category 재사용) →
           ⑤ 마지막 호출에 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">embed:true</code>로 시맨틱 색인.
         </p>
+        <p className="text-sm text-stone-600">번들 구성(폴더째 복사해 어느 하네스에도 배치):</p>
+        <ul className="list-disc pl-5 text-sm text-stone-600 space-y-1">
+          <li><code className="rounded bg-stone-100 px-1 py-0.5 text-xs">SKILL.md</code> — 워크플로우 진입점(하네스 무관).</li>
+          <li><code className="rounded bg-stone-100 px-1 py-0.5 text-xs">references/ontology-rules.md</code> — 분류 규칙 정본 사본(CI byte-parity 검사).</li>
+          <li><code className="rounded bg-stone-100 px-1 py-0.5 text-xs">references/tools.md</code> — 능력 ↔ MCP 도구 ↔ REST 매핑 + 인증 경계.</li>
+          <li><code className="rounded bg-stone-100 px-1 py-0.5 text-xs">references/setup.md</code> — API 키 · MCP 등록 · 하네스별 배치(Claude Code·Codex 등).</li>
+        </ul>
       </Section>
 
       <Section title="4. 방법 C — REST 직접 호출">
@@ -172,7 +181,7 @@ curl -sH "Authorization: Bearer $KEY" "$BASE/search?q=attention&k=8"`}</CodeBloc
       </Section>
 
       <p className="text-xs text-stone-400">
-        참고 파일 — 스킬: <code className="rounded bg-stone-100 px-1 py-0.5">skills/wiki-ingest/SKILL.md</code> ·
+        참고 파일 — 스킬 번들: <code className="rounded bg-stone-100 px-1 py-0.5">skills/wiki-ingest/</code>(SKILL.md + references/) ·
         MCP: <code className="rounded bg-stone-100 px-1 py-0.5">mcp/server.mjs</code> ·
         REST: <code className="rounded bg-stone-100 px-1 py-0.5">docs/rest-api.md</code>
       </p>

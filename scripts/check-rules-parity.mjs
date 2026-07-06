@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// 정본 규칙(rules/ontology-rules.md) ↔ shipped SKILL(skills/wiki-ingest/SKILL.md) ↔ 코드 상수(ONTOLOGY_RULES_VERSION)
-// 세 곳의 version 일치 + SKILL의 vendored 블록이 정본 본문과 byte-parity 인지 검사. CI에서 실행.
+// 정본 규칙(rules/ontology-rules.md) ↔ shipped SKILL(skills/wiki-ingest/) ↔ 코드 상수(ONTOLOGY_RULES_VERSION)
+// 세 곳의 version 일치 + 스킬 번들의 references/ontology-rules.md 사본이 정본과 byte-parity 인지 검사. CI에서 실행.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -29,14 +29,10 @@ const rulesVersion = rules.fm.version;
 const rulesBody = rules.body.trim();
 if (!rulesVersion) fail("rules/ontology-rules.md 에 version: 없음");
 
-// 2) SKILL front-matter version + vendored block
+// 2) SKILL front-matter version + 번들에 vendoring된 규칙 사본
 const skill = frontMatter(read("skills/wiki-ingest/SKILL.md"));
 const skillVersion = skill.fm.ontology_rules_version;
-const vend = read("skills/wiki-ingest/SKILL.md").match(
-  /<!-- BEGIN VENDORED ontology-rules[^>]*-->\n([\s\S]*?)\n<!-- END VENDORED ontology-rules[^>]*-->/,
-);
-if (!vend) fail("SKILL.md 에 VENDORED ontology-rules 블록 없음");
-const vendBody = vend[1].trim();
+const vendBody = frontMatter(read("skills/wiki-ingest/references/ontology-rules.md")).body.trim();
 
 // 3) 코드 상수
 const onto = read("src/lib/ontology.ts");
@@ -49,7 +45,7 @@ if (!(rulesVersion === skillVersion && skillVersion === codeVersion)) {
   fail(`version 불일치 — rules=${rulesVersion} skill=${skillVersion} code=${codeVersion}`);
 }
 if (rulesBody !== vendBody) {
-  fail("SKILL vendored 블록이 정본 본문과 다름(byte-parity 실패). 정본을 SKILL에 다시 vendoring 하세요.");
+  fail("skills/wiki-ingest/references/ontology-rules.md 가 정본 본문과 다름(byte-parity 실패). 정본을 다시 복사하세요: cp rules/ontology-rules.md skills/wiki-ingest/references/ontology-rules.md");
 }
 
 console.log(`✓ rules parity OK (version=${rulesVersion}, byte-parity 일치)`);

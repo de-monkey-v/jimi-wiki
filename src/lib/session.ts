@@ -1,56 +1,39 @@
 import "server-only";
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { authMode } from "@/lib/auth-mode";
 import type { User } from "@/generated/prisma/client";
 
 /**
- * 세션 (OAuth 전 테스트용 쿠키 세션).
- * 쿠키 `dev_user`에 `email.<HMAC서명>`을 담는다 — 서명 검증 없이는 위조 불가.
- * (평문 이메일만 담으면 curl로 임의 계정 도용 가능하므로 AUTH_SECRET으로 서명한다.)
- * OAuth를 붙이면 getCurrentUser 내부만 Auth.js 세션 조회로 교체하면 된다.
+ * 현재 사용자 조회 — 앱 전체의 단일 초크포인트.
+ * - single: 로그인 없이 부트스트랩된 owner(ADMIN_EMAIL 또는 최초 유저)를 반환.
+ * - local/oidc: Auth.js JWT 세션에서 userId를 뽑아 조회(jwt/session 콜백이 실어줌).
  */
-export const DEV_SESSION_COOKIE = "dev_user";
-const SECRET = process.env.AUTH_SECRET ?? "dev-insecure-secret-change-me";
-
-function hmac(email: string): string {
-  return createHmac("sha256", SECRET).update(email).digest("hex");
-}
-
-/** 쿠키에 저장할 서명된 값 생성 (login에서 사용). */
-export function signSession(email: string): string {
-  return `${email}.${hmac(email)}`;
-}
-
-/** 서명 검증 후 이메일 반환. 위조/변조면 null. (sig는 hex라 이메일의 '.'과 구분됨 — 마지막 '.'이 구분자) */
-function verifySession(value: string | undefined): string | null {
-  if (!value) return null;
-  const i = value.lastIndexOf(".");
-  if (i <= 0) return null;
-  const email = value.slice(0, i);
-  const sig = value.slice(i + 1);
-  const expected = hmac(email);
-  try {
-    const a = Buffer.from(sig, "hex");
-    const b = Buffer.from(expected, "hex");
-    if (a.length === b.length && timingSafeEqual(a, b)) return email;
-  } catch {
-    /* malformed */
+async function getSingleOwner(): Promise<User | null> {
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (email) {
+    const u = await prisma.user.findUnique({ where: { email } });
+    if (u) return u; // 매칭 없으면(오타·미시드) 최초 유저로 폴백 — 리다이렉트 루프 방지
   }
-  return null;
+  return prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  const store = await cookies();
-  const email = verifySession(store.get(DEV_SESSION_COOKIE)?.value);
-  if (!email) return null;
-  return prisma.user.findUnique({ where: { email } });
+  if (authMode() === "single") return getSingleOwner();
+  const session = await auth();
+  const uid = session?.user?.id;
+  if (uid) return prisma.user.findUnique({ where: { id: uid } });
+  // 폴백: 콜백이 id를 못 실은 예외 경로에서도 email로 복구.
+  const email = session?.user?.email;
+  return email ? prisma.user.findUnique({ where: { email } }) : null;
 }
 
-/** 로그인 필수 컨텍스트용. 미로그인 시 /login으로 리다이렉트. */
+/** 로그인 필수 컨텍스트용. 미인증 시 리다이렉트. 시그니처 불변(호출부 무영향). */
 export async function getCurrentUserId(): Promise<string> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  return user.id;
+  if (user) return user.id;
+  // loop-free: 비밀번호를 가진 관리자가 아직 없으면 최초 셋업으로, 있으면 로그인으로.
+  const bootstrapped = await prisma.user.count({ where: { passwordHash: { not: null } } });
+  redirect(bootstrapped === 0 ? "/setup" : "/login");
 }

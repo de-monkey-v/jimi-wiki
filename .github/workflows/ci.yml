@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: jimi
+          POSTGRES_PASSWORD: jimi
+          POSTGRES_DB: jimi
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U jimi -d jimi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://jimi:jimi@localhost:5433/jimi?schema=public
+      AUTH_SECRET: ci-secret
+      GEMINI_API_KEY: ""
+      GOOGLE_GENERATIVE_AI_API_KEY: ""
+      DEV_USER_EMAIL: dev@jimi.local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma migrate deploy
+      - run: pnpm check:rules
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm smoke

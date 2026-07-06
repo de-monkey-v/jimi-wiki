@@ -59,17 +59,41 @@ enum AgentStatus {
 
 // ---------- 인증 (Auth.js) ----------
 model User {
-  id            String       @id @default(cuid())
-  email         String       @unique
-  name          String?
-  image         String?
-  emailVerified DateTime?
-  createdAt     DateTime     @default(now())
-  accounts      Account[]
-  sessions      Session[]
-  memberships   Membership[]
-  createdWikis  Wiki[]       @relation("WikiCreatedBy")
-  apiKeys       ApiKey[]
+  id             String       @id @default(cuid())
+  email          String       @unique
+  name           String?
+  image          String?
+  emailVerified  DateTime?
+  passwordHash   String? // argon2id 해시. null=비밀번호 미설정(oidc/single/미부트스트랩 기존 유저)
+  isAdmin        Boolean      @default(false) // 인스턴스 관리자(유저·초대 관리 권한). 위키별 Role과 직교
+  createdAt      DateTime     @default(now())
+  accounts       Account[] // 유지(JWT 전환 후 idle) — oidc 확장 시 재사용
+  sessions       Session[] // 유지(JWT 전환 후 idle)
+  memberships    Membership[]
+  createdWikis   Wiki[]       @relation("WikiCreatedBy")
+  apiKeys        ApiKey[]
+  createdInvites Invite[]     @relation("InviteCreatedBy")
+}
+
+// ---------- 인스턴스 계정 초대 (가입 게이트) ----------
+// ShareLink(위키 스코프 공유)와 달리 wikiId가 선택이며 '새 유저 계정 발급'을 의미한다.
+// 공개 회원가입은 없다 — 관리자가 발급한 이 토큰으로만 계정을 만들 수 있다.
+model Invite {
+  id           String    @id @default(cuid())
+  token        String    @unique // 고엔트로피 무작위(crypto.randomBytes(24).base64url). 초대 URL에 실림
+  email        String? // 지정 시 이 이메일만 가입 허용
+  wikiId       String? // 지정 시 가입과 동시에 이 위키 멤버로 추가. null=계정만 생성
+  role         Role      @default(viewer) // wikiId가 있을 때 부여할 위키 역할
+  expiresAt    DateTime? // null=무만료. now 이후면 사용 불가
+  usedAt       DateTime? // 소비 시각(1회용 게이트). null=미사용
+  usedByUserId String? // 이 초대로 가입한 유저(소프트 참조)
+  createdById  String
+  createdAt    DateTime  @default(now())
+  createdBy    User      @relation("InviteCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  wiki         Wiki?     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@index([createdById])
+  @@index([wikiId])
 }
 
 // ---------- API 키 인증 (프로그램적 호출용 Bearer 토큰) ----------
@@ -169,6 +193,7 @@ model Wiki {
   shareLinks  ShareLink[]
   agentRuns   AgentRun[]
   apiKeys     ApiKey[]
+  invites     Invite[]
 }
 
 model Membership {

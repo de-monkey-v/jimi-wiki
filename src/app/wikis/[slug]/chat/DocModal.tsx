@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import GithubSlugger from "github-slugger";
 import { fetchEvidenceDoc } from "./actions";
@@ -24,8 +25,9 @@ const cacheKey = (wikiSlug: string, d: { kind: string; slug: string }) => `${wik
  */
 export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; wikiSlug: string; onClose: () => void }) {
   // 이어보기 스택: prop doc이 바뀌면 [doc]으로 리셋
-  const [stack, setStack] = useState<EvidenceDoc[]>([]);
-  useEffect(() => setStack(doc ? [doc] : []), [doc]);
+  const rootKey = doc ? `${doc.kind}:${doc.slug}:${doc.heading ?? ""}` : "";
+  const [nav, setNav] = useState<{ rootKey: string; stack: EvidenceDoc[] }>({ rootKey: "", stack: [] });
+  const stack = useMemo(() => (doc && nav.rootKey === rootKey ? nav.stack : doc ? [doc] : []), [doc, nav, rootKey]);
   const current = stack.length > 0 ? stack[stack.length - 1] : null;
 
   const [state, setState] = useState<{ loading: boolean; data?: DocContent; error?: boolean }>({ loading: false });
@@ -91,8 +93,13 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
       if (!f || f.length === 0) return;
       const first = f[0];
       const last = f[f.length - 1];
-      if (e.shiftKey && document.activeElement === first) (e.preventDefault(), last.focus());
-      else if (!e.shiftKey && document.activeElement === last) (e.preventDefault(), first.focus());
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -114,8 +121,8 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
     const seg = a.getAttribute("href")?.split("/").pop();
     if (!seg) return;
     const slug = decodeURIComponent(seg);
-    setStack((s) => [...s, { kind: "page", slug, title: a.textContent ?? slug }]);
-  }, []);
+    setNav({ rootKey, stack: [...stack, { kind: "page", slug, title: a.textContent ?? slug }] });
+  }, [rootKey, stack]);
 
   if (!doc || !current) return null;
   const href =
@@ -138,7 +145,7 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
           <div className="flex min-w-0 items-center gap-2">
             {stack.length > 1 && (
               <button
-                onClick={() => setStack((s) => s.slice(0, -1))}
+                onClick={() => setNav({ rootKey, stack: stack.slice(0, -1) })}
                 className="shrink-0 rounded border border-stone-200 px-1.5 py-0.5 text-xs text-stone-500 hover:bg-stone-50"
               >
                 ← 뒤로
@@ -192,7 +199,7 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
                     {state.data.related.map((r) => (
                       <button
                         key={r.slug}
-                        onClick={() => setStack((s) => [...s, { kind: "page", slug: r.slug, title: r.title }])}
+                        onClick={() => setNav({ rootKey, stack: [...stack, { kind: "page", slug: r.slug, title: r.title }] })}
                         className="rounded-md border border-stone-200 px-2 py-1 text-xs text-stone-600 hover:border-blue-400 hover:text-blue-700"
                       >
                         {r.title}

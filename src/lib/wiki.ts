@@ -508,7 +508,12 @@ export async function getPageNeighborhood(wikiId: string, slug: string, depth = 
     for (const l of links) {
       const to = l.toPageId!;
       edgePairs.push([l.fromPageId, to]);
-      for (const id of [l.fromPageId, to]) if (!idSet.has(id)) (idSet.add(id), next.push(id));
+      for (const id of [l.fromPageId, to]) {
+        if (!idSet.has(id)) {
+          idSet.add(id);
+          next.push(id);
+        }
+      }
     }
     frontier = next;
   }

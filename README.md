@@ -77,3 +77,9 @@ http://localhost:3007 접속. 원격/다른 호스트에서 접속하려면 `nex
    ```
 
 > 내부 AI를 소비하는 라우트(`/ingest`, `/query`, `/reindex`, `/lint?deep`)는 **세션 전용**이다. API 키로는 `create_source` + `write_page` 같은 primitive로 위키를 직접 작성하고, 앱 내부 AI ingest는 웹 UI에서 실행한다. 자세한 정책은 `docs/rest-api.md` 참조.
+
+## 라이선스
+
+**Functional Source License, Version 1.1, Apache 2.0 Future License (FSL-1.1-ALv2)** — 전문은 [`LICENSE.md`](LICENSE.md).
+
+내부 사용, 수정, 비상업적 교육·연구, 자체 배포는 자유롭게 허용된다. 다만 이 소프트웨어를 대체하거나 실질적으로 동일한 기능을 제공하는 **상업적 제품·서비스(예: 경쟁 SaaS 호스팅)로 제공하는 것은 금지**된다. 각 버전은 공개 후 **2년이 지나면 Apache License 2.0으로 자동 전환**된다.

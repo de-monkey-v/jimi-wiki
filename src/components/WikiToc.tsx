@@ -182,6 +182,10 @@ export function WikiToc({
               <Link href={`/wikis/${slug}/lint`} className={`px-2 ${linkCls(sub === "lint")}`}>건강검진</Link>
             </li>
           )}
+          <li>
+            {/* 전역 /docs 라우트로 나가는 링크 — 위키 셸 밖이라 sub 하이라이트 대상 아님 */}
+            <Link href={`/docs?wiki=${encodeURIComponent(slug)}`} className={`px-2 ${linkCls(false)}`}>연동 가이드</Link>
+          </li>
           {role === "owner" && (
             <li>
               <Link href={`/wikis/${slug}/settings`} className={`px-2 ${linkCls(sub === "settings")}`}>설정</Link>

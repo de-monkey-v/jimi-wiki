@@ -19,6 +19,7 @@ export default async function WikisPage() {
         <div className="flex items-center gap-3 text-sm text-stone-500">
           <Link href="/channels" className="hover:text-stone-800">채널</Link>
           <Link href="/keys" className="hover:text-stone-800">API 키</Link>
+          <Link href="/docs" className="hover:text-stone-800">연동 가이드</Link>
           <span className="text-stone-300">·</span>
           <span className="text-xs text-stone-400">{user.email}</span>
           <form action={logoutAction}>

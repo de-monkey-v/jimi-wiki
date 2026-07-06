@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser } from "@/lib/wiki";
+import { getWikiForUser, getPage, deletePage } from "@/lib/wiki";
 import { hasRole } from "@/lib/api-gate";
 import { mergeCategory, renameCategory, retireCategory, setPageCategory } from "@/lib/governance";
 
@@ -11,6 +11,18 @@ async function gate(slug: string) {
   const wiki = await getWikiForUser(userId, slug);
   if (!wiki || !hasRole(wiki.role, "editor")) throw new Error("권한 없음(editor 이상 필요)");
   return wiki;
+}
+
+// 정크 노트(출처 없는 note) 삭제. 1a DELETE 가드와 동일한 안전 재검증을 서버측에서 한 번 더.
+export async function deleteJunkNoteAction(formData: FormData) {
+  const slug = String(formData.get("wikiSlug") ?? "");
+  const wiki = await gate(slug);
+  const pageSlug = String(formData.get("pageSlug") ?? "");
+  const page = await getPage(wiki.id, pageSlug);
+  if (page && page.kind === "note" && page.sourceId == null) {
+    await deletePage(wiki.id, page.slug);
+  }
+  revalidatePath(`/wikis/${slug}/lint`);
 }
 
 export async function mergeCategoryAction(formData: FormData) {

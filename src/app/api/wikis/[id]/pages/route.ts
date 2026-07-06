@@ -8,8 +8,6 @@ import type { PageKind } from "@/generated/prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const coerceKind = (v: unknown): PageKind => (PAGE_KINDS.includes(v as PageKind) ? (v as PageKind) : "note");
-
 /** GET /api/wikis/:id/pages — 페이지 목록. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -45,13 +43,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!body || typeof body !== "object" || !body.title || typeof body.body !== "string") {
     return NextResponse.json({ error: "title_and_body_required" }, { status: 400 });
   }
-  // L4: MCP write_page의 kind enum과 정합. 명시된 잘못된 kind는 조용히 note로 강등하지 않고 거부.
-  // (kind 생략 시에는 하위호환으로 note 기본.)
-  if (body.kind !== undefined && !PAGE_KINDS.includes(body.kind as PageKind)) {
+  // kind는 명시 필수 — 생략 시 조용히 note로 떨어지면 지울 수 없는 정크 노트가 생긴다(불변 계층).
+  if (body.kind === undefined) {
+    return NextResponse.json({ error: "kind_required" }, { status: 400 });
+  }
+  // MCP write_page의 kind enum과 정합. 잘못된 kind는 거부.
+  if (!PAGE_KINDS.includes(body.kind as PageKind)) {
     return NextResponse.json({ error: "invalid_kind" }, { status: 400 });
   }
-
-  const kind = coerceKind(body.kind);
+  const kind = body.kind as PageKind;
   // S3: raw REST 경로도 거버넌스 우회 못 하게 서버측 정규화. note는 순수성 위해 category 없음.
   const category =
     kind === "note" ? null : body.category ? await normalizeCategoryForWrite(gate.wiki.id, String(body.category)) : undefined;
@@ -61,6 +61,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (body.sourceSlug) {
     source = await getSource(gate.wiki.id, String(body.sourceSlug));
     if (!source) return NextResponse.json({ error: "source_not_found" }, { status: 400 });
+  }
+  // note는 반드시 원문(sourceSlug)에 연결한다 — 출처 없는 정크 노트를 원천 차단.
+  if (kind === "note" && !source) {
+    return NextResponse.json({ error: "note_requires_source" }, { status: 400 });
   }
 
   const res = await upsertPage(gate.wiki.id, {

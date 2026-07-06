@@ -4,7 +4,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser } from "@/lib/wiki";
 import { hasRole } from "@/lib/api-gate";
 import { lintWiki } from "@/lib/lint";
-import { mergeCategoryAction, retireCategoryAction, assignCategoryAction, flattenCategoryAction } from "./actions";
+import { mergeCategoryAction, retireCategoryAction, assignCategoryAction, flattenCategoryAction, deleteJunkNoteAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +104,36 @@ export default async function LintPage({
                     {d.sourceTitle}
                   </Link>
                   <span className="text-xs text-gray-400">{(d.sim * 100).toFixed(0)}%</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      {/* 정크 노트: 출처 없는 note — 손상/테스트 잔재. 삭제 대상 */}
+      <section className="border rounded-lg p-4">
+        <h2 className="font-semibold mb-2">
+          정크 노트 (출처 없음) <span className="text-sm text-gray-400">({report.junkNotes.length})</span>
+        </h2>
+        {report.junkNotes.length === 0 ? (
+          <p className="text-sm text-gray-400">없음</p>
+        ) : (
+          <>
+            <p className="mb-2 text-xs text-gray-400">
+              원문(Source)에 연결되지 않은 노트입니다(provenance 없음). 빈/짧은 테스트 잔재면 삭제하고, 내용이 있으면 원문 재연결(재-ingest)을 검토하세요.
+            </p>
+            <ul className="space-y-1 text-sm">
+              {report.junkNotes.map((n) => (
+                <li key={n.slug} className="flex flex-wrap items-center gap-2">
+                  <Link href={`${base}/${encodeURIComponent(n.slug)}`} className="text-blue-600 hover:underline">
+                    {n.title || n.slug}
+                  </Link>
+                  <form action={deleteJunkNoteAction} className="inline">
+                    <input type="hidden" name="wikiSlug" value={slug} />
+                    <input type="hidden" name="pageSlug" value={n.slug} />
+                    <button className="rounded border px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">삭제</button>
+                  </form>
                 </li>
               ))}
             </ul>

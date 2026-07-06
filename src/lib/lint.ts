@@ -13,6 +13,7 @@ export interface LintReport {
   noOutLinks: { slug: string; title: string }[]; // 나가는 링크 없음
   untreatedSources: { slug: string; title: string }[]; // 소스 노트 없는 원문
   sourceDupPages: { pageSlug: string; pageTitle: string; sourceSlug: string; sourceTitle: string; sim: number }[]; // 원문을 사실상 복붙한 페이지
+  junkNotes: { slug: string; title: string }[]; // 출처(sourceId) 없는 정크 노트 — 삭제 대상
   categoryHealth: CategoryIssues; // 중복 의심 category·고아 category·미분류 파생
   llmNotes?: string; // 심층(deep) 시 LLM이 찾은 모순·누락 개념
 }
@@ -79,7 +80,7 @@ const LINT_SYSTEM = `너는 이 위키의 품질 검수자다. 도구(listPages,
 
 /** 위키 건강검진. 기계적 점검은 항상, deep=true면 LLM 심층 점검 추가. */
 export async function lintWiki(wikiId: string, opts?: { deep?: boolean; userId?: string | null }): Promise<LintReport> {
-  const pages = await prisma.page.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true } });
+  const pages = await prisma.page.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true, kind: true } });
   const links = await prisma.pageLink.findMany({
     where: { wikiId },
     select: { fromPageId: true, toPageId: true, toSlug: true },
@@ -92,15 +93,18 @@ export async function lintWiki(wikiId: string, opts?: { deep?: boolean; userId?:
 
   const inbound = new Set(links.filter((l) => l.toPageId).map((l) => l.toPageId!));
   const outbound = new Set(links.map((l) => l.fromPageId));
-  const orphanPages = pages.filter((p) => !inbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));
-  const noOutLinks = pages.filter((p) => !outbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));
+  // orphan/noOut는 파생 페이지(concept/entity/answer)만 대상. note는 설계상 그래프의 잎(원문 요약
+  // 전용, 상호참조 금지)이고 meta(ontology 등)는 system 페이지라 링크 검사에서 제외한다.
+  const derived = pages.filter((p) => p.kind !== "note" && p.kind !== "meta");
+  const orphanPages = derived.filter((p) => !inbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));
+  const noOutLinks = derived.filter((p) => !outbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));
 
   // 소스 노트 없는 원문. "처리됨" 판정은 세 경로 중 하나면 충분:
   // (a) note 페이지의 sourceId provenance, (b) 파생 페이지의 PageContribution, (c) 본문 내 slug 언급(구형 위키 호환)
   const sources = await prisma.source.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true, body: true } });
   const pageBodies = await prisma.page.findMany({
     where: { wikiId },
-    select: { slug: true, title: true, body: true, sourceId: true },
+    select: { slug: true, title: true, body: true, sourceId: true, kind: true },
   });
   const allBodies = pageBodies.map((p) => p.body).join("\n");
   const treatedSourceIds = new Set(pageBodies.map((p) => p.sourceId).filter((id): id is string => id !== null));
@@ -128,11 +132,17 @@ export async function lintWiki(wikiId: string, opts?: { deep?: boolean; userId?:
   }
   sourceDupPages.sort((a, b) => b.sim - a.sim);
 
+  // 정크 노트: 출처(sourceId) 없는 note. 원문에 연결되지 않아 provenance가 없는 손상/테스트 잔재로,
+  // API/거버넌스로 삭제 가능(불변 보호 대상 아님). 진짜 결함이므로 신호로 노출한다.
+  const junkNotes = pageBodies
+    .filter((p) => p.kind === "note" && p.sourceId == null)
+    .map((p) => ({ slug: p.slug, title: p.title }));
+
   // category 건강: itemCount 재계산(C3) 후 중복/고아/미분류 탐지
   await recountItemCounts(wikiId).catch(() => {});
   const categoryHealth = await detectCategoryIssues(wikiId);
 
-  const report: LintReport = { pageCount: pages.length, brokenLinks, orphanPages, noOutLinks, untreatedSources, sourceDupPages, categoryHealth };
+  const report: LintReport = { pageCount: pages.length, brokenLinks, orphanPages, noOutLinks, untreatedSources, sourceDupPages, junkNotes, categoryHealth };
 
   if (opts?.deep && geminiEnabled() && pages.length > 0) {
     try {
@@ -164,7 +174,7 @@ export async function lintWiki(wikiId: string, opts?: { deep?: boolean; userId?:
       wikiId,
       kind: "lint",
       title: "lint",
-      detail: `broken=${brokenLinks.length} orphan=${orphanPages.length} noOut=${noOutLinks.length} srcDup=${sourceDupPages.length}`,
+      detail: `broken=${brokenLinks.length} orphan=${orphanPages.length} noOut=${noOutLinks.length} srcDup=${sourceDupPages.length} junk=${junkNotes.length}`,
     },
   });
 

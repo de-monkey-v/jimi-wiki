@@ -384,6 +384,7 @@ export async function runIngestJob(run: {
       const res = await upsertPage(wikiId, {
         title,
         kind: "note",
+        sourceId: source.id, // 스텁 노트도 provenance 연결(출처 없는 정크 노트 방지)
         body: `> 원문: ${input.url ?? "(직접 입력)"}\n> sources: ${sourceSlug}\n\n${content.slice(0, 2000)}`,
       });
       touched.add(res.slug);

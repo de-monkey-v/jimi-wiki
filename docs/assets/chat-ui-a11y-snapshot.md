@@ -1,0 +1,67 @@
+- generic [ref=f8e1]:
+  - main [ref=f8e2]:
+    - generic [ref=f8e3]:
+      - link "내 위키" [ref=f8e4] [cursor=pointer]:
+        - /url: /wikis
+      - text: /
+      - link "AI 스터디" [ref=f8e5] [cursor=pointer]:
+        - /url: /wikis/ai-스터디
+    - heading "AI에게 질문" [level=1] [ref=f8e6]
+    - paragraph [ref=f8e7]: AI 스터디의 지식으로 답합니다 · 좋은 답변은 '위키에 저장'으로 축적하세요.
+    - generic [ref=f8e8]:
+      - generic [ref=f8e9]:
+        - generic [ref=f8e25]: BERT와 GPT의 차이는?
+        - generic [ref=f8e27]:
+          - generic [ref=f8e29]:
+            - paragraph [ref=f8e30]: BERT(Bidirectional Encoder Representations from Transformers)와 GPT(Generative Pre-trained Transformer)는 모두 트랜스포머 아키텍처를 기반으로 하는 언어 모델이다 [1, 2].
+            - paragraph [ref=f8e31]: 주요 차이점은 다음과 같다.
+            - list [ref=f8e32]:
+              - listitem [ref=f8e33]: "아키텍처 활용: BERT는 트랜스포머의 인코더-디코더 구조 중 인코더 부분만을 사용하는 반면 [1], GPT는 트랜스포머의 인코더-디코더 구조 중 디코더 부분만을 사용한다 [2, 3]."
+              - listitem [ref=f8e34]: "텍스트 처리 방향: GPT는 디코더 부분만을 사용하여 텍스트 생성 작업에 특화되어 있다 [2]. (BERT의 텍스트 처리 방향에 대한 정보는 위키에 없다.)"
+            - paragraph [ref=f8e35]: "참고:"
+            - list [ref=f8e36]:
+              - listitem [ref=f8e37]: BERT
+              - listitem [ref=f8e38]: GPT
+              - listitem [ref=f8e39]: source
+          - generic [ref=f8e40]:
+            - link "[1] BERT" [ref=f8e41] [cursor=pointer]:
+              - /url: /wikis/ai-%EC%8A%A4%ED%84%B0%EB%94%94/bert
+              - generic [ref=f8e42]: "[1]"
+              - text: BERT
+            - link "[2] GPT" [ref=f8e43] [cursor=pointer]:
+              - /url: /wikis/ai-%EC%8A%A4%ED%84%B0%EB%94%94/gpt
+              - generic [ref=f8e44]: "[2]"
+              - text: GPT
+            - generic [ref=f8e45]:
+              - generic [ref=f8e46]: "[3]"
+              - text: source
+            - link "[4] 인코더-디코더" [ref=f8e47] [cursor=pointer]:
+              - /url: /wikis/ai-%EC%8A%A4%ED%84%B0%EB%94%94/encoder-decoder
+              - generic [ref=f8e48]: "[4]"
+              - text: 인코더-디코더
+            - link "[5] 트랜스포머와 어텐션 (Source Note)" [ref=f8e49] [cursor=pointer]:
+              - /url: /wikis/ai-%EC%8A%A4%ED%84%B0%EB%94%94/2026-07-02-transformer-and-attention
+              - generic [ref=f8e50]: "[5]"
+              - text: 트랜스포머와 어텐션 (Source Note)
+            - link "[6] 트랜스포머 › 관련 문서" [ref=f8e51] [cursor=pointer]:
+              - /url: /wikis/ai-%EC%8A%A4%ED%84%B0%EB%94%94/transformer
+              - generic [ref=f8e52]: "[6]"
+              - text: 트랜스포머
+              - generic [ref=f8e53]: › 관련 문서
+            - generic [ref=f8e54]:
+              - generic [ref=f8e55]: "[7]"
+              - text: source
+            - link "[8] RAG와 파인튜닝 (Source Note) › RAG와 파인튜닝" [ref=f8e56] [cursor=pointer]:
+              - /url: /wikis/ai-%EC%8A%A4%ED%84%B0%EB%94%94/2026-07-02-rag%EC%99%80-%ED%8C%8C%EC%9D%B8%ED%8A%9C%EB%8B%9D
+              - generic [ref=f8e57]: "[8]"
+              - text: RAG와 파인튜닝 (Source Note)
+              - generic [ref=f8e58]: › RAG와 파인튜닝
+          - button "위키에 저장" [ref=f8e60]
+      - generic [ref=f8e11]:
+        - textbox "위키에 질문… (Enter 전송 · Shift+Enter 줄바꿈)" [active] [ref=f8e12]:
+          - /placeholder: 위키에 질문…  (Enter 전송 · Shift+Enter 줄바꿈)
+          - text: 테스트
+        - button "보내기" [ref=f8e13]
+  - button "Open Next.js Dev Tools" [ref=f8e19] [cursor=pointer]:
+    - img [ref=f8e20]
+  - alert [ref=f8e23]

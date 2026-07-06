@@ -1,4 +1,4 @@
-// jimi-wiki 플랫폼 데이터 모델 — design/jimi-wiki-platform.md §4 참조
+// jimi-wiki 플랫폼 데이터 모델 — docs/jimi-wiki-platform.md §4 참조
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]

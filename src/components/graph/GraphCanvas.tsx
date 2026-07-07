@@ -6,10 +6,21 @@ import Sigma from "sigma";
 import type { NodeDisplayData, EdgeDisplayData } from "sigma/types";
 import FA2Layout from "graphology-layout-forceatlas2/worker";
 import forceAtlas2 from "graphology-layout-forceatlas2";
+import noverlap from "graphology-layout-noverlap";
+import { createNodeBorderProgram } from "@sigma/node-border";
 import { nodeColor, KIND_COLOR, KIND_LABEL, KIND_ORDER, type WikiGraph } from "@/lib/kinds";
 import type { PageKind } from "@/generated/prisma/client";
 
 const DIM = "#e7e5e4"; // stone-200 — dim 처리 색
+
+// 노드에 흰 헤일로를 둘러 엣지·다른 노드 위에서 또렷하게 떠 보이게(Obsidian/Quartz 느낌).
+// 바깥 15% 링 = borderColor(현재 페이지는 강조색, 기본 흰색), 안쪽 = 노드 색.
+const NodeHaloProgram = createNodeBorderProgram({
+  borders: [
+    { size: { value: 0.15 }, color: { attribute: "borderColor", defaultValue: "#ffffff" } },
+    { size: { fill: true }, color: { attribute: "color" } },
+  ],
+});
 
 export default function GraphCanvas({
   nodes,
@@ -59,6 +70,7 @@ export default function GraphCanvas({
         y: Math.random(),
         size: 3 + 8 * Math.sqrt(n.degree / maxDeg) + (n.slug === currentSlug ? 4 : 0),
         color: nodeColor(n),
+        borderColor: n.slug === currentSlug ? "#44403c" : "#ffffff", // 현재 페이지는 stone-700 링
         kind: n.kind,
         broken: !!n.broken,
         forceLabel: n.slug === currentSlug,
@@ -82,12 +94,21 @@ export default function GraphCanvas({
 
     const sigma = new Sigma(graph, el, {
       renderEdgeLabels: false,
-      labelRenderedSizeThreshold: 8,
-      labelColor: { color: "#57534e" },
+      // 호버 없이도 라벨이 보이게: 임계값 0 → 전 노드가 라벨 대상.
+      // density를 올려 대부분 항상 표시하되, 격자 겹침관리로 확대 시 더 드러나 지저분해지지 않게 함.
+      labelRenderedSizeThreshold: 0,
+      labelDensity: 3,
+      labelGridCellSize: 70,
+      labelSize: 12,
+      labelWeight: "500",
+      labelColor: { color: "#44403c" }, // stone-700 — 배경 위 가독성
       labelFont: "ui-sans-serif, system-ui, sans-serif",
       defaultEdgeColor: DIM,
       minCameraRatio: 0.05,
       maxCameraRatio: 8,
+      // 흰 헤일로 노드(엣지는 sigma 기본 직선 — 연결 추적이 더 명료)
+      defaultNodeType: "halo",
+      nodeProgramClasses: { halo: NodeHaloProgram },
     });
     sigmaRef.current = sigma;
     graphRef.current = graph;
@@ -107,9 +128,13 @@ export default function GraphCanvas({
           res.label = "";
         }
       }
-      if (s.hovered && node !== s.hovered && !graph.areNeighbors(s.hovered, node)) {
-        res.color = DIM;
-        res.label = "";
+      if (s.hovered) {
+        if (node === s.hovered) {
+          res.highlighted = true; // sigma 호버 스타일(라벨 박스 강조)
+        } else if (!graph.areNeighbors(s.hovered, node)) {
+          res.color = DIM;
+          res.label = "";
+        }
       }
       return res;
     });
@@ -123,7 +148,15 @@ export default function GraphCanvas({
         return res;
       }
       const cur = st.current;
-      if (cur.hovered && s !== cur.hovered && t !== cur.hovered) res.hidden = true;
+      if (cur.hovered) {
+        if (s !== cur.hovered && t !== cur.hovered) {
+          res.hidden = true;
+        } else {
+          // 호버 노드에 붙은 엣지는 그 노드 색으로 물들이고 굵게 강조
+          res.color = graph.getNodeAttribute(cur.hovered, "color") as string;
+          res.size = 2;
+        }
+      }
       return res;
     });
 
@@ -143,13 +176,18 @@ export default function GraphCanvas({
     });
 
     // FA2 live 레이아웃 → 안정화 후 정지(Quartz식 군집 애니메이션)
-    const settings = forceAtlas2.inferSettings(graph);
-    const layout = new FA2Layout(graph, { settings: { ...settings, slowDown: 8 } });
+    // adjustSizes: 노드 크기를 고려해 겹침 완화 / linLogMode: 큰 그래프에서 군집을 더 또렷하게 뭉침
+    const base = forceAtlas2.inferSettings(graph);
+    const settings = { ...base, slowDown: 8, adjustSizes: true, ...(graph.order > 20 ? { linLogMode: true } : {}) };
+    const layout = new FA2Layout(graph, { settings });
     layout.start();
     let stopped = false;
     const stopTimer = setTimeout(() => {
       layout.stop();
+      // 정지 후 잔여 겹침을 정리해 노드가 서로 파묻히지 않게 함
+      noverlap.assign(graph, { maxIterations: 60, settings: { margin: 3, ratio: 1, expansion: 1.1 } });
       stopped = true;
+      sigma.refresh();
     }, 3500);
     // 워커 정지 후 여유를 두고 마우스 히트 인덱스를 최종 위치로 재구축(정지-refresh 레이스 회피)
     const reindexTimer = setTimeout(() => sigma.refresh(), 3800);
@@ -228,7 +266,10 @@ export default function GraphCanvas({
   const hasBroken = nodes.some((n) => n.broken);
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-stone-200 bg-white" style={{ height }}>
+    <div
+      className="relative overflow-hidden rounded-lg border border-stone-200"
+      style={{ height, background: "radial-gradient(circle at 50% 38%, #ffffff 0%, #fafaf9 70%, #f5f5f4 100%)" }}
+    >
       <div ref={containerRef} className="absolute inset-0" />
       {controls && (
         <div className="absolute left-3 top-3 z-10 w-56 space-y-2 rounded-lg border border-stone-200 bg-white/90 p-3 text-sm shadow-sm backdrop-blur">

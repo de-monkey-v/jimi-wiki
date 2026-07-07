@@ -13,7 +13,11 @@ const sanitizeSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    a: [...(defaultSchema.attributes?.a ?? []), "className"],
+    // 기본 스키마의 className 정의(a에 대해 값 "data-footnote-backref"만 허용)에 위키링크 값을 병합.
+    // append로는 findDefinition이 기본 정의를 먼저 반환해 무시되므로 map으로 기존 정의에 값을 더한다.
+    a: (defaultSchema.attributes?.a ?? []).map((e) =>
+      Array.isArray(e) && e[0] === "className" ? ([...e, "wikilink", "wikilink-missing"] as typeof e) : e,
+    ),
   },
 };
 
@@ -50,7 +54,8 @@ function remarkWikiLink(opts: {
     return {
       type: "link",
       url: opts.hrefFor(target),
-      data: { hProperties: { className: missing ? "wikilink wikilink-missing" : "wikilink" } },
+      // className은 hast 토큰 배열로 — 문자열로 주면 sanitize/stringify가 드롭한다.
+      data: { hProperties: { className: missing ? ["wikilink", "wikilink-missing"] : ["wikilink"] } },
       children: [{ type: "text", value: label }],
     };
   };

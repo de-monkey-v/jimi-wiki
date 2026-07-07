@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+.openai-oauth.json
+.openai-oauth.json*.tmp
+.model-catalog.cache.json*
+*.log
+npm-debug.log*
+.DS_Store
+docs/assets

@@ -79,6 +79,8 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 | 명령 | 설명 |
 |---|---|
 | `pnpm dev` | 개발 서버 (포트 3007) |
+| `pnpm dev:all` | web + worker 한 번에 기동(로그 합침, Ctrl-C로 둘 다 종료) |
+| `pnpm start:all` | 프로덕션 web(`start`) + worker 한 번에 기동 |
 | `pnpm worker` | pending ingest 잡 처리 worker |
 | `pnpm build` / `pnpm start` | 프로덕션 빌드 / 서버 |
 | `pnpm db:up` | Postgres 컨테이너 기동 |
@@ -99,6 +101,10 @@ self-host를 전제로 한다 — 내부 서버(또는 자체 호스트)에 올�
 - `postgres`: `pgvector/pgvector:pg17`
 
 `web`·`worker`는 같은 `DATABASE_URL`, `AUTH_SECRET`, `GEMINI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `AUTH_MODE`를 공유한다. 첫 배포 시 `ADMIN_EMAIL`/`ADMIN_PASSWORD`로 관리자를 부트스트랩하거나 `web`의 `/setup`에서 만든다. 인터넷에 노출한다면 리버스 프록시로 HTTPS를 두거나 Tailscale 같은 사설 네트워크 뒤에 둔다.
+
+**Docker 로 한 번에**: `docker compose up --build` 하면 `db`·`web`(3007)·`worker`가 함께 뜬다. `web`·`worker`는 같은 이미지(command 로 역할 구분)이고, `.env`를 `env_file`로 읽되 `DATABASE_URL`은 컨테이너용(`db:5432`)으로 덮어쓴다. ChatGPT OAuth 토큰은 `jimi-oauth` 볼륨(`/data`)에 두어 web·worker가 공유한다. 개발 중이면 `pnpm dev:all`(web+worker 동시)로 충분하다.
+
+**모델 선택 · ChatGPT 로그인**: 관리자는 **`/admin/settings`**에서 채팅·ingest·query/lint 모델을 provider별 목록에서 골라 저장하고(재시작 없이 반영), ChatGPT 구독 OAuth를 브라우저 없이 device-code 로 로그인/로그아웃할 수 있다. env(`CHAT_MODEL` 등)는 미설정 시 폴백. 자세한 OAuth 흐름은 [`docs/openai-oauth.md`](docs/openai-oauth.md).
 
 Health check:
 

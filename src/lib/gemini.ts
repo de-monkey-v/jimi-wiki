@@ -8,17 +8,29 @@ import {
   type FunctionCall,
 } from "@google/genai";
 import { recordUsage, type UsageMeta } from "@/lib/usage";
+import { genModel, openaiOAuthEnabled } from "@/lib/model-config";
+import { storeExists } from "@/lib/openai-oauth";
+import { providerOf } from "@/lib/provider";
 
-// 모델은 env로 오버라이드 가능(미설정 시 기본값). .env.example의 "모델 선택" 참조.
+// 임베딩 모델은 env 고정(DB vector 컬럼·HNSW와 결합). 생성 모델(chat/gen/ingest)은 model-config 에서 런타임 조회.
 export const EMBED_MODEL = process.env.EMBED_MODEL || "gemini-embedding-001"; // 임베딩(검색·색인)
 // ⚠️ EMBED_DIM은 DB의 vector(N) 컬럼·HNSW 인덱스와 결합. 바꾸면 스키마 마이그레이션 + 전체 재색인 필요.
 export const EMBED_DIM = Number(process.env.EMBED_DIM) || 768;
-export const GEN_MODEL = process.env.GEN_MODEL || "gemini-2.5-flash"; // query·lint 등 일반 생성
 const EMBED_MAX_ITEMS = 100;
 const EMBED_MAX_CHARS = 18_000; // 요청당 총 문자 예산(토큰/배치 상한 회피)
 
 export function geminiEnabled(): boolean {
   return !!process.env.GEMINI_API_KEY;
+}
+
+/** 주어진 모델의 provider 가 사용 가능한지(키/OAuth). 알 수 없는 provider 는 false(gemini 폴백 금지). */
+export function llmEnabledForModel(model: string): boolean {
+  const p = providerOf(model);
+  if (p === "anthropic") return !!process.env.ANTHROPIC_API_KEY;
+  if (p === "openai")
+    return !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL || (openaiOAuthEnabled() && storeExists()));
+  if (p === "google") return geminiEnabled();
+  return false;
 }
 
 let _client: GoogleGenAI | null = null;
@@ -116,12 +128,26 @@ export async function embedTexts(texts: string[], taskType: EmbedTaskType, meta?
   return out;
 }
 
-/** 도구 없는 단순 텍스트 생성(질의 답변 등). meta 주면 사용량 계측(성공 경로). */
+/** 도구 없는 단순 텍스트 생성(질의 답변 등). gen 모델에 따라 provider 라우팅. meta 주면 사용량 계측(성공 경로). */
 export async function generateText(system: string, prompt: string, meta?: UsageMeta): Promise<string> {
+  const model = genModel();
+  const provider = providerOf(model);
+  // 비-Gemini provider 는 툴 없는 루프로 위임(동일 계약).
+  if (provider === "anthropic" || provider === "openai") {
+    const loop =
+      provider === "anthropic"
+        ? await (await import("@/lib/claude")).claudeGenerateWithTools({ system, userPrompt: prompt, tools: [], model })
+        : await (await import("@/lib/openai")).openaiGenerateWithTools({ system, userPrompt: prompt, tools: [], model });
+    if (meta && loop.usage) {
+      recordUsage({ ...meta, kind: "llm", model, inputTokens: loop.usage.inputTokens, outputTokens: loop.usage.outputTokens });
+    }
+    return loop.text;
+  }
+  if (provider !== "google") throw new Error(`알 수 없는 모델 provider: ${model}`);
   const res = await withRetry(
     () =>
       client().models.generateContent({
-        model: GEN_MODEL,
+        model,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: { systemInstruction: system },
       }),
@@ -132,7 +158,7 @@ export async function generateText(system: string, prompt: string, meta?: UsageM
     recordUsage({
       ...meta,
       kind: "llm",
-      model: GEN_MODEL,
+      model,
       inputTokens: m?.promptTokenCount ?? null,
       outputTokens: m?.candidatesTokenCount ?? null,
     });
@@ -169,15 +195,17 @@ export async function generateWithTools(opts: {
   maxTurns?: number;
   model?: string;
 }): Promise<ToolLoopResult> {
-  const model = opts.model ?? GEN_MODEL;
-  if (model.startsWith("claude")) {
+  const model = opts.model ?? genModel();
+  const provider = providerOf(model);
+  if (provider === "anthropic") {
     const { claudeGenerateWithTools } = await import("@/lib/claude");
     return claudeGenerateWithTools({ ...opts, model });
   }
-  if (/^(gpt|o\d)/i.test(model)) {
+  if (provider === "openai") {
     const { openaiGenerateWithTools } = await import("@/lib/openai");
     return openaiGenerateWithTools({ ...opts, model });
   }
+  if (provider !== "google") throw new Error(`알 수 없는 모델 provider: ${model}`);
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
   const contents: Content[] = [{ role: "user", parts: [{ text: opts.userPrompt }] }];
   const called: string[] = [];
@@ -198,8 +226,13 @@ export async function generateWithTools(opts: {
           contents,
           config: {
             systemInstruction: opts.system,
-            tools: [{ functionDeclarations: opts.tools.map((t) => t.decl) }],
-            toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
+            // 빈 tools 면 function calling config 를 걸지 않는다(Gemini 는 선언 없는 config 를 거부).
+            ...(opts.tools.length > 0
+              ? {
+                  tools: [{ functionDeclarations: opts.tools.map((t) => t.decl) }],
+                  toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
+                }
+              : {}),
           },
         }),
       "generateContent",

@@ -17,5 +17,41 @@ services:
       timeout: 5s
       retries: 10
 
+  # web·worker 는 같은 이미지, command 로 역할 구분. 같은 DB·OAuth 토큰 볼륨을 공유한다.
+  # env_file(.env)의 API 키 등을 쓰되, DATABASE_URL/토큰 경로는 컨테이너용으로 덮어쓴다.
+  web:
+    build: .
+    container_name: jimi-wiki-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://jimi:jimi@db:5432/jimi
+      OPENAI_OAUTH_STORE: /data/openai-oauth.json
+    ports:
+      - "3007:3007"
+    volumes:
+      - jimi-oauth:/data
+    command: sh -c "pnpm prisma migrate deploy && pnpm start"
+
+  worker:
+    build: .
+    container_name: jimi-wiki-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://jimi:jimi@db:5432/jimi
+      OPENAI_OAUTH_STORE: /data/openai-oauth.json
+    volumes:
+      - jimi-oauth:/data
+    # worker 도 마이그레이션을 보장(prisma 의 advisory lock 으로 web 과 동시 실행해도 안전) — 빈 DB 크래시루프 방지.
+    command: sh -c "pnpm prisma migrate deploy && pnpm worker"
+
 volumes:
   jimi-wiki-pgdata:
+  jimi-oauth:

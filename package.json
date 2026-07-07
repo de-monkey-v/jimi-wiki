@@ -5,8 +5,10 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "dev": "next dev -p 3007",
+    "dev:all": "tsx scripts/dev-all.ts",
+    "start:all": "tsx scripts/dev-all.ts start",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3007",
     "worker": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/worker.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",

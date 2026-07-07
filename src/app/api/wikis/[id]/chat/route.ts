@@ -1,5 +1,7 @@
 import { google } from "@ai-sdk/google";
-import { openaiProvider, isOpenAIModel } from "@/lib/openai";
+import { openaiProvider } from "@/lib/openai";
+import { chatModel } from "@/lib/model-config";
+import { isChatModel, providerOf } from "@/lib/provider";
 import {
   streamText,
   convertToModelMessages,
@@ -98,9 +100,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (relevant && sources.length > 0) {
         writer.write({ type: "data-sources", id: "sources", data: sources });
       }
-      const chatModel = process.env.CHAT_MODEL || "gemini-2.5-flash";
+      let chatModelId = chatModel();
+      if (!isChatModel(chatModelId)) {
+        // claude/알 수 없는 id 는 스트리밍 채팅 미지원 → 안전 폴백(전체 채팅이 깨지지 않게)
+        console.warn(`[chat] 지원하지 않는 채팅 모델(${chatModelId}) → gemini-2.5-flash 폴백`);
+        chatModelId = "gemini-2.5-flash";
+      }
       const result = streamText({
-        model: isOpenAIModel(chatModel) ? openaiProvider(chatModel) : google(chatModel),
+        model: providerOf(chatModelId) === "openai" ? openaiProvider(chatModelId) : google(chatModelId),
         system,
         messages: await convertToModelMessages(messages),
         // 스트림 완료 시 사용량 계측(fire-and-forget)
@@ -110,7 +117,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             wikiId: wiki.id,
             route: "chat",
             kind: "llm",
-            model: chatModel,
+            model: chatModelId,
             inputTokens: usage?.inputTokens ?? null,
             outputTokens: usage?.outputTokens ?? null,
           });

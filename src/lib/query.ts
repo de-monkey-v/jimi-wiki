@@ -1,6 +1,7 @@
 import "server-only";
 import { hybridSearch } from "@/lib/search";
-import { generateText, geminiEnabled } from "@/lib/gemini";
+import { generateText, llmEnabledForModel } from "@/lib/gemini";
+import { genModel } from "@/lib/model-config";
 import { upsertPage } from "@/lib/wiki";
 import { prisma } from "@/lib/db";
 
@@ -31,7 +32,7 @@ export async function answerQuery(
 ): Promise<QueryResult> {
   const q = question.trim();
   if (!q) return { answer: "질문이 비어 있습니다.", sources: [] };
-  if (!geminiEnabled()) throw new Error("GEMINI_API_KEY 미설정 — 질의 답변에는 LLM이 필요합니다");
+  if (!llmEnabledForModel(genModel())) throw new Error("LLM provider 미설정 — 질의 답변에는 LLM(키/OAuth)이 필요합니다");
 
   const hits = await hybridSearch(wikiId, q, 8);
   if (hits.length === 0) {

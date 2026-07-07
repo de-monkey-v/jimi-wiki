@@ -36,7 +36,10 @@ yarn-error.log*
 
 # ChatGPT(Codex) OAuth 토큰 저장소 — 민감 자격증명. 절대 커밋 금지.
 .openai-oauth.json
-.openai-oauth.json.tmp
+.openai-oauth.json*.tmp
+
+# models.dev 카탈로그 디스크 캐시(런타임 생성)
+.model-catalog.cache.json*
 
 # vercel
 .vercel

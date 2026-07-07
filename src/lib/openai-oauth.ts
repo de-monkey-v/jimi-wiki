@@ -10,7 +10,7 @@
  */
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
 
@@ -50,12 +50,16 @@ export function oauthPersonalEnabled(): boolean {
 
 function readStore(): OAuthStore | null {
   if (!storeExists()) return null;
-  return JSON.parse(readFileSync(storePath(), "utf8")) as OAuthStore;
+  try {
+    return JSON.parse(readFileSync(storePath(), "utf8")) as OAuthStore;
+  } catch {
+    return null; // 손상/빈 파일 → 미로그인 취급(설정 페이지 락아웃 방지, 재로그인 유도)
+  }
 }
 
 function writeStore(store: OAuthStore): void {
   const p = storePath();
-  const tmp = `${p}.tmp`;
+  const tmp = `${p}.${process.pid}.tmp`; // 프로세스별 tmp — 동시 writer 간 충돌 회피
   writeFileSync(tmp, JSON.stringify(store, null, 2), { mode: 0o600 });
   renameSync(tmp, p);
   try {
@@ -93,6 +97,11 @@ function authorizeURL(redirect: string, challenge: string, state: string): strin
   })}`;
 }
 
+/** refresh token 이 무효(회전 재사용 등)해 세션 재로그인이 필요한 경우. */
+export class InvalidGrantError extends Error {}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function tokenRequest(body: URLSearchParams): Promise<TokenResponse> {
   const res = await fetch(`${ISSUER}/oauth/token`, {
     method: "POST",
@@ -101,6 +110,8 @@ async function tokenRequest(body: URLSearchParams): Promise<TokenResponse> {
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    if (res.status === 400 && /invalid_grant/.test(detail))
+      throw new InvalidGrantError("refresh token 이 무효입니다 — 다시 로그인하세요.");
     throw new Error(`토큰 요청 실패 (${res.status}): ${detail.slice(0, 300)}`);
   }
   return (await res.json()) as TokenResponse;
@@ -134,15 +145,41 @@ function toStore(t: TokenResponse, prev?: OAuthStore): OAuthStore {
   };
 }
 
+let refreshInFlight: Promise<{ access: string; accountId?: string }> | null = null;
+
 /** 유효한 access token 반환 — 만료 임박 시 refresh 후 저장. 토큰 없으면 throw. */
 export async function getFreshAccess(): Promise<{ access: string; accountId?: string }> {
   const s = readStore();
-  if (!s) throw new Error("ChatGPT OAuth 토큰이 없습니다 — `pnpm openai:login` 을 먼저 실행하세요.");
+  if (!s) throw new Error("ChatGPT OAuth 토큰이 없습니다 — 관리자 설정에서 로그인하세요.");
   if (Date.now() < s.expires - REFRESH_MARGIN_MS) return { access: s.access, accountId: s.accountId };
-  if (!s.refresh) throw new Error("refresh token 이 없습니다 — `pnpm openai:login` 으로 다시 로그인하세요.");
-  const next = toStore(await refreshTokens(s.refresh), s);
-  writeStore(next);
-  return { access: next.access, accountId: next.accountId };
+  if (!s.refresh) throw new Error("refresh token 이 없습니다 — 다시 로그인하세요.");
+  // 같은 프로세스 동시 호출은 하나의 refresh 를 공유(중복 refresh → 토큰 회전 자멸 방지).
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = refreshOnce(s).finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+async function refreshOnce(s: OAuthStore): Promise<{ access: string; accountId?: string }> {
+  try {
+    const next = toStore(await refreshTokens(s.refresh), s);
+    writeStore(next);
+    return { access: next.access, accountId: next.accountId };
+  } catch (e) {
+    // 크로스 프로세스 경쟁: 다른 프로세스(web↔worker)가 방금 refresh 해서 우리 refresh token 이
+    // 회전됐을 수 있다. store 를 다시 읽어 더 새 토큰이 있으면 그걸 쓴다(무효 재로그인 회피).
+    for (let i = 0; i < 3; i++) {
+      await sleep(400);
+      const s2 = readStore();
+      if (s2 && s2.access !== s.access && Date.now() < s2.expires - REFRESH_MARGIN_MS) {
+        return { access: s2.access, accountId: s2.accountId };
+      }
+    }
+    // 회전 재사용으로 세션이 revoke 된 경우: 토큰을 지워 UI 가 재로그인을 유도하게 한다.
+    if (e instanceof InvalidGrantError) logout();
+    throw e;
+  }
 }
 
 // id_token/access_token(JWT) payload 에서 chatgpt_account_id 추출.
@@ -227,4 +264,78 @@ export async function runBrowserLogin(): Promise<OAuthStore> {
   const store = toStore(await exchangeCode(code, redirect, verifier));
   writeStore(store);
   return store;
+}
+
+// ---------- device-code 흐름 (UI/헤드리스 로그인) ----------
+// opencode headless 흐름과 동일: usercode 발급 → 사용자가 다른 기기에서 코드 승인 → token 폴링.
+
+export type DeviceAuth = {
+  deviceAuthId: string;
+  userCode: string;
+  verificationUrl: string;
+  interval: number;
+  expiresIn: number; // 초 — 이 시간 안에 승인해야 함
+};
+
+async function deviceJson(path: string, body: Record<string, unknown>): Promise<Response> {
+  return fetch(`${ISSUER}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": "jimi-wiki/oauth" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** device 로그인 시작 — 사용자에게 보여줄 코드·URL 반환. */
+export async function startDeviceAuth(): Promise<DeviceAuth> {
+  const res = await deviceJson("/api/accounts/deviceauth/usercode", { client_id: CLIENT_ID });
+  if (!res.ok) throw new Error(`device auth 시작 실패 (${res.status}): ${(await res.text()).slice(0, 200)}`);
+  const d = (await res.json()) as {
+    device_auth_id: string;
+    user_code: string;
+    interval?: string | number;
+    expires_in?: string | number;
+    verification_uri?: string;
+    verification_uri_complete?: string;
+  };
+  return {
+    deviceAuthId: d.device_auth_id,
+    userCode: d.user_code,
+    verificationUrl: d.verification_uri_complete || d.verification_uri || `${ISSUER}/codex/device`,
+    interval: Math.max(Number(d.interval) || 5, 1),
+    expiresIn: Math.max(Number(d.expires_in) || 900, 60),
+  };
+}
+
+export type DevicePoll = { status: "pending" | "complete" | "error"; message?: string; accountId?: string };
+
+/** device 토큰 1회 폴링. 승인 전이면 pending, 승인되면 토큰 교환·저장 후 complete. */
+export async function pollDeviceToken(deviceAuthId: string, userCode: string): Promise<DevicePoll> {
+  const res = await deviceJson("/api/accounts/deviceauth/token", {
+    device_auth_id: deviceAuthId,
+    user_code: userCode,
+  });
+  if (res.status === 403 || res.status === 404) return { status: "pending" };
+  if (!res.ok) return { status: "error", message: `${res.status}: ${(await res.text()).slice(0, 150)}` };
+  const data = (await res.json()) as { authorization_code: string; code_verifier: string };
+  try {
+    const store = toStore(await exchangeCode(data.authorization_code, `${ISSUER}/deviceauth/callback`, data.code_verifier));
+    writeStore(store);
+    return { status: "complete", accountId: store.accountId };
+  } catch (e) {
+    // 일회용 authorization_code 는 이미 소진됨 — 처음부터 다시 로그인해야 한다.
+    return { status: "error", message: "토큰 교환 실패(다시 로그인): " + (e as Error).message.slice(0, 120) };
+  }
+}
+
+/** 로그아웃 — 저장된 토큰 삭제. */
+export function logout(): void {
+  const p = storePath();
+  if (existsSync(p)) unlinkSync(p);
+}
+
+/** UI 표시용 상태(토큰 미노출). */
+export function readStoreStatus(): { exists: boolean; accountId?: string; expires?: number } {
+  const s = readStore();
+  if (!s) return { exists: false };
+  return { exists: true, accountId: s.accountId, expires: s.expires };
 }

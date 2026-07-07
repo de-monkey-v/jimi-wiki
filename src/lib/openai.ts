@@ -3,7 +3,13 @@ import { randomUUID } from "node:crypto";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, tool, jsonSchema, stepCountIs } from "ai";
 import type { ToolSpec, ToolLoopResult, LoopUsage } from "@/lib/gemini";
-import { CODEX_BASE_URL, getFreshAccess, oauthPersonalEnabled } from "@/lib/openai-oauth";
+import { CODEX_BASE_URL, getFreshAccess, storeExists } from "@/lib/openai-oauth";
+import { openaiOAuthEnabled } from "@/lib/model-config";
+
+// OAuth 경로 활성: DB/설정 플래그(캐시, 동기) + 토큰 존재 + OPENAI_BASE_URL 없음(있으면 프록시 우선).
+function oauthActive(): boolean {
+  return openaiOAuthEnabled() && !process.env.OPENAI_BASE_URL && storeExists();
+}
 
 // OpenAI 모델 라우팅. 세 경로:
 //  1) 표준 API 키(OPENAI_API_KEY)
@@ -36,7 +42,7 @@ const codexFetch = (async (input, init) => {
 
 /** 현재 설정에 맞는 OpenAI provider 와 OAuth 여부. */
 function client(): { provider: ReturnType<typeof createOpenAI>; oauth: boolean } {
-  if (oauthPersonalEnabled()) {
+  if (oauthActive()) {
     return {
       provider: createOpenAI({ baseURL: CODEX_BASE_URL, apiKey: "chatgpt-oauth", fetch: codexFetch }),
       oauth: true,
@@ -59,7 +65,7 @@ export function openaiProvider(model: string) {
 }
 
 export function openaiEnabled(): boolean {
-  return !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL) || oauthPersonalEnabled();
+  return !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL) || oauthActive();
 }
 
 /** gpt-5.x / gpt-4.x / o1·o3·o4 등 OpenAI 모델 판별. */

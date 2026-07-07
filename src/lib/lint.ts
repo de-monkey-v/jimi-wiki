@@ -1,7 +1,8 @@
 import "server-only";
 import { Type } from "@google/genai";
 import { prisma } from "@/lib/db";
-import { generateWithTools, geminiEnabled, GEN_MODEL, type ToolSpec } from "@/lib/gemini";
+import { generateWithTools, llmEnabledForModel, type ToolSpec } from "@/lib/gemini";
+import { genModel } from "@/lib/model-config";
 import { hybridSearch } from "@/lib/search";
 import { recordUsage } from "@/lib/usage";
 import { listPages, getPage } from "@/lib/wiki";
@@ -157,7 +158,7 @@ export async function lintWiki(
 
   const report: LintReport = { pageCount: pages.length, brokenLinks, orphanPages, noOutLinks, untreatedSources, sourceDupPages, junkNotes, categoryHealth, score };
 
-  if (opts?.deep && geminiEnabled() && pages.length > 0) {
+  if (opts?.deep && llmEnabledForModel(genModel()) && pages.length > 0) {
     try {
       const loop = await generateWithTools({
         system: LINT_SYSTEM,
@@ -172,7 +173,7 @@ export async function lintWiki(
           userId: opts?.userId ?? null, // 일일 쿼터가 lint-deep 토큰도 유저에 귀속하도록
           route: "lint",
           kind: "llm",
-          model: GEN_MODEL,
+          model: genModel(),
           inputTokens: loop.usage.inputTokens,
           outputTokens: loop.usage.outputTokens,
         });

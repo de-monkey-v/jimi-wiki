@@ -57,6 +57,18 @@ enum AgentStatus {
   error
 }
 
+// ---------- 앱 전역 설정 (단일행) ----------
+// 런타임에 UI(관리자)에서 바꾸는 설정. env 는 미설정 시 폴백. web·worker 가 같은 행을 읽는다.
+// ⚠️ EMBED_MODEL/EMBED_DIM 은 DB vector 컬럼·HNSW 인덱스와 결합되어 여기 두지 않는다(env 고정).
+model AppConfig {
+  id           String   @id @default("singleton")
+  chatModel    String? // 위키 채팅. null=env CHAT_MODEL 폴백
+  genModel     String? // query·lint 등 일반 생성. null=env GEN_MODEL 폴백
+  ingestModel  String? // ingest 에이전트. null=env INGEST_MODEL 폴백
+  openaiOAuth  Boolean? // ChatGPT 구독 OAuth 경로 활성. null=env OPENAI_OAUTH_PERSONAL 폴백
+  updatedAt    DateTime @updatedAt
+}
+
 // ---------- 인증 (Auth.js) ----------
 model User {
   id             String       @id @default(cuid())

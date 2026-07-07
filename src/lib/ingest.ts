@@ -7,7 +7,8 @@ import { prisma } from "@/lib/db";
 import { normalizeSlug } from "@/lib/markdown";
 import { getPage, listPages, upsertPage, addPageSource } from "@/lib/wiki";
 import { hybridSearch, reindexSource, reindexEmbeddings, indexCategory, matchCategorySemantic, deleteCategoryChunk } from "@/lib/search";
-import { generateWithTools, geminiEnabled, type ToolSpec } from "@/lib/gemini";
+import { generateWithTools, geminiEnabled, llmEnabledForModel, type ToolSpec } from "@/lib/gemini";
+import { ingestModel } from "@/lib/model-config";
 import { lintWiki } from "@/lib/lint";
 import { PAGE_KINDS } from "@/lib/kinds";
 import { recordUsage } from "@/lib/usage";
@@ -425,9 +426,9 @@ export async function runIngestJob(run: {
     const touched = new Set<string>();
     let summary: string;
     let loopUsage: import("@/lib/gemini").LoopUsage | undefined;
-    const ingestModel = process.env.INGEST_MODEL || "gemini-3.1-pro-preview";
+    const ingestModelId = ingestModel();
 
-    if (!geminiEnabled()) {
+    if (!llmEnabledForModel(ingestModelId)) {
       const res = await upsertPage(wikiId, {
         title,
         kind: "note",
@@ -435,7 +436,7 @@ export async function runIngestJob(run: {
         body: `> 원문: ${input.url ?? "(직접 입력)"}\n> sources: ${sourceSlug}\n\n${content.slice(0, 2000)}`,
       });
       touched.add(res.slug);
-      summary = "GEMINI_API_KEY 미설정 — 원문 스텁 노트만 생성(LLM 큐레이션 생략).";
+      summary = "LLM provider 미설정(키/OAuth 없음) — 원문 스텁 노트만 생성(LLM 큐레이션 생략).";
     } else {
       // 신뢰 경계 구분자 위조 방지: 원문에서 종료 태그를 무력화하고 title의 특수문자 제거
       const safeContent = content.slice(0, MAX_PROMPT_CHARS).replaceAll("</원문>", "〈/원문〉").replaceAll("<원문", "〈원문");
@@ -456,7 +457,7 @@ export async function runIngestJob(run: {
         tools: buildTools(wikiId, touched, source.id),
         maxTurns: 24,
         // ingest는 위키 본문을 "쓰는" 에이전트라 품질 레버리지가 가장 큼 — 상위 모델 사용 (chat/lint는 flash 유지)
-        model: ingestModel,
+        model: ingestModelId,
       });
       summary = loop.text || "(요약 없음)";
       loopUsage = loop.usage;
@@ -467,10 +468,10 @@ export async function runIngestJob(run: {
           wikiId,
           route: "ingest",
           kind: "llm",
-          model: ingestModel,
+          model: ingestModelId,
           inputTokens: loopUsage.inputTokens,
           outputTokens: loopUsage.outputTokens,
-          costUsd: estimateCostUSD(ingestModel, loopUsage),
+          costUsd: estimateCostUSD(ingestModelId, loopUsage),
         });
       }
 
@@ -511,7 +512,7 @@ export async function runIngestJob(run: {
           summary,
           sourceSlug,
           pagesTouched: [...touched],
-          ...(loopUsage ? { model: ingestModel, usage: { ...loopUsage }, costUSD: estimateCostUSD(ingestModel, loopUsage) } : {}),
+          ...(loopUsage ? { model: ingestModelId, usage: { ...loopUsage }, costUSD: estimateCostUSD(ingestModelId, loopUsage) } : {}),
         },
         finishedAt: new Date(),
       },

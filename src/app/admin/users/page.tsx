@@ -24,7 +24,12 @@ export default async function AdminUsers() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12 space-y-10">
-      <h1 className="text-2xl font-bold">유저 관리</h1>
+      <div>
+        <h1 className="text-2xl font-bold">유저 관리</h1>
+        <nav className="text-sm text-gray-500 mt-1">
+          <span className="text-gray-800">유저 관리</span> · <a href="/admin/settings" className="underline">앱 설정</a>
+        </nav>
+      </div>
 
       <section className="space-y-2">
         {users.map((u) => (

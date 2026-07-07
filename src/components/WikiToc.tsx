@@ -77,7 +77,7 @@ function FolderNode({
         style={{ paddingLeft: depth * 12 + 4 }}
       >
         <span className="w-3 shrink-0 text-xs text-stone-400">{open ? "▾" : "▸"}</span>
-        <span className="flex-1 truncate text-left">{entry.name}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{entry.name}</span>
         <span className="text-xs text-stone-300">{leafCount(entry)}</span>
       </button>
       {open && (
@@ -117,8 +117,34 @@ export function WikiToc({
   const chatModal = useChatModal();
   const shortcut = useShortcutLabel();
 
+  // 모바일: 목차를 off-canvas 드로어로. 데스크톱(md+)은 기존 고정 사이드바.
+  const [open, setOpen] = useState(false);
+
   return (
-    <aside className="flex h-dvh w-72 shrink-0 flex-col border-r border-stone-200 bg-white">
+    <>
+      {/* 모바일 전용 토글(☰/✕) — 사이드바 위(z-50)에 뜬다 */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="목차 열기/닫기"
+        aria-expanded={open}
+        className="fixed left-2 top-2 z-50 rounded-md border border-stone-200 bg-white/90 px-2.5 py-1.5 text-lg leading-none text-stone-700 shadow-sm backdrop-blur md:hidden"
+      >
+        {open ? "✕" : "☰"}
+      </button>
+      {/* 열렸을 때 배경(탭하면 닫힘) */}
+      {open && (
+        <div onClick={() => setOpen(false)} aria-hidden className="fixed inset-0 z-30 bg-black/30 md:hidden" />
+      )}
+      <aside
+        // 모바일 드로어에서 내부 링크(<a>)를 누르면 네비게이션과 함께 닫는다(폴더 토글 <button>은 유지).
+        onClick={(e) => {
+          if (open && (e.target as HTMLElement).closest("a")) setOpen(false);
+        }}
+        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-72 shrink-0 transform flex-col overflow-x-hidden border-r border-stone-200 bg-white transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
       <div className="border-b border-stone-100 px-3 py-3">
         <Link href="/wikis" className="text-xs text-stone-400 hover:text-stone-600">← 내 위키</Link>
         <Link href={`/wikis/${slug}`} className="mt-1 block truncate text-base font-bold tracking-tight">
@@ -165,7 +191,7 @@ export function WikiToc({
               }}
               className={`flex w-full items-center px-2 ${linkCls(sub === "chat")}`}
             >
-              <span className="flex-1">AI에게 질문</span>
+              <span className="min-w-0 flex-1 truncate">AI에게 질문</span>
               <kbd className="rounded border border-stone-200 bg-stone-50 px-1 text-[10px] text-stone-400">{shortcut} · /</kbd>
             </Link>
           </li>
@@ -200,6 +226,7 @@ export function WikiToc({
           <button className="w-full rounded-md px-2 py-1 text-left text-sm text-stone-600 hover:bg-stone-100">로그아웃</button>
         </form>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

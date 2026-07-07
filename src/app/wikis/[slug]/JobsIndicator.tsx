@@ -68,7 +68,7 @@ export function JobsIndicator({ slug }: { slug: string }) {
   return (
     <div className="fixed bottom-8 right-24 z-30 flex flex-col items-end gap-2">
       {open && (
-        <div className="w-96 max-w-[calc(100vw-8rem)] rounded-xl border border-stone-200 bg-white shadow-xl">
+        <div className="w-96 max-w-[min(24rem,calc(100%-2rem))] rounded-xl border border-stone-200 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-stone-100 px-4 py-2.5">
             <h2 className="text-sm font-semibold text-stone-700">에이전트 작업</h2>
             <button onClick={() => setOpen(false)} aria-label="닫기" className="text-stone-400 hover:text-stone-700">✕</button>

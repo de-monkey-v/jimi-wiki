@@ -63,7 +63,6 @@ export function Sidebar({ email, owned, shared }: { email: string; owned: Wiki[]
         <div className="border-t pt-3">
           <ul className="space-y-0.5">
             <li><Link href="/wikis" className={itemCls(pathname === "/wikis")}>+ 새 위키</Link></li>
-            <li><Link href="/channels" className={itemCls(pathname.startsWith("/channels"))}>채널 둘러보기</Link></li>
             <li><Link href="/keys" className={itemCls(pathname.startsWith("/keys"))}>API 키</Link></li>
           </ul>
         </div>

@@ -30,7 +30,7 @@ function EntryList({ entries, basePath }: { entries: TocEntry[]; basePath: strin
   );
 }
 
-/** 인증 없는 읽기 전용 위키 뷰(공유 링크·채널 공용). basePath 예: /s/<token> 또는 /channels/<slug> */
+/** 인증 없는 읽기 전용 위키 뷰(공유 링크용). basePath 예: /s/<token> */
 export async function PublicWikiView({
   wikiId,
   title,

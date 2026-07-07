@@ -196,21 +196,6 @@ export function deleteWiki(wikiId: string) {
   return prisma.wiki.delete({ where: { id: wikiId } }); // cascade로 pages/sources/chunks/members 등 삭제
 }
 
-/** 채널: 공개 위키 목록(인증 불필요). */
-export function listPublicWikis() {
-  return prisma.wiki.findMany({
-    where: { visibility: "public" },
-    orderBy: { updatedAt: "desc" },
-    include: { _count: { select: { pages: true } }, createdBy: { select: { name: true, email: true } } },
-  });
-}
-
-/** 공개 위키 조회(visibility=public만). 채널 읽기용. */
-export async function getPublicWiki(slug: string) {
-  const w = await prisma.wiki.findUnique({ where: { slug } });
-  return w && w.visibility === "public" ? w : null;
-}
-
 // ---------- 페이지 생성/수정 ----------
 export async function createPage(wikiId: string, input: { title: string; kind: PageKind; body?: string; category?: string | null; sourceId?: string | null }) {
   const root = normalizeSlug(input.title) || "page";

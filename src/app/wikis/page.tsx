@@ -17,7 +17,6 @@ export default async function WikisPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">jimi-wiki</h1>
         <div className="flex items-center gap-3 text-sm text-stone-500">
-          <Link href="/channels" className="hover:text-stone-800">채널</Link>
           <Link href="/keys" className="hover:text-stone-800">API 키</Link>
           <Link href="/docs" className="hover:text-stone-800">연동 가이드</Link>
           <span className="text-stone-300">·</span>
@@ -40,7 +39,6 @@ export default async function WikisPage() {
                 {w.description && <div className="text-sm text-gray-500">{w.description}</div>}
               </div>
               <div className="text-xs text-gray-400">
-                {w.visibility === "public" ? "공개 · " : ""}
                 {w.kind} · {w._count.pages} 페이지
               </div>
             </Link>

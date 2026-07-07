@@ -59,7 +59,6 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
             <select name="visibility" defaultValue={wiki.visibility} className="mt-1 block border rounded px-3 py-2">
               <option value="private">private (멤버만)</option>
               <option value="unlisted">unlisted (링크 공유)</option>
-              <option value="public">public (채널에 공개)</option>
             </select>
           </label>
           <button className="bg-stone-900 text-white rounded px-4 py-2">저장</button>

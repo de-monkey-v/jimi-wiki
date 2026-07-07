@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, listPages, KIND_LABEL } from "@/lib/wiki";
 import { prisma } from "@/lib/db";
-import { IngestPanel } from "./IngestPanel";
+import { EmptyState } from "@/components/EmptyState";
+import { HomeActions } from "./HomeActions";
 import { ReindexForm } from "./ReindexForm";
 import { RunStatusBadge } from "./RunStatusBadge";
 
@@ -63,7 +64,19 @@ export default async function WikiHome({
       )}
 
       {/* 페이지 목록 */}
-      {pages.length === 0 && <p className="text-gray-500 mb-8">아직 페이지가 없습니다.</p>}
+      {pages.length === 0 && (
+        <div className="mb-8 rounded-lg border border-stone-200 bg-white p-5">
+          <EmptyState
+            asset="empty-pages"
+            title="아직 페이지가 없습니다"
+            body={
+              canWrite
+                ? "아래에서 소스를 수집하거나 새 페이지를 만들면 문서와 개념 연결이 이곳에 정리됩니다."
+                : "페이지가 추가되면 읽을 수 있는 문서와 개념 연결이 이곳에 표시됩니다."
+            }
+          />
+        </div>
+      )}
       <div className="space-y-6 mb-10">
         {[...groups.entries()].map(([kind, ps]) => (
           <section key={kind}>
@@ -83,24 +96,8 @@ export default async function WikiHome({
 
       {canWrite && (
       <>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Ingest 패널 (제출 진행 표시 포함) */}
-        <IngestPanel wikiSlug={slug} />
-
-        {/* 새 페이지: 전용 화면으로 이동 */}
-        <div className="flex flex-col justify-between rounded-lg border p-4">
-          <div>
-            <h2 className="font-semibold">새 페이지 (수동)</h2>
-            <p className="mt-1 text-xs text-gray-400">제목·종류·카테고리를 정해 빈 페이지를 만들고 바로 편집합니다.</p>
-          </div>
-          <Link
-            href={`/wikis/${slug}/new`}
-            className="mt-3 inline-block w-fit rounded bg-stone-900 px-4 py-2 text-white hover:bg-stone-700"
-          >
-            새 페이지 만들기 →
-          </Link>
-        </div>
-      </div>
+      {/* ingest·새페이지 진입 — 페이지 이동 없이 모달로 (WikiActionsProvider) */}
+      <HomeActions slug={slug} />
 
       {/* 시맨틱 재색인: 수동으로 올린 페이지의 임베딩(선택적 AI)을 채운다 */}
       <ReindexForm wikiSlug={slug} />

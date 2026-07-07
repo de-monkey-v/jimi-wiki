@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { logoutAction } from "@/app/login/actions";
 import { useChatModal, useShortcutLabel } from "@/app/wikis/[slug]/chat/ChatModal";
+import { useWikiActions } from "@/app/wikis/[slug]/WikiActions";
+import { EmptyState } from "@/components/EmptyState";
 import type { TocSection, TocEntry } from "@/lib/kinds";
 
 const RESERVED = new Set(["chat", "lint", "settings", "sources", "graph", "new"]);
@@ -115,6 +117,7 @@ export function WikiToc({
   const sub = seg[3];
   const current = sub && !RESERVED.has(sub) ? sub : undefined;
   const chatModal = useChatModal();
+  const actions = useWikiActions();
   const shortcut = useShortcutLabel();
 
   // 모바일: 목차를 off-canvas 드로어로. 데스크톱(md+)은 기존 고정 사이드바.
@@ -154,7 +157,14 @@ export function WikiToc({
 
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         {sections.length === 0 ? (
-          <p className="px-2 py-1 text-sm text-stone-400">아직 페이지가 없습니다.</p>
+          <div className="px-2 py-2">
+            <EmptyState
+              asset="empty-pages"
+              title="페이지 없음"
+              body="페이지가 추가되면 목차가 여기에 표시됩니다."
+              compact
+            />
+          </div>
         ) : (
           <div className="space-y-4">
             {sections.map((s) => (
@@ -197,7 +207,36 @@ export function WikiToc({
           </li>
           {role !== "viewer" && (
             <li>
-              <Link href={`/wikis/${slug}/new`} className={`px-2 ${linkCls(sub === "new")}`}>+ 새 페이지</Link>
+              {/* 모달로 즉시 오픈. JS 없으면 /new 페이지로 폴백. */}
+              <Link
+                href={`/wikis/${slug}/new`}
+                onClick={(e) => {
+                  if (actions) {
+                    e.preventDefault();
+                    actions.openNewPage();
+                  }
+                }}
+                className={`px-2 ${linkCls(sub === "new")}`}
+              >
+                + 새 페이지
+              </Link>
+            </li>
+          )}
+          {role !== "viewer" && (
+            <li>
+              {/* 소스 편입 모달. 폴백은 위키 홈(인라인 진입점 없이도 이동 가능하게). */}
+              <Link
+                href={`/wikis/${slug}`}
+                onClick={(e) => {
+                  if (actions) {
+                    e.preventDefault();
+                    actions.openIngest();
+                  }
+                }}
+                className={`px-2 ${linkCls(false)}`}
+              >
+                + 소스 편입
+              </Link>
             </li>
           )}
           <li>

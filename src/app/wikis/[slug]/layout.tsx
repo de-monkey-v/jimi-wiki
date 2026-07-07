@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { getWikiForUser, getWikiToc } from "@/lib/wiki";
 import { WikiToc } from "@/components/WikiToc";
 import { ChatModalProvider } from "./chat/ChatModal";
+import { WikiActionsProvider } from "./WikiActions";
 import { JobsIndicator } from "./JobsIndicator";
 
 // 위키 안에서는 좌측 사이드바가 그 위키의 책 목차(TOC)로 전환된다.
@@ -23,14 +24,16 @@ export default async function WikiLayout({
 
   return (
     <ChatModalProvider slug={slug} title={wiki.title} canWrite={wiki.role !== "viewer"}>
-      <div className="flex h-dvh overflow-hidden">
-        <WikiToc slug={slug} title={wiki.title} email={user.email} role={wiki.role} sections={sections} />
-        {/* min-w-0: flex 자식 기본 min-width:auto 를 해제 — 없으면 넓은 콘텐츠(코드/표/긴 URL)가
-            컬럼을 못 줄여 레이아웃 전체가 가로로 밀린다(모바일 좌우 드래그의 1차 원인).
-            pt-12 md:pt-0: 모바일 상단 토글 버튼(fixed) 공간 확보. */}
-        <div className="flex-1 min-w-0 overflow-y-auto pt-12 md:pt-0">{children}</div>
-      </div>
-      <JobsIndicator slug={slug} />
+      <WikiActionsProvider slug={slug} wikiKind={wiki.kind} canWrite={wiki.role !== "viewer"}>
+        <div className="flex h-dvh overflow-hidden">
+          <WikiToc slug={slug} title={wiki.title} email={user.email} role={wiki.role} sections={sections} />
+          {/* min-w-0: flex 자식 기본 min-width:auto 를 해제 — 없으면 넓은 콘텐츠(코드/표/긴 URL)가
+              컬럼을 못 줄여 레이아웃 전체가 가로로 밀린다(모바일 좌우 드래그의 1차 원인).
+              pt-12 md:pt-0: 모바일 상단 토글 버튼(fixed) 공간 확보. */}
+          <div className="flex-1 min-w-0 overflow-y-auto pt-12 md:pt-0">{children}</div>
+        </div>
+        <JobsIndicator slug={slug} />
+      </WikiActionsProvider>
     </ChatModalProvider>
   );
 }

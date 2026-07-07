@@ -6,6 +6,7 @@ import { createWiki, getWikiForUser, getPage, createPage, updatePage } from "@/l
 import { MANUAL_KINDS } from "@/lib/kinds";
 import { hasRole } from "@/lib/api-gate";
 import { createIngestRun, reapStaleRuns } from "@/lib/ingest";
+import { getOntology } from "@/lib/ontology";
 import { reindexEmbeddings } from "@/lib/search";
 import { answerQuery } from "@/lib/query";
 import { normalizeCategoryForWrite } from "@/lib/governance";
@@ -25,6 +26,17 @@ async function requireWriteAccess(userId: string, wikiSlug: string) {
 async function requireQuota(userId: string) {
   const q = await checkDailyQuota(userId);
   if (!q.ok) throw new Error(`일일 토큰 쿼터를 초과했습니다(${q.used}/${q.limit}). 내일 다시 시도하세요.`);
+}
+
+/** 새 페이지 모달용 카테고리 목록(lazy 로드). /new 페이지의 로딩과 동일 규약. */
+export async function getWikiCategoriesAction(
+  wikiSlug: string,
+): Promise<{ slug: string; label: string; itemCount: number }[]> {
+  const userId = await getCurrentUserId();
+  const wiki = await getWikiForUser(userId, wikiSlug);
+  if (!wiki) return [];
+  const onto = await getOntology(wiki.id);
+  return onto.categories.slice(0, 200).map((c) => ({ slug: c.slug, label: c.label, itemCount: c.itemCount ?? 0 }));
 }
 
 export async function createWikiAction(formData: FormData) {

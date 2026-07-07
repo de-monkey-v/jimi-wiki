@@ -59,17 +59,31 @@ body {
 }
 a.accent, .accent { color: var(--accent); }
 
-/* 위키링크 */
-.wikilink {
-  color: #2563eb;
-  text-decoration: none;
-}
-.wikilink:hover {
+/* 위키링크 — 존재하는 페이지: 본문색 + 세련된 밑줄.
+   .wiki-content a(특이도 0,1,1)를 이기려 .wiki-content a.wikilink(0,2,1)로 스코프한다. */
+.wiki-content a.wikilink {
+  color: inherit; /* 본문 글자색을 따름 */
   text-decoration: underline;
+  text-decoration-color: #c7d2fe; /* 옅은 인디고 밑줄 */
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.15s ease;
 }
-.wikilink-missing {
+.wiki-content a.wikilink:hover {
+  text-decoration-color: #4f46e5; /* 진한 인디고(--accent) */
+}
+/* 없는 페이지: 빨강 경고 유지 + 밑줄 형태만 조화(기존 border-bottom → dashed underline).
+   .wikilink 뒤에 두어 동일 특이도에서 missing이 이기게 한다. */
+.wiki-content a.wikilink-missing {
   color: #dc2626;
-  border-bottom: 1px dashed #dc2626;
+  text-decoration: underline dashed;
+  text-decoration-color: #fca5a5; /* 옅은 빨강 */
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  border-bottom: none;
+}
+.wiki-content a.wikilink-missing:hover {
+  text-decoration-color: #dc2626;
 }
 
 /* 렌더된 페이지 본문 기본 타이포 */
@@ -86,7 +100,7 @@ a.accent, .accent { color: var(--accent); }
 .wiki-content p { margin: 0.6em 0; }
 .wiki-content ul { list-style: disc; padding-left: 1.4em; margin: 0.6em 0; }
 .wiki-content ol { list-style: decimal; padding-left: 1.4em; margin: 0.6em 0; }
-.wiki-content a { color: #2563eb; }
+.wiki-content a { color: #2563eb; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
 .wiki-content code { background: #f3f4f6; padding: 0.1em 0.3em; border-radius: 4px; font-size: 0.9em; }
 .wiki-content pre { background: #f3f4f6; padding: 0.8em; border-radius: 8px; overflow-x: auto; max-width: 100%; margin: 0.8em 0; }
 .wiki-content pre code { background: none; padding: 0; }

@@ -34,6 +34,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# ChatGPT(Codex) OAuth 토큰 저장소 — 민감 자격증명. 절대 커밋 금지.
+.openai-oauth.json
+.openai-oauth.json.tmp
+
 # vercel
 .vercel
 
@@ -43,3 +47,6 @@ next-env.d.ts
 
 # prisma generated client (npx prisma generate로 재생성)
 /src/generated/
+
+# 개인 로컬 전용 (공개 배포 금지) — ChatGPT 구독 codex 프록시 등
+/local/

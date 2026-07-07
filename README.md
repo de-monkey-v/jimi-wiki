@@ -64,9 +64,14 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 | `AUTH_MODE` | 인증 모드: `single` \| `local`(기본) \| `oidc` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | (선택) `pnpm db:seed` 시 first-run 관리자 부트스트랩. 웹 `/setup`을 쓰면 비워둠 |
 | `APP_URL` | 앱 공개 URL — 초대/공유 링크 절대경로 조립용 |
-| `GEMINI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | 생성 + 임베딩 (동일 값) |
+| `GEMINI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini 생성 + 임베딩 키 (동일 값) |
+| `ANTHROPIC_API_KEY` | (선택) 모델을 `claude-*`로 쓸 때 필요 |
+| `OPENAI_API_KEY` | (선택) 모델을 `gpt-*`/`o*`로 쓸 때 필요 (chat·ingest·lint) |
+| `OPENAI_BASE_URL` | (선택·개인 로컬 전용) OpenAI 호환 프록시 주소. 외부 codex-auth 프록시를 직접 띄워 태울 때만. ⚠️ 공개 배포 금지 |
+| `OPENAI_OAUTH_PERSONAL` | (선택·개인 로컬 전용) `1`이면 `pnpm openai:login`으로 로그인한 ChatGPT 구독 OAuth를 앱에서 직접 사용(별도 프록시 불필요). `OPENAI_BASE_URL`이 있으면 그쪽 우선. ⚠️ 개인 self-host 전용, 여러 사람에게 서비스로 열지 말 것(약관). 자세한 사용법은 [`docs/openai-oauth.md`](docs/openai-oauth.md) |
+| `EMBED_MODEL` / `EMBED_DIM` | 임베딩 모델·차원 (기본 `gemini-embedding-001` / `768`, Gemini 전용). ⚠️ 차원 변경은 DB 마이그레이션+재색인 필요 |
+| `INGEST_MODEL` / `GEN_MODEL` / `CHAT_MODEL` | ingest / query·lint / 채팅 모델. `gemini-*` \| `claude-*` \| `gpt-*` 혼용 가능 (기본 Gemini) |
 | `DAILY_TOKEN_LIMIT` | 유저별 일일 생성형 토큰 상한 |
-| `ANTHROPIC_API_KEY`, `INGEST_MODEL` | (선택) ingest 모델을 `claude-*`로 오버라이드할 때 |
 | `WORKER_POLL_MS` | ingest worker 폴링 주기 |
 
 ## 스크립트
@@ -80,6 +85,7 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 | `pnpm db:migrate` | `prisma migrate dev` |
 | `pnpm db:seed` | first-run 관리자 부트스트랩 (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) |
 | `pnpm apikey:issue` | CLI로 API 키 발급 |
+| `pnpm openai:login` | (개인용) ChatGPT 구독 OAuth 로그인 — `OPENAI_OAUTH_PERSONAL=1`과 함께 사용 |
 | `pnpm smoke` | 스모크 테스트 |
 | `pnpm check:rules` | ontology rules ↔ skill parity 검사 |
 | `pnpm mcp` | MCP 서버 실행 (`mcp/server.mjs`) |

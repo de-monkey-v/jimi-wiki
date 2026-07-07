@@ -1,4 +1,5 @@
 import { google } from "@ai-sdk/google";
+import { openaiProvider, isOpenAIModel } from "@/lib/openai";
 import {
   streamText,
   convertToModelMessages,
@@ -97,8 +98,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (relevant && sources.length > 0) {
         writer.write({ type: "data-sources", id: "sources", data: sources });
       }
+      const chatModel = process.env.CHAT_MODEL || "gemini-2.5-flash";
       const result = streamText({
-        model: google("gemini-2.5-flash"),
+        model: isOpenAIModel(chatModel) ? openaiProvider(chatModel) : google(chatModel),
         system,
         messages: await convertToModelMessages(messages),
         // 스트림 완료 시 사용량 계측(fire-and-forget)
@@ -108,7 +110,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             wikiId: wiki.id,
             route: "chat",
             kind: "llm",
-            model: "gemini-2.5-flash",
+            model: chatModel,
             inputTokens: usage?.inputTokens ?? null,
             outputTokens: usage?.outputTokens ?? null,
           });

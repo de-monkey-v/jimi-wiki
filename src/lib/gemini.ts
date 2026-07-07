@@ -9,9 +9,11 @@ import {
 } from "@google/genai";
 import { recordUsage, type UsageMeta } from "@/lib/usage";
 
-export const EMBED_MODEL = "gemini-embedding-001";
-export const EMBED_DIM = 768;
-export const GEN_MODEL = "gemini-2.5-flash";
+// 모델은 env로 오버라이드 가능(미설정 시 기본값). .env.example의 "모델 선택" 참조.
+export const EMBED_MODEL = process.env.EMBED_MODEL || "gemini-embedding-001"; // 임베딩(검색·색인)
+// ⚠️ EMBED_DIM은 DB의 vector(N) 컬럼·HNSW 인덱스와 결합. 바꾸면 스키마 마이그레이션 + 전체 재색인 필요.
+export const EMBED_DIM = Number(process.env.EMBED_DIM) || 768;
+export const GEN_MODEL = process.env.GEN_MODEL || "gemini-2.5-flash"; // query·lint 등 일반 생성
 const EMBED_MAX_ITEMS = 100;
 const EMBED_MAX_CHARS = 18_000; // 요청당 총 문자 예산(토큰/배치 상한 회피)
 
@@ -171,6 +173,10 @@ export async function generateWithTools(opts: {
   if (model.startsWith("claude")) {
     const { claudeGenerateWithTools } = await import("@/lib/claude");
     return claudeGenerateWithTools({ ...opts, model });
+  }
+  if (/^(gpt|o\d)/i.test(model)) {
+    const { openaiGenerateWithTools } = await import("@/lib/openai");
+    return openaiGenerateWithTools({ ...opts, model });
   }
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
   const contents: Content[] = [{ role: "user", parts: [{ text: opts.userPrompt }] }];

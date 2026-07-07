@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { storeExists } from "@/lib/openai-oauth";
+import type { Provider, OpenAITransport } from "@/lib/provider";
 
 /**
  * 앱 전역 런타임 설정(모델 선택 + OAuth 활성). DB 단일행 AppConfig 를 소스로,
@@ -14,7 +16,33 @@ export interface ResolvedConfig {
   chatModel: string;
   genModel: string;
   ingestModel: string;
-  openaiOAuth: boolean;
+  openaiTransport: OpenAITransport;
+  enabledProviders: Provider[];
+}
+
+const TRANSPORTS: OpenAITransport[] = ["apikey", "oauth", "proxy"];
+function isTransport(x: string): x is OpenAITransport {
+  return (TRANSPORTS as string[]).includes(x);
+}
+// env 폴백/자동 추론(하위호환): OPENAI_TRANSPORT 우선, 아니면 기존 우선순위로 추론.
+function envOpenAITransport(): OpenAITransport {
+  const t = (process.env.OPENAI_TRANSPORT ?? "").trim();
+  if (isTransport(t)) return t;
+  if (process.env.OPENAI_BASE_URL) return "proxy";
+  if (process.env.OPENAI_OAUTH_PERSONAL === "1") return "oauth";
+  return "apikey";
+}
+
+const VALID_PROVIDERS: Provider[] = ["google", "openai", "anthropic"];
+function isValidProvider(x: string): x is Provider {
+  return (VALID_PROVIDERS as string[]).includes(x);
+}
+// opt-in 부트스트랩: AppConfig 행이 없을 때만 env ENABLED_PROVIDERS(콤마 목록)로 활성 provider 를 정한다.
+function envEnabledProviders(): Provider[] {
+  return (process.env.ENABLED_PROVIDERS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(isValidProvider);
 }
 
 // env 폴백 — 기존 하드코딩 기본값과 동일하게 유지(동작 보존). UI 표시용으로도 export.
@@ -26,7 +54,8 @@ function envDefaults(): ResolvedConfig {
     chatModel: process.env.CHAT_MODEL || "gemini-2.5-flash",
     genModel: process.env.GEN_MODEL || "gemini-2.5-flash",
     ingestModel: process.env.INGEST_MODEL || "gemini-3.1-pro-preview",
-    openaiOAuth: process.env.OPENAI_OAUTH_PERSONAL === "1",
+    openaiTransport: envOpenAITransport(),
+    enabledProviders: envEnabledProviders(),
   };
 }
 
@@ -41,7 +70,8 @@ type ConfigRow = {
   chatModel: string | null;
   genModel: string | null;
   ingestModel: string | null;
-  openaiOAuth: boolean | null;
+  openaiTransport: string | null;
+  enabledProviders: string[];
 };
 
 function resolve(row: ConfigRow | null): ResolvedConfig {
@@ -50,7 +80,9 @@ function resolve(row: ConfigRow | null): ResolvedConfig {
     chatModel: row?.chatModel ?? env.chatModel,
     genModel: row?.genModel ?? env.genModel,
     ingestModel: row?.ingestModel ?? env.ingestModel,
-    openaiOAuth: row?.openaiOAuth ?? env.openaiOAuth,
+    openaiTransport: row?.openaiTransport && isTransport(row.openaiTransport) ? row.openaiTransport : env.openaiTransport,
+    // 행이 있으면 그 배열(빈 배열=명시적 없음), 없으면 env 부트스트랩.
+    enabledProviders: row ? row.enabledProviders.filter(isValidProvider) : env.enabledProviders,
   };
 }
 
@@ -93,8 +125,41 @@ export function genModel(): string {
 export function ingestModel(): string {
   return getConfigCached().ingestModel;
 }
-export function openaiOAuthEnabled(): boolean {
-  return getConfigCached().openaiOAuth;
+// ---------- OpenAI 연결 방식(transport) ----------
+export function openaiTransport(): OpenAITransport {
+  return getConfigCached().openaiTransport;
+}
+/** 해당 방식의 자격증명이 준비됐는지. */
+export function openaiTransportAvailable(t: OpenAITransport): boolean {
+  if (t === "apikey") return !!process.env.OPENAI_API_KEY;
+  if (t === "proxy") return !!process.env.OPENAI_BASE_URL;
+  return storeExists(); // oauth: 로그인 토큰 존재
+}
+/** 선택된 방식이 available 이면 그것, 아니면 available 한 것 중 첫째(없으면 선택값 그대로 — 자연 오류). */
+export function effectiveOpenAITransport(): OpenAITransport {
+  const sel = openaiTransport();
+  if (openaiTransportAvailable(sel)) return sel;
+  return TRANSPORTS.find(openaiTransportAvailable) ?? sel;
+}
+
+// ---------- provider opt-in 게이트 ----------
+export function enabledProviders(): Provider[] {
+  return getConfigCached().enabledProviders;
+}
+/** 관리자가 명시적으로 켠 provider 인지(opt-in). */
+export function isProviderEnabled(p: Provider): boolean {
+  return getConfigCached().enabledProviders.includes(p);
+}
+/** provider 자격증명(키/OAuth 토큰)이 존재하는지. "쓸 수 있음"과 별개인 "가능함". */
+export function providerHasCredential(p: Provider): boolean {
+  if (p === "google") return !!process.env.GEMINI_API_KEY;
+  if (p === "anthropic") return !!process.env.ANTHROPIC_API_KEY;
+  // openai: 3가지 연결 방식 중 하나라도 자격증명이 있으면 "가능".
+  return TRANSPORTS.some(openaiTransportAvailable);
+}
+/** 실제 사용 가능 = 자격증명 존재 AND 관리자가 활성화. 카탈로그·라우팅 게이트의 단일 판정. */
+export function providerUsable(p: Provider): boolean {
+  return providerHasCredential(p) && isProviderEnabled(p);
 }
 
 /** 설정 저장(부분 갱신). 저장 후 로컬 캐시를 즉시 갱신한다. null 을 주면 해당 항목 env 폴백으로 되돌림. */
@@ -104,7 +169,7 @@ export async function setModelConfig(patch: Partial<ConfigRow>): Promise<void> {
     where: { id: SINGLETON },
     create: { id: SINGLETON, ...patch },
     update: patch,
-    select: { chatModel: true, genModel: true, ingestModel: true, openaiOAuth: true },
+    select: { chatModel: true, genModel: true, ingestModel: true, openaiTransport: true, enabledProviders: true },
   });
   cache = resolve(row);
   loadedAt = Date.now();
@@ -114,6 +179,6 @@ export async function setModelConfig(patch: Partial<ConfigRow>): Promise<void> {
 export async function getRawConfigRow(): Promise<ConfigRow | null> {
   return prisma.appConfig.findUnique({
     where: { id: SINGLETON },
-    select: { chatModel: true, genModel: true, ingestModel: true, openaiOAuth: true },
+    select: { chatModel: true, genModel: true, ingestModel: true, openaiTransport: true, enabledProviders: true },
   });
 }

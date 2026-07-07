@@ -8,8 +8,7 @@ import {
   type FunctionCall,
 } from "@google/genai";
 import { recordUsage, type UsageMeta } from "@/lib/usage";
-import { genModel, openaiOAuthEnabled } from "@/lib/model-config";
-import { storeExists } from "@/lib/openai-oauth";
+import { genModel, providerUsable } from "@/lib/model-config";
 import { providerOf } from "@/lib/provider";
 
 // 임베딩 모델은 env 고정(DB vector 컬럼·HNSW와 결합). 생성 모델(chat/gen/ingest)은 model-config 에서 런타임 조회.
@@ -23,14 +22,11 @@ export function geminiEnabled(): boolean {
   return !!process.env.GEMINI_API_KEY;
 }
 
-/** 주어진 모델의 provider 가 사용 가능한지(키/OAuth). 알 수 없는 provider 는 false(gemini 폴백 금지). */
+/** 주어진 모델이 실제로 쓸 수 있는지 = provider 자격증명 존재 AND 관리자 활성(opt-in).
+ *  알 수 없는 provider 는 false(gemini 폴백 금지). */
 export function llmEnabledForModel(model: string): boolean {
   const p = providerOf(model);
-  if (p === "anthropic") return !!process.env.ANTHROPIC_API_KEY;
-  if (p === "openai")
-    return !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL || (openaiOAuthEnabled() && storeExists()));
-  if (p === "google") return geminiEnabled();
-  return false;
+  return p ? providerUsable(p) : false;
 }
 
 let _client: GoogleGenAI | null = null;

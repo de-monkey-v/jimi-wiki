@@ -61,12 +61,15 @@ enum AgentStatus {
 // 런타임에 UI(관리자)에서 바꾸는 설정. env 는 미설정 시 폴백. web·worker 가 같은 행을 읽는다.
 // ⚠️ EMBED_MODEL/EMBED_DIM 은 DB vector 컬럼·HNSW 인덱스와 결합되어 여기 두지 않는다(env 고정).
 model AppConfig {
-  id           String   @id @default("singleton")
-  chatModel    String? // 위키 채팅. null=env CHAT_MODEL 폴백
-  genModel     String? // query·lint 등 일반 생성. null=env GEN_MODEL 폴백
-  ingestModel  String? // ingest 에이전트. null=env INGEST_MODEL 폴백
-  openaiOAuth  Boolean? // ChatGPT 구독 OAuth 경로 활성. null=env OPENAI_OAUTH_PERSONAL 폴백
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default("singleton")
+  chatModel        String? // 위키 채팅. null=env CHAT_MODEL 폴백
+  genModel         String? // query·lint 등 일반 생성. null=env GEN_MODEL 폴백
+  ingestModel      String? // ingest 에이전트. null=env INGEST_MODEL 폴백
+  openaiTransport  String? // OpenAI 연결 방식: apikey|oauth|proxy. null=env(OPENAI_TRANSPORT)/auto 폴백
+  // opt-in: 관리자가 명시적으로 켠 provider 만 사용(키 존재 ≠ 자동 사용). 값: google|openai|anthropic.
+  // 행이 없을 때만 env ENABLED_PROVIDERS 로 폴백(스칼라 배열은 null 불가).
+  enabledProviders String[] @default([])
+  updatedAt        DateTime @updatedAt
 }
 
 // ---------- 인증 (Auth.js) ----------

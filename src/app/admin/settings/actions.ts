@@ -1,10 +1,12 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin";
-import { setModelConfig } from "@/lib/model-config";
+import { setModelConfig, getRawConfigRow, providerUsable } from "@/lib/model-config";
 import { logout } from "@/lib/openai-oauth";
 import { invalidateCatalog } from "@/lib/model-catalog";
-import { providerOf, isChatModel } from "@/lib/provider";
+import { providerOf, isChatModel, type Provider } from "@/lib/provider";
+
+const PROVIDERS: Provider[] = ["google", "openai", "anthropic"];
 
 // 빈 문자열 = env 폴백(null 저장).
 function val(fd: FormData, k: string): string | null {
@@ -12,24 +14,49 @@ function val(fd: FormData, k: string): string | null {
   return v || null;
 }
 
-/** 모델 선택(chat/gen/ingest) 저장. UI 필터에 의존하지 않고 서버에서 provider 를 검증한다. */
+// 선택된 모델이 실제로 쓸 수 있는지(알 수 있는 provider + 자격증명 + opt-in 활성) 검증.
+function requireUsable(model: string, label: string) {
+  const p = providerOf(model);
+  if (!p) throw new Error(`알 수 없는 모델 provider: ${model} (${label})`);
+  if (!providerUsable(p)) throw new Error(`비활성 provider 입니다: ${model} (${label}) — /admin/settings 에서 ${p} 를 먼저 활성화하세요`);
+}
+
+/** 모델 선택(chat/gen/ingest) 저장. UI 필터에 의존하지 않고 서버에서 provider·활성 여부를 검증한다. */
 export async function updateModelsAction(fd: FormData) {
   await requireAdmin();
   const chat = val(fd, "chatModel");
   const gen = val(fd, "genModel");
   const ingest = val(fd, "ingestModel");
-  // 검증: 채팅은 Gemini·GPT 만(스트리밍 지원), gen·ingest 는 알 수 있는 provider 만.
-  if (chat && !isChatModel(chat)) throw new Error(`채팅 모델로 쓸 수 없습니다: ${chat} — Gemini·GPT만 지원(Claude는 ingest·query·lint에서)`);
-  if (gen && !providerOf(gen)) throw new Error(`알 수 없는 모델 provider: ${gen} (일반 생성)`);
-  if (ingest && !providerOf(ingest)) throw new Error(`알 수 없는 모델 provider: ${ingest} (ingest)`);
+  if (chat) {
+    if (!isChatModel(chat)) throw new Error(`채팅 모델로 쓸 수 없습니다: ${chat} — Gemini·GPT만 지원(Claude는 ingest·query·lint에서)`);
+    requireUsable(chat, "채팅");
+  }
+  if (gen) requireUsable(gen, "일반 생성");
+  if (ingest) requireUsable(ingest, "ingest");
   await setModelConfig({ chatModel: chat, genModel: gen, ingestModel: ingest });
   revalidatePath("/admin/settings");
 }
 
-/** ChatGPT OAuth 경로 활성/비활성 토글. */
-export async function setOAuthEnabledAction(fd: FormData) {
+/** provider opt-in 토글 — 관리자가 명시적으로 켠 provider 만 사용 가능(키 존재 ≠ 자동 사용). */
+export async function setProviderEnabledAction(fd: FormData) {
   await requireAdmin();
-  await setModelConfig({ openaiOAuth: fd.get("enabled") === "true" });
+  const provider = String(fd.get("provider") ?? "");
+  const enabled = fd.get("enabled") === "true";
+  if (!(PROVIDERS as string[]).includes(provider)) throw new Error("알 수 없는 provider");
+  const row = await getRawConfigRow();
+  const set = new Set(row?.enabledProviders ?? []);
+  if (enabled) set.add(provider);
+  else set.delete(provider);
+  await setModelConfig({ enabledProviders: [...set] });
+  revalidatePath("/admin/settings");
+}
+
+/** OpenAI 연결 방식 선택(apikey|oauth|proxy). */
+export async function setOpenAITransportAction(fd: FormData) {
+  await requireAdmin();
+  const t = String(fd.get("transport") ?? "");
+  if (!["apikey", "oauth", "proxy"].includes(t)) throw new Error("알 수 없는 연결 방식");
+  await setModelConfig({ openaiTransport: t });
   revalidatePath("/admin/settings");
 }
 

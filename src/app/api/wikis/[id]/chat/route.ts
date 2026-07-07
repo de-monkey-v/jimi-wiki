@@ -1,6 +1,6 @@
 import { google } from "@ai-sdk/google";
 import { openaiProvider } from "@/lib/openai";
-import { chatModel } from "@/lib/model-config";
+import { chatModel, providerUsable } from "@/lib/model-config";
 import { isChatModel, providerOf } from "@/lib/provider";
 import {
   streamText,
@@ -101,9 +101,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         writer.write({ type: "data-sources", id: "sources", data: sources });
       }
       let chatModelId = chatModel();
-      if (!isChatModel(chatModelId)) {
-        // claude/알 수 없는 id 는 스트리밍 채팅 미지원 → 안전 폴백(전체 채팅이 깨지지 않게)
-        console.warn(`[chat] 지원하지 않는 채팅 모델(${chatModelId}) → gemini-2.5-flash 폴백`);
+      // 스트리밍 미지원(claude/unknown)이거나 provider 가 비활성/자격증명 없음이면 안전 폴백(채팅이 통째로 깨지지 않게)
+      if (!isChatModel(chatModelId) || !providerUsable(providerOf(chatModelId)!)) {
+        console.warn(`[chat] 사용 불가 채팅 모델(${chatModelId}) → gemini-2.5-flash 폴백`);
         chatModelId = "gemini-2.5-flash";
       }
       const result = streamText({

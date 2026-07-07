@@ -4,6 +4,9 @@
  */
 export type Provider = "google" | "openai" | "anthropic";
 
+// OpenAI 는 연결 방식이 3가지 — 관리자가 명시적으로 하나를 고른다.
+export type OpenAITransport = "apikey" | "oauth" | "proxy";
+
 export function providerOf(model: string): Provider | null {
   if (!model) return null;
   if (model.startsWith("claude")) return "anthropic";

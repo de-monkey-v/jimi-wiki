@@ -3,18 +3,13 @@ import { randomUUID } from "node:crypto";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, tool, jsonSchema, stepCountIs } from "ai";
 import type { ToolSpec, ToolLoopResult, LoopUsage } from "@/lib/gemini";
-import { CODEX_BASE_URL, getFreshAccess, storeExists } from "@/lib/openai-oauth";
-import { openaiOAuthEnabled } from "@/lib/model-config";
+import { CODEX_BASE_URL, getFreshAccess } from "@/lib/openai-oauth";
+import { effectiveOpenAITransport, providerHasCredential } from "@/lib/model-config";
 
-// OAuth 경로 활성: DB/설정 플래그(캐시, 동기) + 토큰 존재 + OPENAI_BASE_URL 없음(있으면 프록시 우선).
-function oauthActive(): boolean {
-  return openaiOAuthEnabled() && !process.env.OPENAI_BASE_URL && storeExists();
-}
-
-// OpenAI 모델 라우팅. 세 경로:
-//  1) 표준 API 키(OPENAI_API_KEY)
-//  2) OPENAI_BASE_URL 로 로컬 OpenAI-호환 프록시(예: 외부 codex-auth 프록시) 지정 — 개인 로컬 전용
-//  3) `pnpm openai:login` + OPENAI_OAUTH_PERSONAL=1 — ChatGPT 구독 OAuth 를 앱에 직접 태움(개인 로컬 전용)
+// OpenAI 연결 방식(관리자가 /admin/settings 에서 선택, effectiveOpenAITransport 로 해소):
+//  1) apikey — 표준 api.openai.com (OPENAI_API_KEY)
+//  2) proxy  — OPENAI_BASE_URL 로 OpenAI-호환 프록시(예: 외부 codex-auth 프록시)
+//  3) oauth  — ChatGPT 구독 OAuth 를 codex 백엔드로 직접 태움(`pnpm openai:login` 또는 UI 로그인)
 // ⚠️ (2)(3) 은 개인 self-host 전용. 멀티유저/공개 배포에 쓰지 말 것(ChatGPT 약관).
 
 // ChatGPT(Codex) 백엔드는 표준 api.openai.com 이 아니고 요청마다 최신 토큰이 필요하다. custom fetch 로
@@ -40,18 +35,23 @@ const codexFetch = (async (input, init) => {
   return fetch(input, { ...init, headers, body });
 }) as typeof fetch;
 
-/** 현재 설정에 맞는 OpenAI provider 와 OAuth 여부. */
+/** 선택된 연결 방식에 맞는 OpenAI provider 와 OAuth(codex) 여부. */
 function client(): { provider: ReturnType<typeof createOpenAI>; oauth: boolean } {
-  if (oauthActive()) {
+  const t = effectiveOpenAITransport();
+  if (t === "oauth") {
     return {
       provider: createOpenAI({ baseURL: CODEX_BASE_URL, apiKey: "chatgpt-oauth", fetch: codexFetch }),
       oauth: true,
     };
   }
-  return {
-    provider: createOpenAI({ apiKey: process.env.OPENAI_API_KEY, baseURL: process.env.OPENAI_BASE_URL || undefined }),
-    oauth: false,
-  };
+  if (t === "proxy") {
+    return {
+      provider: createOpenAI({ apiKey: process.env.OPENAI_API_KEY, baseURL: process.env.OPENAI_BASE_URL || undefined }),
+      oauth: false,
+    };
+  }
+  // apikey — 표준 api.openai.com (baseURL 미지정)
+  return { provider: createOpenAI({ apiKey: process.env.OPENAI_API_KEY }), oauth: false };
 }
 
 // codex 백엔드는 Responses API 전용이므로 OAuth 경로에선 .responses() 를 강제한다.
@@ -65,7 +65,7 @@ export function openaiProvider(model: string) {
 }
 
 export function openaiEnabled(): boolean {
-  return !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL) || oauthActive();
+  return providerHasCredential("openai");
 }
 
 /** gpt-5.x / gpt-4.x / o1·o3·o4 등 OpenAI 모델 판별. */

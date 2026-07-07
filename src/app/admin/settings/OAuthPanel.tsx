@@ -1,9 +1,17 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { logoutOAuthAction, setOAuthEnabledAction } from "./actions";
+import type { OpenAITransport } from "@/lib/provider";
+import { logoutOAuthAction, setOpenAITransportAction } from "./actions";
 
 type Status = { exists: boolean; accountId?: string; expires?: number };
+type Avail = { apikey: boolean; oauth: boolean; proxy: boolean };
+
+const TRANSPORT_OPTIONS: { id: OpenAITransport; label: string; hint: string }[] = [
+  { id: "apikey", label: "API 키", hint: "OPENAI_API_KEY" },
+  { id: "oauth", label: "ChatGPT 구독(OAuth)", hint: "로그인 필요" },
+  { id: "proxy", label: "프록시", hint: "OPENAI_BASE_URL" },
+];
 type PollResult = { status: "complete" | "error" | "expired" | "cancelled"; message?: string };
 
 // 폴링 루프는 모듈 레벨(컴포넌트 밖) — Date.now/setTimeout 등 부수효과를 render 순수성 밖에 둔다.
@@ -40,7 +48,7 @@ async function pollDevice(
   return signal.aborted ? { status: "cancelled" } : { status: "expired" };
 }
 
-export function OAuthPanel({ status, enabled, baseUrlSet }: { status: Status; enabled: boolean; baseUrlSet: boolean }) {
+export function OAuthPanel({ status, transport, avail }: { status: Status; transport: OpenAITransport; avail: Avail }) {
   const router = useRouter();
   const [device, setDevice] = useState<{ userCode: string; url: string } | null>(null);
   const [msg, setMsg] = useState("");
@@ -99,7 +107,39 @@ export function OAuthPanel({ status, enabled, baseUrlSet }: { status: Status; en
 
   return (
     <section className="border rounded-lg p-4 space-y-3">
-      <h2 className="font-semibold">ChatGPT 구독 OAuth (GPT 모델용)</h2>
+      <h2 className="font-semibold">OpenAI 연결 (방식 선택 + ChatGPT 로그인)</h2>
+
+      {/* 연결 방식 선택 — 사용 가능한 것만 고를 수 있다. 현재 선택은 강조. */}
+      <div className="space-y-1">
+        <p className="text-sm font-medium">연결 방식</p>
+        <div className="flex flex-wrap gap-2">
+          {TRANSPORT_OPTIONS.map((o) => {
+            const ok = avail[o.id];
+            const current = transport === o.id;
+            return (
+              <form key={o.id} action={setOpenAITransportAction}>
+                <input type="hidden" name="transport" value={o.id} />
+                <button
+                  disabled={!ok || current}
+                  title={ok ? "" : `${o.hint} 없음`}
+                  className={`text-sm rounded border px-3 py-1.5 disabled:cursor-not-allowed ${
+                    current
+                      ? "border-stone-900 bg-stone-900 text-white"
+                      : "border-stone-200 hover:bg-gray-50 disabled:opacity-40"
+                  }`}
+                >
+                  {current ? "✓ " : ""}
+                  {o.label}
+                  {ok ? "" : " (불가)"}
+                </button>
+              </form>
+            );
+          })}
+        </div>
+        <p className="text-xs text-gray-500">
+          현재: <b>{transport}</b> — 이 방식으로 GPT 모델을 호출합니다. 키가 있어도 <b>고른 방식</b>만 씁니다.
+        </p>
+      </div>
 
       {status.exists ? (
         <p className="text-sm text-emerald-600">
@@ -125,18 +165,7 @@ export function OAuthPanel({ status, enabled, baseUrlSet }: { status: Status; en
             <button className="text-sm text-red-600 underline">로그아웃</button>
           </form>
         )}
-        <form action={setOAuthEnabledAction} className="flex items-center gap-2">
-          <input type="hidden" name="enabled" value={String(!enabled)} />
-          <button className="text-sm underline">{enabled ? "OAuth 경로 비활성화" : "OAuth 경로 활성화"}</button>
-        </form>
-        <span className="text-xs text-gray-500">경로 상태: {enabled ? "활성" : "비활성"}</span>
       </div>
-
-      {baseUrlSet && (
-        <p className="text-xs text-amber-600">
-          ⚠️ OPENAI_BASE_URL 이 설정되어 있어 그쪽(프록시)이 우선합니다. OAuth 경로를 쓰려면 env 에서 비우세요.
-        </p>
-      )}
 
       {device && (
         <div className="text-sm border rounded p-3 bg-gray-50 space-y-1">

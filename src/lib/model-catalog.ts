@@ -2,7 +2,12 @@ import "server-only";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import fallback from "./model-catalog.fallback.json";
-import { openaiOAuthEnabled } from "@/lib/model-config";
+import {
+  openaiTransport,
+  providerUsable,
+  providerHasCredential,
+  isProviderEnabled,
+} from "@/lib/model-config";
 import { storeExists } from "@/lib/openai-oauth";
 import type { Provider } from "@/lib/provider";
 
@@ -73,10 +78,14 @@ function writeDiskCache(c: CacheShape): void {
   }
 }
 
-function providerEnabled(p: Provider): boolean {
-  if (p === "google") return !!process.env.GEMINI_API_KEY;
-  if (p === "anthropic") return !!process.env.ANTHROPIC_API_KEY;
-  return !!(process.env.OPENAI_API_KEY || process.env.OPENAI_BASE_URL || (openaiOAuthEnabled() && storeExists()));
+/** 설정 페이지용 provider 상태: 자격증명 유무 + opt-in 활성 여부(별개 축). */
+export function getProviderStatuses(): { provider: Provider; label: string; hasCredential: boolean; enabled: boolean }[] {
+  return SUPPORTED.map((p) => ({
+    provider: p,
+    label: LABEL[p],
+    hasCredential: providerHasCredential(p),
+    enabled: isProviderEnabled(p),
+  }));
 }
 
 // models.dev id 는 "openai/gpt-5-mini" 형태 → 우리 코드가 쓰는 bare id("gpt-5-mini")로.
@@ -158,14 +167,14 @@ async function loadGroups(): Promise<Record<string, CatalogModel[]>> {
 /** provider 그룹 목록. 저장된 값이 목록에 없을 수 있으니 UI 는 custom 입력도 허용해야 한다. */
 export async function getModelCatalog(): Promise<ProviderGroup[]> {
   const groups = await loadGroups();
-  const oauth = openaiOAuthEnabled() && storeExists() && !process.env.OPENAI_BASE_URL;
+  const oauth = openaiTransport() === "oauth" && storeExists();
   return SUPPORTED.map((provider) => {
     let models = groups[provider] ?? [];
     if (provider === "openai" && oauth) {
       const seen = new Set(models.map((m) => m.id));
       models = [...OAUTH_OPENAI.filter((m) => !seen.has(m.id)), ...models];
     }
-    return { provider, label: LABEL[provider], enabled: providerEnabled(provider), models };
+    return { provider, label: LABEL[provider], enabled: providerUsable(provider), models };
   });
 }
 

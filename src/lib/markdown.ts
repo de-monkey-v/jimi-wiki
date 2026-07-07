@@ -5,7 +5,7 @@ import remarkRehype from "remark-rehype";
 import rehypeSlug from "rehype-slug";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
-import { visit } from "unist-util-visit";
+import { visit, SKIP } from "unist-util-visit";
 import type { Root, Text } from "mdast";
 
 // 기본 스키마(href/src를 http/https/mailto/상대경로로 제한, javascript: 차단) + 위키링크 className 허용
@@ -18,6 +18,11 @@ const sanitizeSchema = {
 };
 
 const WIKILINK = /\[\[([^\]]+?)\]\]/g;
+
+// CommonMark가 [[slug]](gloss)를 먼저 링크로 삼킨 경우의 시그니처:
+// link 노드의 유일한 text 자식이 정확히 "[inner]"(단일 대괄호) 형태다.
+// 정상 마크다운 [text](url)의 링크 텍스트에는 대괄호가 없으므로 오탐이 사실상 없다.
+const LINK_COLLISION = /^\[([^[\]]+)\]$/;
 
 /** 위키링크 타깃/페이지 슬러그 정규화 (한글 허용) */
 export function normalizeSlug(s: string): string {
@@ -38,7 +43,56 @@ function remarkWikiLink(opts: {
   hrefFor: (target: string) => string;
   exists?: (target: string) => boolean;
 }) {
-  return (tree: Root) => {
+  // 위키링크 링크 노드 빌더 — 두 패스가 공유하므로 className/href/exists 의미가 갈라지지 않는다.
+  const makeWikiLinkNode = (inner: string) => {
+    const { target, label } = parseTarget(inner);
+    const missing = opts.exists ? !opts.exists(target) : false;
+    return {
+      type: "link",
+      url: opts.hrefFor(target),
+      data: { hProperties: { className: missing ? "wikilink wikilink-missing" : "wikilink" } },
+      children: [{ type: "text", value: label }],
+    };
+  };
+
+  return (tree: Root, file?: unknown) => {
+    const source = file ? String(file) : "";
+
+    // 1) CommonMark가 [[slug]](gloss)를 하나의 link 노드로 먼저 삼킨 경우 복구.
+    //    gloss에 내부 공백이 없어 유효한 링크 목적지가 될 때만 발생한다.
+    //    link 노드의 유일한 text 자식이 "[inner]"(단일 대괄호)면 위키링크로 되돌리고,
+    //    뒤따르던 (gloss)는 원문 오프셋으로 정확히 잘라 literal text로 다시 내보낸다.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    visit(tree, "link", (node: any, index, parent) => {
+      if (!parent || index === null || index === undefined) return;
+      if (!node.children || node.children.length !== 1) return;
+      const only = node.children[0];
+      if (!only || only.type !== "text") return;
+      const bm = LINK_COLLISION.exec(only.value);
+      if (!bm) return;
+      const { target } = parseTarget(bm[1]);
+      if (!target) return; // 정규화 후 빈 타깃이면 실제 위키링크가 아님
+
+      // gloss는 원문 오프셋으로 정확히 복원(디코딩/이스케이프 왜곡 방지).
+      // 슬라이스 범위 [textEnd+1, linkEnd)는 이미 양쪽 괄호를 포함한다.
+      // 위치 정보가 없을 때만 디코딩된 url로 폴백.
+      let gloss = `(${node.url})`;
+      const tEnd = only.position?.end?.offset;
+      const lEnd = node.position?.end?.offset;
+      if (source && typeof tEnd === "number" && typeof lEnd === "number") {
+        gloss = source.slice(tEnd + 1, lEnd);
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (parent as any).children.splice(index, 1, makeWikiLinkNode(bm[1]), {
+        type: "text",
+        value: gloss,
+      });
+      return [SKIP, index + 2]; // 삽입한 두 노드를 재방문하지 않음
+    });
+
+    // 2) CommonMark가 건드리지 않은 text 노드의 [[..]] 처리(공백 gloss·bare·label·다중 포함).
+    //    text 노드만 방문하므로 코드블록·인라인코드는 자동 제외된다.
     visit(tree, "text", (node: Text, index, parent) => {
       if (!parent || index === null || index === undefined) return;
       const value = node.value;
@@ -50,14 +104,7 @@ function remarkWikiLink(opts: {
       WIKILINK.lastIndex = 0;
       while ((m = WIKILINK.exec(value))) {
         if (m.index > last) children.push({ type: "text", value: value.slice(last, m.index) });
-        const { target, label } = parseTarget(m[1]);
-        const missing = opts.exists ? !opts.exists(target) : false;
-        children.push({
-          type: "link",
-          url: opts.hrefFor(target),
-          data: { hProperties: { className: missing ? "wikilink wikilink-missing" : "wikilink" } },
-          children: [{ type: "text", value: label }],
-        });
+        children.push(makeWikiLinkNode(m[1]));
         last = m.index + m[0].length;
       }
       if (last < value.length) children.push({ type: "text", value: value.slice(last) });

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getPage, getBacklinks, getOutlinks, existingSlugSet, getWikiToc, getPrevNext, getPageProvenance, getPageSources } from "@/lib/wiki";
 import { renderMarkdown } from "@/lib/markdown";
 import type { TocEntry } from "@/lib/kinds";
+import { EmptyState } from "@/components/EmptyState";
 import { ReadingPane } from "@/components/ReadingPane";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
 
@@ -36,22 +37,14 @@ export async function PublicWikiView({
   title,
   basePath,
   pageSlug,
-  homeHref,
-  homeLabel,
 }: {
   wikiId: string;
   title: string;
   basePath: string;
   pageSlug?: string;
-  homeHref?: string;
-  homeLabel?: string;
 }) {
   const crumb = (
     <div className="mb-1 text-sm text-stone-400">
-      {homeHref ? (
-        <Link href={homeHref} className="hover:underline">{homeLabel ?? "홈"}</Link>
-      ) : null}
-      {homeHref ? " / " : null}
       <Link href={basePath} className="hover:underline">{title}</Link>
       <span className="ml-2 rounded bg-stone-100 px-1.5 py-0.5 text-xs">읽기 전용</span>
     </div>
@@ -107,7 +100,13 @@ export async function PublicWikiView({
       {crumb}
       <h1 className="mb-6 text-2xl font-bold">{title}</h1>
       {sections.length === 0 ? (
-        <p className="text-stone-500">아직 페이지가 없습니다.</p>
+        <div className="rounded-lg border border-stone-200 bg-white p-6">
+          <EmptyState
+            asset="read-only-share"
+            title="공개된 페이지가 없습니다"
+            body="읽기 전용 공유 위키에 페이지가 추가되면 이곳에서 열람할 수 있습니다."
+          />
+        </div>
       ) : (
         <div className="space-y-6">
           {sections.map((s) => (

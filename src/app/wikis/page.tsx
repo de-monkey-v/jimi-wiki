@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { listOwnedWikis, listSharedWikis } from "@/lib/wiki";
+import { EmptyState } from "@/components/EmptyState";
 import { createWikiAction } from "./actions";
 import { logoutAction } from "../login/actions";
 
@@ -11,6 +12,7 @@ export default async function WikisPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const [owned, shared] = await Promise.all([listOwnedWikis(user.id), listSharedWikis(user.id)]);
+  const hasAnyWikis = owned.length > 0 || shared.length > 0;
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
@@ -30,7 +32,7 @@ export default async function WikisPage() {
 
       {/* 내가 만든 위키 */}
       <ul className="space-y-2 mb-8">
-        {owned.length === 0 && <li className="text-gray-500">아직 만든 위키가 없습니다. 아래에서 만들어보세요.</li>}
+        {owned.length === 0 && hasAnyWikis && <li className="text-gray-500">아직 만든 위키가 없습니다. 아래에서 만들어보세요.</li>}
         {owned.map((w) => (
           <li key={w.id} className="border rounded-lg p-4 hover:bg-gray-50">
             <Link href={`/wikis/${w.slug}`} className="flex items-center justify-between">
@@ -66,6 +68,16 @@ export default async function WikisPage() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {!hasAnyWikis && (
+        <div className="mb-8 rounded-lg border border-stone-200 bg-white p-5">
+          <EmptyState
+            asset="empty-wikis"
+            title="아직 위키가 없습니다"
+            body="아래에서 첫 위키를 만들면 문서와 연결 관계가 여기에 쌓입니다."
+          />
         </div>
       )}
 

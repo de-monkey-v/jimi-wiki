@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import { EmptyState } from "@/components/EmptyState";
 import { saveAnswerAction } from "./actions";
 import { DocModal, type EvidenceDoc } from "./DocModal";
 import { remarkCitations } from "./remarkCitations";
@@ -145,7 +146,12 @@ function EvidencePanel({ sources, cited, onOpen }: { sources: ChatSource[]; cite
       <div className="rounded-lg border bg-white p-3">
         <h2 className="mb-2 text-sm font-semibold text-stone-600">근거 자료</h2>
         {sources.length === 0 ? (
-          <p className="text-xs text-stone-400">질문하면 답변의 근거 문서가 여기 표시됩니다.</p>
+          <EmptyState
+            asset="chat-ready"
+            title="근거 대기 중"
+            body="질문하면 답변의 근거 문서가 여기 표시됩니다."
+            compact
+          />
         ) : (
           <>
             <ul className="space-y-1.5">
@@ -234,9 +240,13 @@ export function WikiChat({ slug, canWrite }: { slug: string; canWrite: boolean }
       <div className="flex flex-col h-[68vh] min-w-0 flex-1 border rounded-lg overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
         {messages.length === 0 && (
-          <p className="text-sm text-gray-400">
-            이 위키에 대해 물어보세요. 위키에 저장된 내용을 근거로 답하고, 근거를 [번호]로 인용합니다.
-          </p>
+          <div className="flex min-h-full items-center justify-center">
+            <EmptyState
+              asset="chat-ready"
+              title="이 위키에 대해 물어보세요"
+              body="저장된 내용을 근거로 답하고, 근거 문서는 답변과 함께 표시됩니다."
+            />
+          </div>
         )}
         {messages.map((m, i) => {
           const text = textOf(m);

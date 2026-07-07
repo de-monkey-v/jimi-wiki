@@ -1,5 +1,6 @@
 "use client";
 import { useFormStatus } from "react-dom";
+import { EmptyState } from "@/components/EmptyState";
 import { ingestAction } from "../actions";
 
 function SubmitButton() {
@@ -22,8 +23,12 @@ function SubmitButton() {
 export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
   return (
     <form action={ingestAction} className="space-y-3 rounded-lg border p-4">
-      <h2 className="font-semibold">소스 편입 (Ingest)</h2>
-      <p className="text-xs text-gray-400">URL이나 텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다.</p>
+      <EmptyState
+        asset="ingest-flow"
+        title="소스 편입 (Ingest)"
+        body="URL이나 텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다."
+        compact
+      />
       <input type="hidden" name="wikiSlug" value={wikiSlug} />
       <input name="url" placeholder="https://…" className="w-full rounded border px-3 py-2" />
       <textarea name="text" rows={3} placeholder="또는 텍스트 직접 붙여넣기" className="w-full rounded border px-3 py-2 text-sm" />

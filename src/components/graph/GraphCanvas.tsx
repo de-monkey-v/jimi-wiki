@@ -44,6 +44,10 @@ export default function GraphCanvas({
   const [hiddenKinds, setHiddenKinds] = useState<Set<PageKind>>(new Set<PageKind>(["note"]));
   const [showBroken, setShowBroken] = useState(true);
   const [search, setSearch] = useState("");
+  // 깨진(아직 없는) 노드 호버 시 커서 위치(컨테이너-로컬 px)에 띄우는 툴팁.
+  // flipX/flipY: 컨테이너 우/하단 가장자리면 반대쪽으로 뒤집어 overflow-hidden에 잘리지 않게 함.
+  // 일부러 init useEffect deps에서 제외 → setTip는 안정적이라 sigma를 재생성하지 않음.
+  const [tip, setTip] = useState<{ x: number; y: number; slug: string; flipX: boolean; flipY: boolean } | null>(null);
 
   // 리듀서가 최신 컨트롤/호버 상태를 읽도록 ref로 보관(sigma 재생성 없이 refresh만)
   const st = useRef({ hiddenKinds, showBroken, search: "", hovered: null as string | null });
@@ -160,13 +164,31 @@ export default function GraphCanvas({
       return res;
     });
 
-    // 호버 강조
-    sigma.on("enterNode", ({ node }) => {
+    // 호버 강조 + 커서 + 깨진 노드 툴팁
+    sigma.on("enterNode", ({ node, event }) => {
       st.current.hovered = node;
+      const broken = graph.getNodeAttribute(node, "broken") as boolean;
+      // sigma엔 커서 설정이 없어 컨테이너 DOM에 직접 지정: 실 노드=클릭 가능(pointer), 깨진 노드=이동 불가(help)
+      el.style.cursor = broken ? "help" : "pointer";
+      if (broken) {
+        // event.x/event.y는 이미 컨테이너 top-left 기준 px(커서 위치) → 좌표 변환/카메라 보정 불필요.
+        // 컨테이너(overflow-hidden) 우/하단 근처면 플립해 잘림 방지(툴팁 폭 200 + 여백, 높이 여유 48).
+        setTip({
+          x: event.x,
+          y: event.y,
+          slug: node,
+          flipX: event.x > el.clientWidth - 220,
+          flipY: event.y > el.clientHeight - 48,
+        });
+      } else {
+        setTip(null);
+      }
       sigma.refresh({ skipIndexation: true });
     });
     sigma.on("leaveNode", () => {
       st.current.hovered = null;
+      el.style.cursor = "";
+      setTip(null);
       sigma.refresh({ skipIndexation: true });
     });
     // 클릭 → 페이지 이동(깨진 노드는 무시)
@@ -228,6 +250,8 @@ export default function GraphCanvas({
     return () => {
       clearTimeout(stopTimer);
       clearTimeout(reindexTimer);
+      el.style.cursor = ""; // 호버 커서가 unmount 후에도 남지 않도록 복구
+      setTip(null);
       el.removeEventListener("mouseenter", onEnter);
       mc.removeListener("mousemovebody", onMove);
       mc.removeListener("mouseup", onUp);
@@ -243,6 +267,14 @@ export default function GraphCanvas({
     sigmaRef.current?.refresh({ skipIndexation: true });
   }, [hiddenKinds, showBroken, search]);
 
+  // 필터로 노드를 숨기면 마우스가 안 움직여 leaveNode가 안 뜸 → 호버 잔재(툴팁/커서)를 토글 시점에 정리.
+  // effect가 아닌 이벤트 핸들러에서 호출(동기 setState-in-effect 회피).
+  const clearHoverChrome = () => {
+    st.current.hovered = null;
+    if (containerRef.current) containerRef.current.style.cursor = "";
+    setTip(null);
+  };
+
   const onSearch = (q: string) => {
     setSearch(q);
     const g = graphRef.current;
@@ -255,13 +287,15 @@ export default function GraphCanvas({
     }
   };
 
-  const toggleKind = (k: PageKind) =>
+  const toggleKind = (k: PageKind) => {
+    clearHoverChrome();
     setHiddenKinds((prev) => {
       const next = new Set(prev);
       if (next.has(k)) next.delete(k);
       else next.add(k);
       return next;
     });
+  };
 
   const hasBroken = nodes.some((n) => n.broken);
 
@@ -289,7 +323,7 @@ export default function GraphCanvas({
             ))}
             {hasBroken && (
               <label className="flex cursor-pointer items-center gap-2 text-xs text-stone-600">
-                <input type="checkbox" checked={showBroken} onChange={(e) => setShowBroken(e.target.checked)} />
+                <input type="checkbox" checked={showBroken} onChange={(e) => { clearHoverChrome(); setShowBroken(e.target.checked); }} />
                 <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#dc2626" }} />
                 깨진 링크
               </label>
@@ -298,6 +332,20 @@ export default function GraphCanvas({
           <div className="border-t border-stone-100 pt-1 text-xs text-stone-400">
             노드 {nodes.length} · 링크 {edges.length}
           </div>
+        </div>
+      )}
+      {tip && (
+        <div
+          className="pointer-events-none absolute z-10 max-w-[200px] rounded-lg border border-stone-200 bg-white/90 px-2 py-1 text-xs text-stone-600 shadow-sm backdrop-blur"
+          style={{
+            left: tip.x,
+            top: tip.y,
+            transform: `translate(${tip.flipX ? "calc(-100% - 12px)" : "12px"}, ${tip.flipY ? "calc(-100% - 12px)" : "12px"})`,
+          }}
+        >
+          <span className="font-medium text-red-600">{tip.slug}</span>
+          <span className="text-stone-400"> · </span>
+          아직 없는 페이지
         </div>
       )}
     </div>

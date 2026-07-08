@@ -268,7 +268,7 @@ export async function generateWithTools(opts: {
         model,
         contents: [
           ...contents,
-          { role: "user", parts: [{ text: "이제 도구 호출을 멈추고, 지금까지 만들고 수정한 페이지를 한국어로 요약 보고하라." }] },
+          { role: "user", parts: [{ text: "이제 도구 호출을 멈추고, 지금까지 만들고 수정한 페이지를 원문·위키 콘텐츠와 같은 언어로 요약 보고하라." }] },
         ],
         config: { systemInstruction: opts.system },
       }),

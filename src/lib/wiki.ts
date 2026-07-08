@@ -192,8 +192,11 @@ export function updateWikiSettings(
   });
 }
 
-export function deleteWiki(wikiId: string) {
-  return prisma.wiki.delete({ where: { id: wikiId } }); // cascade로 pages/sources/chunks/members 등 삭제
+export async function deleteWiki(wikiId: string) {
+  const res = await prisma.wiki.delete({ where: { id: wikiId } }); // cascade로 pages/sources/chunks/members 등 삭제
+  // DB cascade는 blob 원본을 지우지 않으므로 이 위키의 blob 접두사를 통째 정리(고아 방지, 비치명적)
+  await import("@/lib/blob").then((m) => m.getBlobStore().deletePrefix(`${wikiId}/`)).catch(() => {});
+  return res;
 }
 
 // ---------- 페이지 생성/수정 ----------
@@ -336,7 +339,7 @@ export async function getSourceImpact(
  * 반환: 삭제했으면 함께 지운 노트 slug들, 원문이 없으면 null.
  */
 export async function deleteSource(wikiId: string, slug: string): Promise<{ deletedNotes: string[] } | null> {
-  const source = await prisma.source.findUnique({ where: { wikiId_slug: { wikiId, slug } }, select: { id: true } });
+  const source = await prisma.source.findUnique({ where: { wikiId_slug: { wikiId, slug } }, select: { id: true, storageKey: true } });
   if (!source) return null;
   const notes = await prisma.page.findMany({ where: { wikiId, sourceId: source.id, kind: "note" }, select: { id: true, slug: true } });
   await prisma.$transaction([
@@ -349,6 +352,8 @@ export async function deleteSource(wikiId: string, slug: string): Promise<{ dele
     prisma.searchChunk.deleteMany({ where: { wikiId, refType: "source", refId: source.id } }),
     prisma.source.delete({ where: { id: source.id } }),
   ]);
+  // 원본 파일(blob) 동반 삭제 — DB 트랜잭션 커밋 뒤 best-effort(실패해도 삭제는 성립, 고아 blob 은 GC 대상)
+  if (source.storageKey) await import("@/lib/blob").then((m) => m.getBlobStore().delete(source.storageKey!)).catch(() => {});
   return { deletedNotes: notes.map((n) => n.slug) };
 }
 

@@ -391,10 +391,12 @@
     "submitPending": "Queuing job…",
     "submit": "Ingest",
     "emptyTitle": "Ingest a Source",
-    "emptyBody": "Drop a web link (body text only), YouTube (captions), or plain text, and the LLM reads it and organizes it into notes and concept pages.",
+    "emptyBody": "Drop a web link (body text only), YouTube (captions), plain text, or files (PDF, Word, images, and more), and the LLM reads it and organizes it into notes and concept pages.",
     "urlPlaceholder": "https://…  (web article or YouTube link)",
     "textPlaceholder": "Or paste text / a video transcript directly",
-    "titlePlaceholder": "Title (optional)"
+    "titlePlaceholder": "Title (optional)",
+    "fileLabel": "Upload files",
+    "fileHint": "PDF, Word (docx), PowerPoint (pptx), Excel (xlsx), ODF, text, Markdown, images, ZIP (multiple allowed, up to 25MB each). Images and scanned PDFs are read via Gemini."
   },
   "WikisSlugJobsIndicator": {
     "type": {

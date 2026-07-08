@@ -5,7 +5,8 @@ import { getCurrentUserId } from "@/lib/session";
 import { createWiki, getWikiForUser, getPage, createPage, updatePage } from "@/lib/wiki";
 import { MANUAL_KINDS } from "@/lib/kinds";
 import { hasRole } from "@/lib/api-gate";
-import { createIngestRun, reapStaleRuns } from "@/lib/ingest";
+import { createIngestRun, createFileIngestRun, reapStaleRuns } from "@/lib/ingest";
+import { classifyUpload, MAX_UPLOAD_BYTES, MAX_REQUEST_BYTES } from "@/lib/file-types";
 import { getOntology } from "@/lib/ontology";
 import { reindexEmbeddings } from "@/lib/search";
 import { normalizeCategoryForWrite } from "@/lib/governance";
@@ -87,10 +88,34 @@ export async function ingestAction(formData: FormData) {
   const url = String(formData.get("url") ?? "").trim() || undefined;
   const text = String(formData.get("text") ?? "").trim() || undefined;
   const title = String(formData.get("title") ?? "").trim() || undefined;
-  if (!url && !text) throw new Error("URL 또는 텍스트가 필요합니다");
-  // 비동기: 잡만 생성하고 즉시 반환, 처리는 별도 worker가 수행. ?run=으로 상태 배지 표시.
-  const run = await createIngestRun(wiki.id, { url, text, title }, userId);
-  redirect(`/wikis/${encodeURIComponent(wikiSlug)}?run=${run.id}`);
+  const rawFiles = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
+  if (!url && !text && rawFiles.length === 0) throw new Error("URL·텍스트·파일 중 하나가 필요합니다");
+
+  // 파일은 부수효과(blob 저장·잡 생성) 전에 전량 선검증한다 — 한 파일이 실패해도 일부만 커밋되지 않도록.
+  const files = await Promise.all(
+    rawFiles.map(async (f) => ({ file: f, buffer: Buffer.from(await f.arrayBuffer()) })),
+  );
+  if (files.length) {
+    const total = files.reduce((s, f) => s + f.buffer.length, 0);
+    if (total > MAX_REQUEST_BYTES) throw new Error(`업로드 총량이 너무 큽니다(최대 ${Math.floor(MAX_REQUEST_BYTES / 1024 / 1024)}MB)`);
+    for (const { file, buffer } of files) {
+      if (buffer.length > MAX_UPLOAD_BYTES) throw new Error(`${file.name}: 파일이 너무 큽니다(최대 ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)`);
+      const cls = classifyUpload(buffer, file.name);
+      if ("rejected" in cls) throw new Error(`${file.name}: ${cls.rejected}`);
+    }
+  }
+
+  // 검증 통과 후에만 잡 생성(비동기: 처리는 별도 worker). ?run=으로 첫 잡의 상태 배지 표시.
+  let firstRunId: string | undefined;
+  if (url || text) {
+    const run = await createIngestRun(wiki.id, { url, text, title }, userId);
+    firstRunId ??= run.id;
+  }
+  for (const { file, buffer } of files) {
+    const run = await createFileIngestRun(wiki.id, { buffer, filename: file.name, mimeType: file.type || undefined }, userId);
+    firstRunId ??= run.id;
+  }
+  redirect(`/wikis/${encodeURIComponent(wikiSlug)}${firstRunId ? `?run=${firstRunId}` : ""}`);
 }
 
 export type RunListItem = {

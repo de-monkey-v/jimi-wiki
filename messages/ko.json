@@ -391,10 +391,12 @@
     "submitPending": "잡 등록 중…",
     "submit": "수집",
     "emptyTitle": "소스 편입 (Ingest)",
-    "emptyBody": "웹 링크(본문만 추출)·유튜브(자막)·텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다.",
+    "emptyBody": "웹 링크(본문 추출)·유튜브(자막)·텍스트·파일(PDF·Word·이미지 등)을 주면 LLM이 읽고 노트·개념 페이지로 정리합니다.",
     "urlPlaceholder": "https://…  (웹 기사 또는 유튜브 링크)",
     "textPlaceholder": "또는 텍스트/영상 대본 직접 붙여넣기",
-    "titlePlaceholder": "제목(선택)"
+    "titlePlaceholder": "제목(선택)",
+    "fileLabel": "파일 업로드",
+    "fileHint": "PDF·Word(docx)·PowerPoint(pptx)·Excel(xlsx)·ODF·텍스트·마크다운·이미지·ZIP (여러 개 가능, 파일당 최대 25MB). 이미지·스캔 PDF는 Gemini로 글자를 읽어냅니다."
   },
   "WikisSlugJobsIndicator": {
     "type": {

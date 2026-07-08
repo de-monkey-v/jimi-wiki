@@ -4,6 +4,8 @@ import { Type } from "@google/genai";
 import { prisma } from "@/lib/db";
 import { assertPublicUrl, MAX_SOURCE_CHARS } from "@/lib/safe-fetch";
 import { isYoutubeUrl, fetchYoutubeTranscript } from "@/lib/youtube";
+import { stripHtml, MIN_ARTICLE_CHARS } from "@/lib/html-text";
+import { classifyUpload, MAX_UPLOAD_BYTES } from "@/lib/file-types";
 import { normalizeSlug } from "@/lib/markdown";
 import { getPage, listPages, upsertPage, addPageSource } from "@/lib/wiki";
 import { hybridSearch, reindexSource, reindexEmbeddings, indexCategory, matchCategorySemantic, deleteCategoryChunk } from "@/lib/search";
@@ -11,7 +13,7 @@ import { generateWithTools, geminiEnabled, llmEnabledForModel, type ToolSpec } f
 import { ingestModel } from "@/lib/model-config";
 import { lintWiki } from "@/lib/lint";
 import { PAGE_KINDS } from "@/lib/kinds";
-import { recordUsage } from "@/lib/usage";
+import { recordUsage, checkDailyQuota } from "@/lib/usage";
 import { getOntology, matchCategory, isReservedSlug, syncOntologyWithPages, sanitizeCategorySlug } from "@/lib/ontology";
 import type { PageKind } from "@/generated/prisma/client";
 
@@ -19,6 +21,11 @@ export interface IngestInput {
   url?: string;
   text?: string;
   title?: string;
+  // 파일 업로드: 바이트가 아니라 참조만 싣는다(원본은 blob 저장소, 워커가 storageKey 로 읽어 텍스트화).
+  storageKey?: string;
+  filename?: string;
+  mimeType?: string;
+  size?: number;
 }
 export interface IngestResult {
   agentRunId: string;
@@ -242,24 +249,6 @@ function buildTools(wikiId: string, touched: Set<string>, sourceId: string): Too
   ];
 }
 
-// HTML → 평문. script/style 제거 후 태그 제거 + 기본 엔티티 복원. 본문 추출 실패 시 fallback으로도 쓴다.
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n\s*\n+/g, "\n\n")
-    .trim();
-}
-
-// 본문 추출 성공으로 간주할 최소 길이. 이보다 짧으면(동의/페이월 스텁 등) 원시 strip으로 폴백.
-const MIN_ARTICLE_CHARS = 200;
-
 // URL → 텍스트. SSRF 차단 + 리다이렉트 비허용. HTML은 Readability(본문 추출)로 광고·네비를 걷어내고
 // 실패하면 원시 태그 제거로 폴백한다. 추출한 기사 제목을 함께 반환(호출부 title 유도에 사용).
 export async function fetchAsText(url: string): Promise<{ text: string; title?: string }> {
@@ -316,12 +305,13 @@ export async function createSourceUnique(
   title: string,
   url: string | undefined,
   body: string,
+  storageKey?: string,
 ): Promise<{ id: string; slug: string }> {
   const root = `${todayStamp()}-${normalizeSlug(title) || "source"}`;
   for (let i = 0; ; i++) {
     const slug = i === 0 ? root : `${root}-${i + 1}`;
     try {
-      return await prisma.source.create({ data: { wikiId, slug, title, url: url ?? null, body } });
+      return await prisma.source.create({ data: { wikiId, slug, title, url: url ?? null, body, storageKey: storageKey ?? null } });
     } catch (e) {
       if ((e as { code?: string }).code === "P2002" && i < 50) continue;
       throw e;
@@ -367,6 +357,30 @@ export async function createIngestRun(
 }
 
 /**
+ * 업로드 파일 → 원본 blob 저장 + ingest run 등록(바이트가 아니라 참조만 싣는다). 업로드 진입점의
+ * 유일 검증 게이트: 크기 상한 + 매직바이트 분류(확장자·MIME 는 신뢰하지 않음)를 여기서 강제하고,
+ * 통과분만 워커 큐에 넣는다. actions.ts(웹 폼)와 API route 가 공용으로 부른다.
+ */
+export async function createFileIngestRun(
+  wikiId: string,
+  file: { buffer: Buffer; filename: string; mimeType?: string },
+  userId?: string,
+): Promise<{ id: string }> {
+  if (file.buffer.length > MAX_UPLOAD_BYTES)
+    throw new Error(`파일이 너무 큽니다(최대 ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)`);
+  const cls = classifyUpload(file.buffer, file.filename);
+  if ("rejected" in cls) throw new Error(cls.rejected);
+  const { getBlobStore, makeStorageKey } = await import("@/lib/blob");
+  const key = makeStorageKey(wikiId, cls.ext);
+  await getBlobStore().put(key, file.buffer);
+  return createIngestRun(
+    wikiId,
+    { storageKey: key, filename: file.filename, mimeType: cls.mimeType, size: file.buffer.length },
+    userId,
+  );
+}
+
+/**
  * 정체 잡 리퍼: 프로세스 종료/크래시로 running에 고착된 오래된 run을 error로 회수.
  * 폴링 라우트/페이지에서 기회적으로 호출(별도 크론 불필요). 긴 ingest를 고려해 기본 임계 60분.
  */
@@ -409,10 +423,50 @@ export async function runIngestJob(run: {
     // running 전이도 try 안에서(실패 시 error로 기록되게)
     await prisma.agentRun.update({ where: { id }, data: { status: "running" } });
 
-    // 원문 수집. text 직접 입력이 최우선(네트워크 없음) → 유튜브는 자막 → 그 외 URL은 본문 추출.
+    // 원문 수집. 파일(storageKey)이 최우선 → text 직접 입력 → 유튜브 자막 → 그 외 URL 본문 추출.
     let content = input.text?.trim() ?? "";
-    let derivedTitle: string | undefined; // 추출기/유튜브가 알아낸 제목(hostname보다 우선한다)
-    if (!content && input.url) {
+    let derivedTitle: string | undefined; // 추출기/유튜브/파일명이 알아낸 제목(hostname보다 우선한다)
+    if (!content && input.storageKey) {
+      // 방어적 심층 방어: 이 run 은 자기 위키가 소유한 blob(키가 `<wikiId>/`로 시작)만 읽을 수 있다.
+      // (업로드 진입점이 makeStorageKey 로 항상 이 접두사를 붙이므로 정상 경로는 통과, 위조 키는 차단)
+      if (!input.storageKey.startsWith(`${wikiId}/`)) throw new Error("blob 키가 이 위키 소유가 아닙니다");
+      const { getBlobStore } = await import("@/lib/blob");
+      const store = getBlobStore();
+      const buffer = await store.get(input.storageKey);
+      // 워커에서도 매직바이트로 재판별(라우팅의 단일 근거). 업로드 게이트와 동일 함수.
+      const cls = classifyUpload(buffer, input.filename ?? "");
+      if ("rejected" in cls) throw new Error(`지원하지 않는 파일: ${cls.rejected}`);
+
+      if (cls.kind === "zip") {
+        // zip 은 Source 를 만들지 않고 안의 파일들을 개별 child run 으로 펼친 뒤 조기 종료한다.
+        // (ensureSourceNote 의 Source⟺note 불변식과 충돌하지 않도록 createSourceUnique 이전에 return)
+        const { fanOutZip } = await import("@/lib/zip-ingest");
+        const n = await fanOutZip({ wikiId, buffer, userId });
+        await store.delete(input.storageKey).catch(() => {}); // zip 원본은 참조 Source 가 없으니 정리
+        await prisma.logEntry.create({
+          data: { wikiId, kind: "ingest", title: `ingest(zip) | ${input.filename ?? "archive.zip"}`, detail: `${n}개 파일 팬아웃` },
+        });
+        await prisma.agentRun.update({
+          where: { id },
+          data: {
+            status: "done",
+            output: { summary: `압축 파일에서 ${n}개 파일을 개별 소스로 등록했습니다.`, sourceSlug: "", pagesTouched: [] },
+            finishedAt: new Date(),
+          },
+        });
+        return;
+      }
+
+      const { extractText } = await import("@/lib/file-extract");
+      const ex = await extractText({
+        buffer,
+        kind: cls.kind,
+        mimeType: cls.mimeType,
+        usageMeta: { userId: userId ?? null, wikiId, route: "ingest" },
+      });
+      content = ex.text.trim();
+      derivedTitle = (input.filename ?? "").replace(/\.[a-z0-9]+$/i, "") || undefined;
+    } else if (!content && input.url) {
       if (isYoutubeUrl(input.url)) {
         const yt = await fetchYoutubeTranscript(input.url);
         content = yt.content;
@@ -423,7 +477,10 @@ export async function runIngestJob(run: {
         derivedTitle = web.title;
       }
     }
-    if (!content) throw new Error("수집할 원문이 없습니다(URL 또는 텍스트 필요)");
+
+    // 파일 소스는 원본(blob)을 보존하므로 추출 텍스트가 비어도(이미지·OCR 미설정 등) 진행한다.
+    const hasContent = content.length > 0;
+    if (!hasContent && !input.storageKey) throw new Error("수집할 원문이 없습니다(URL·텍스트·파일 필요)");
 
     // 제목 유도(잘못된 url이어도 text가 있으면 실패하지 않게 가드)
     let hostFromUrl: string | undefined;
@@ -441,8 +498,8 @@ export async function runIngestJob(run: {
       content.split("\n").find((l) => l.trim())?.slice(0, 60) ||
       "제목 없는 소스";
 
-    // Source 저장(불변, 경합 안전) + FTS 인덱싱(코어는 임베딩 안 함)
-    const source = await createSourceUnique(wikiId, title, input.url, content);
+    // Source 저장(불변, 경합 안전) + FTS 인덱싱(코어는 임베딩 안 함). 파일 소스는 원본 blob 키를 함께 보존.
+    const source = await createSourceUnique(wikiId, title, input.url, content, input.storageKey);
     const sourceSlug = source.slug;
     await reindexSource(wikiId, { id: source.id, slug: sourceSlug, body: content });
 
@@ -451,7 +508,17 @@ export async function runIngestJob(run: {
     let loopUsage: import("@/lib/gemini").LoopUsage | undefined;
     const ingestModelId = ingestModel();
 
-    if (!llmEnabledForModel(ingestModelId)) {
+    // 실행 시점 쿼터 재검사: 제출 시 requireQuota 는 배치/zip 팬아웃으로 파생된 다수 잡을 막지 못한다.
+    // (zip 하나 → 최대 512 child run, 다중 업로드 배치 등) 워커에서 잡마다 재확인해 비용 폭주를 막는다.
+    const quota = userId ? await checkDailyQuota(userId) : { ok: true, used: 0, limit: 0 };
+
+    if (!hasContent) {
+      // 파일에서 추출한 텍스트가 없음(이미지·OCR 미설정 등). 원본 blob 은 보존되므로 나중에 재처리 가능.
+      summary = "파일에서 추출한 텍스트가 없어 원본만 보존하고 스텁 노트를 생성했습니다(LLM 큐레이션 생략).";
+    } else if (!quota.ok) {
+      // 일일 토큰 쿼터 초과 → 원문·스텁 노트는 보존하되 LLM 큐레이션만 건너뛴다(잡을 error 로 떨구지 않음).
+      summary = `일일 토큰 쿼터를 초과해(${quota.used}/${quota.limit}) 원문만 보존하고 LLM 큐레이션은 생략했습니다.`;
+    } else if (!llmEnabledForModel(ingestModelId)) {
       // 스텁 note는 아래 ensureSourceNote가 만든다(LLM 분기와 공용, 불변식 단일 지점).
       summary = "LLM provider 미설정(키/OAuth 없음) — 원문 스텁 노트만 생성(LLM 큐레이션 생략).";
     } else {

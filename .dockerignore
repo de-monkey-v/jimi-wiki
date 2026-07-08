@@ -7,6 +7,7 @@ node_modules
 .openai-oauth.json
 .openai-oauth.json*.tmp
 .model-catalog.cache.json*
+.blobs
 *.log
 npm-debug.log*
 .DS_Store

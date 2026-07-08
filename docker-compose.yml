@@ -30,10 +30,13 @@ services:
     environment:
       DATABASE_URL: postgresql://jimi:jimi@db:5432/jimi
       OPENAI_OAUTH_STORE: /data/openai-oauth.json
+      BLOB_DIR: /data/blobs
     ports:
       - "3007:3007"
     volumes:
       - jimi-oauth:/data
+      # 업로드 원본(blob) 공유 볼륨 — web 이 쓰고 worker 가 읽는다(둘 다 마운트 필수).
+      - jimi-blobs:/data/blobs
     command: sh -c "pnpm prisma migrate deploy && pnpm start"
 
   worker:
@@ -47,11 +50,15 @@ services:
     environment:
       DATABASE_URL: postgresql://jimi:jimi@db:5432/jimi
       OPENAI_OAUTH_STORE: /data/openai-oauth.json
+      BLOB_DIR: /data/blobs
     volumes:
       - jimi-oauth:/data
+      # web 이 저장한 업로드 원본을 worker 가 읽어 텍스트화한다(같은 볼륨 공유 필수).
+      - jimi-blobs:/data/blobs
     # worker 도 마이그레이션을 보장(prisma 의 advisory lock 으로 web 과 동시 실행해도 안전) — 빈 DB 크래시루프 방지.
     command: sh -c "pnpm prisma migrate deploy && pnpm worker"
 
 volumes:
   jimi-wiki-pgdata:
   jimi-oauth:
+  jimi-blobs:

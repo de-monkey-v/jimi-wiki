@@ -391,10 +391,12 @@
     "submitPending": "ジョブを登録中…",
     "submit": "取り込み",
     "emptyTitle": "ソースの取り込み (Ingest)",
-    "emptyBody": "Webリンク（本文のみ抽出）・YouTube（字幕）・テキストを渡すと、LLMが読み取ってノートや概念ページに整理します。",
+    "emptyBody": "Webリンク（本文抽出）・YouTube（字幕）・テキスト・ファイル（PDF・Word・画像など）を渡すと、LLMが読み取ってノートや概念ページに整理します。",
     "urlPlaceholder": "https://…  (Web記事またはYouTubeリンク)",
     "textPlaceholder": "またはテキスト／動画の字幕を直接貼り付け",
-    "titlePlaceholder": "タイトル（任意）"
+    "titlePlaceholder": "タイトル（任意）",
+    "fileLabel": "ファイルをアップロード",
+    "fileHint": "PDF・Word（docx）・PowerPoint（pptx）・Excel（xlsx）・ODF・テキスト・Markdown・画像・ZIP（複数可、1ファイル最大25MB）。画像・スキャンPDFはGeminiで文字を読み取ります。"
   },
   "WikisSlugJobsIndicator": {
     "type": {

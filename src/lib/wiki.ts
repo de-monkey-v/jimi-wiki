@@ -310,6 +310,49 @@ export async function deletePage(wikiId: string, slug: string): Promise<boolean>
 }
 
 /**
+ * 원문(Source) 삭제 시 영향받는 것들(삭제 전 경고 UI용).
+ * - notes: 함께 삭제될 소스 노트(요약, 1:1 쌍)
+ * - derived: 남지만 이 원문 출처를 잃는 정리된 지식(concept/entity, M:N 기여)
+ */
+export async function getSourceImpact(
+  wikiId: string,
+  sourceId: string,
+): Promise<{ notes: { slug: string; title: string }[]; derived: { slug: string; title: string }[] }> {
+  const [notes, contribs] = await Promise.all([
+    prisma.page.findMany({ where: { wikiId, sourceId, kind: "note" }, select: { slug: true, title: true }, orderBy: { title: "asc" } }),
+    prisma.pageContribution.findMany({
+      where: { wikiId, sourceId },
+      select: { page: { select: { slug: true, title: true } } },
+      orderBy: { page: { title: "asc" } },
+    }),
+  ]);
+  return { notes, derived: contribs.map((c) => c.page) };
+}
+
+/**
+ * 원문(Source) 삭제. 연결된 소스 노트(요약)도 함께 지운다(1:1 쌍).
+ * 정리된 지식(concept/entity)은 보존 — PageContribution(source cascade)만 끊겨 출처 표시가 빠진다(고아면 lint가 지적).
+ * SearchChunk는 Source에 FK가 없어 cascade되지 않으므로 원문·노트 청크를 명시 삭제한다(deletePage와 동일 패턴).
+ * 반환: 삭제했으면 함께 지운 노트 slug들, 원문이 없으면 null.
+ */
+export async function deleteSource(wikiId: string, slug: string): Promise<{ deletedNotes: string[] } | null> {
+  const source = await prisma.source.findUnique({ where: { wikiId_slug: { wikiId, slug } }, select: { id: true } });
+  if (!source) return null;
+  const notes = await prisma.page.findMany({ where: { wikiId, sourceId: source.id, kind: "note" }, select: { id: true, slug: true } });
+  await prisma.$transaction([
+    // 연결된 소스 노트: 페이지 청크(FK 없음 → 수동) + 페이지 삭제(out=cascade, in=SetNull→broken, PageContribution page=cascade)
+    ...notes.flatMap((n) => [
+      prisma.searchChunk.deleteMany({ where: { wikiId, refType: "page", refId: n.id } }),
+      prisma.page.delete({ where: { id: n.id } }),
+    ]),
+    // 원문 청크(FK 없음 → 수동) + 원문(PageContribution source=cascade, 잔여 Page.sourceId=SetNull)
+    prisma.searchChunk.deleteMany({ where: { wikiId, refType: "source", refId: source.id } }),
+    prisma.source.delete({ where: { id: source.id } }),
+  ]);
+  return { deletedNotes: notes.map((n) => n.slug) };
+}
+
+/**
  * 이 페이지가 나가는 링크(PageLink)를 재계산하고,
  * 이 페이지 슬러그를 향해 깨져 있던 다른 페이지의 링크를 이 페이지로 연결한다.
  */

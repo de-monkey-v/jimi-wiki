@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser, getSource } from "@/lib/wiki";
+import { getWikiForUser, getSource, getSourceImpact } from "@/lib/wiki";
 import { renderMarkdown } from "@/lib/markdown";
+import { DeleteSourceButton } from "./DeleteSourceButton";
 
 // 원문(Source) 읽기 전용 뷰어 — 소스 노트의 provenance 링크 타겟. 불변·원문 그대로.
 export default async function SourceView({
@@ -19,6 +20,9 @@ export default async function SourceView({
   const source = await getSource(wiki.id, sourceSlug);
   if (!source) notFound();
 
+  const canWrite = wiki.role !== "viewer"; // editor·owner만 삭제 UI 노출
+  const impact = canWrite ? await getSourceImpact(wiki.id, source.id) : null;
+
   const html = await renderMarkdown(source.body ?? "", { hrefFor: () => "#", exists: () => false });
 
   return (
@@ -28,7 +32,17 @@ export default async function SourceView({
       </div>
       <div className="mb-4 flex items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">{source.title}</h1>
-        <span className="shrink-0 rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-500">원문 · 읽기 전용</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-500">원문 · 읽기 전용</span>
+          {canWrite && impact && (
+            <DeleteSourceButton
+              wikiSlug={slug}
+              sourceSlug={source.slug}
+              noteTitles={impact.notes.map((n) => n.title)}
+              derivedTitles={impact.derived.map((d) => d.title)}
+            />
+          )}
+        </div>
       </div>
       {source.url && (
         <a

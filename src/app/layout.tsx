@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
+import { cookies } from "next/headers";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
+import { LOCALE_COOKIE, type Locale } from "@/i18n/locales";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,25 +22,37 @@ export const metadata: Metadata = {
   description: "LLM이 유지보수하는 위키 플랫폼",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const t = await getTranslations("Common");
+
+  // 스위처가 호출하는 인라인 server action — 쿠키 set 후 Next가 트리를 자동 재렌더한다.
+  async function changeLocaleAction(next: Locale) {
+    "use server";
+    const store = await cookies();
+    store.set(LOCALE_COOKIE, next, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+  }
+
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {/* JS가 차단된 환경(Brave Shields 등) 진단용: 스크립트가 실행되면 이 배너는 보이지 않는다 */}
         <noscript>
           <div style={{ background: "#dc2626", color: "#fff", padding: "10px 16px", fontSize: 14, textAlign: "center" }}>
-            ⚠️ JavaScript가 실행되지 않고 있습니다 — 모달·채팅·폴더 펼침이 동작하지 않습니다. Brave Shields(주소창의
-            사자 아이콘)에서 이 사이트의 스크립트 차단을 해제하거나, 브라우저의 JavaScript 설정을 확인하세요.
+            ⚠️ {t("noscriptWarning")}
           </div>
         </noscript>
-        {children}
+        <NextIntlClientProvider>
+          {children}
+          <LocaleSwitcher changeLocaleAction={changeLocaleAction} />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

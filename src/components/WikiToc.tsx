@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -112,6 +113,7 @@ export function WikiToc({
   role: "viewer" | "editor" | "owner";
   sections: TocSection[];
 }) {
+  const t = useTranslations("WikiToc");
   const pathname = decodeURIComponent(usePathname());
   const seg = pathname.split("/"); // ["", "wikis", "<slug>", "<sub>", ...]
   const sub = seg[3];
@@ -129,7 +131,7 @@ export function WikiToc({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="목차 열기/닫기"
+        aria-label={t("toggleToc")}
         aria-expanded={open}
         className="fixed left-2 top-2 z-50 rounded-md border border-stone-200 bg-white/90 px-2.5 py-1.5 text-lg leading-none text-stone-700 shadow-sm backdrop-blur md:hidden"
       >
@@ -149,7 +151,7 @@ export function WikiToc({
         }`}
       >
       <div className="border-b border-stone-100 px-3 py-3">
-        <Link href="/wikis" className="text-xs text-stone-400 hover:text-stone-600">← 내 위키</Link>
+        <Link href="/wikis" className="text-xs text-stone-400 hover:text-stone-600">← {t("myWikis")}</Link>
         <Link href={`/wikis/${slug}`} className="mt-1 block truncate text-base font-bold tracking-tight">
           {title}
         </Link>
@@ -160,8 +162,8 @@ export function WikiToc({
           <div className="px-2 py-2">
             <EmptyState
               asset="empty-pages"
-              title="페이지 없음"
-              body="페이지가 추가되면 목차가 여기에 표시됩니다."
+              title={t("emptyTitle")}
+              body={t("emptyBody")}
               compact
             />
           </div>
@@ -201,7 +203,7 @@ export function WikiToc({
               }}
               className={`flex w-full items-center px-2 ${linkCls(sub === "chat")}`}
             >
-              <span className="min-w-0 flex-1 truncate">AI에게 질문</span>
+              <span className="min-w-0 flex-1 truncate">{t("askAi")}</span>
               <kbd className="rounded border border-stone-200 bg-stone-50 px-1 text-[10px] text-stone-400">{shortcut} · /</kbd>
             </Link>
           </li>
@@ -218,7 +220,7 @@ export function WikiToc({
                 }}
                 className={`px-2 ${linkCls(sub === "new")}`}
               >
-                + 새 페이지
+                + {t("newPage")}
               </Link>
             </li>
           )}
@@ -235,25 +237,25 @@ export function WikiToc({
                 }}
                 className={`px-2 ${linkCls(false)}`}
               >
-                + 소스 편입
+                + {t("ingestSource")}
               </Link>
             </li>
           )}
           <li>
-            <Link href={`/wikis/${slug}/graph`} className={`px-2 ${linkCls(sub === "graph")}`}>그래프</Link>
+            <Link href={`/wikis/${slug}/graph`} className={`px-2 ${linkCls(sub === "graph")}`}>{t("graph")}</Link>
           </li>
           {role !== "viewer" && (
             <li>
-              <Link href={`/wikis/${slug}/lint`} className={`px-2 ${linkCls(sub === "lint")}`}>건강검진</Link>
+              <Link href={`/wikis/${slug}/lint`} className={`px-2 ${linkCls(sub === "lint")}`}>{t("healthCheck")}</Link>
             </li>
           )}
           <li>
             {/* 전역 /docs 라우트로 나가는 링크 — 위키 셸 밖이라 sub 하이라이트 대상 아님 */}
-            <Link href={`/docs?wiki=${encodeURIComponent(slug)}`} className={`px-2 ${linkCls(false)}`}>연동 가이드</Link>
+            <Link href={`/docs?wiki=${encodeURIComponent(slug)}`} className={`px-2 ${linkCls(false)}`}>{t("integrationGuide")}</Link>
           </li>
           {role === "owner" && (
             <li>
-              <Link href={`/wikis/${slug}/settings`} className={`px-2 ${linkCls(sub === "settings")}`}>설정</Link>
+              <Link href={`/wikis/${slug}/settings`} className={`px-2 ${linkCls(sub === "settings")}`}>{t("settings")}</Link>
             </li>
           )}
         </ul>
@@ -262,7 +264,7 @@ export function WikiToc({
       <div className="border-t border-stone-200 px-3 py-2">
         <div className="mb-1 truncate px-1 text-xs text-stone-500">{email}</div>
         <form action={logoutAction}>
-          <button className="w-full rounded-md px-2 py-1 text-left text-sm text-stone-600 hover:bg-stone-100">로그아웃</button>
+          <button className="w-full rounded-md px-2 py-1 text-left text-sm text-stone-600 hover:bg-stone-100">{t("logout")}</button>
         </form>
       </div>
       </aside>

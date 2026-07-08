@@ -1,9 +1,13 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 
-export const metadata = {
-  title: "연동 가이드 — jimi-wiki",
-  description: "이 위키를 앱 내부 AI 없이 외부 도구(MCP·Skill·REST)로 유지보수하는 법",
-};
+export async function generateMetadata() {
+  const t = await getTranslations("DocsPage");
+  return {
+    title: t("metaTitle"),
+    description: t("metaDescription"),
+  };
+}
 
 // 코드 예시에 들어갈 위키 slug. 슬러그 허용 문자(한글·영문·숫자·-_)만 통과시켜
 // 명령 인젝션/깨짐을 막는다. 없으면 플레이스홀더.
@@ -36,55 +40,64 @@ export default async function DocsPage({
 }: {
   searchParams: Promise<{ wiki?: string | string[] }>;
 }) {
+  const t = await getTranslations("DocsPage");
   const { wiki } = await searchParams;
   const slug = sanitizeSlug(wiki);
   const SLUG = slug ?? "<위키-slug>";
   const BASE = "http://localhost:3007"; // 배포 환경에서는 호스트만 바뀐다
 
+  const code = (chunks: React.ReactNode) => (
+    <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">{chunks}</code>
+  );
+  const code2 = (chunks: React.ReactNode) => (
+    <code className="rounded bg-stone-100 px-1 py-0.5">{chunks}</code>
+  );
+  const strong = (chunks: React.ReactNode) => <strong>{chunks}</strong>;
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-10 space-y-6">
       <div>
         <Link href={slug ? `/wikis/${slug}` : "/wikis"} className="text-sm text-gray-400 hover:underline">
-          ← {slug ? "위키로" : "내 위키"}
+          ← {slug ? t("backToWiki") : t("backToMyWikis")}
         </Link>
-        <h1 className="text-2xl font-bold mt-1">연동 가이드</h1>
+        <h1 className="text-2xl font-bold mt-1">{t("title")}</h1>
         <p className="text-sm text-gray-500">
-          이 위키를 <strong>앱 내부 AI 없이</strong> 외부 도구로 유지보수하는 법 — 외부 에이전트(Claude Code·Codex 등)의
-          MCP·Skill, 그리고 REST API. 어느 경로로 쓰든 같은 콘텐츠 API와 분류 규칙을 따르므로 위키의 일관성이 유지됩니다.
+          {t.rich("intro", { strong })}
           {slug ? (
-            <>
-              {" "}아래 예시의 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">{slug}</code>는 지금
-              위키의 slug로 채워져 있습니다.
-            </>
+            <> {t.rich("introSlugFilled", { code, slug })}</>
           ) : (
-            <> 예시의 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">{SLUG}</code>는 대상 위키의 slug로 바꾸세요.</>
+            <> {t.rich("introSlugPlaceholder", { code, slug: SLUG })}</>
           )}
         </p>
       </div>
 
-      <Section title="1. 먼저 — API 키 발급">
+      <Section title={t("section1Title")}>
         <p className="text-sm text-stone-600">
-          모든 외부 호출은 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">Authorization: Bearer &lt;키&gt;</code> 헤더로
-          인증합니다. 원문 키는 발급 시 한 번만 표시되니 안전하게 보관하세요.
+          {t.rich("section1.auth", { code, header: "Authorization: Bearer <키>" })}
         </p>
         <ul className="list-disc pl-5 text-sm text-stone-600 space-y-1">
-          <li><Link href="/keys" className="text-stone-800 underline hover:text-stone-950">API 키</Link> 화면에서 발급 (쓰기 작업은 editor 이상).</li>
-          <li>키를 특정 위키로 <strong>스코프</strong>하거나 <strong>상한 역할(maxRole)</strong>·<strong>만료일</strong>을 걸 수 있습니다. 유효 역할 = min(멤버십 역할, maxRole).</li>
-          <li>계정당 활성 키 최대 20개. 레이트리밋: 분당 60회 / 시간당 1000회(초과 시 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">429</code> + Retry-After).</li>
+          <li>
+            {t.rich("section1.li1", {
+              link: (chunks) => (
+                <Link href="/keys" className="text-stone-800 underline hover:text-stone-950">
+                  {chunks}
+                </Link>
+              ),
+            })}
+          </li>
+          <li>{t.rich("section1.li2", { strong })}</li>
+          <li>{t.rich("section1.li3", { code })}</li>
         </ul>
       </Section>
 
-      <Section title="2. 방법 A — MCP 서버 (권장)">
-        <p className="text-sm text-stone-600">
-          저장소의 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">mcp/server.mjs</code>를 MCP 클라이언트에 등록하면
-          콘텐츠 API가 도구로 노출됩니다. Claude Code 예:
-        </p>
+      <Section title={t("section2Title")}>
+        <p className="text-sm text-stone-600">{t.rich("section2.intro", { code })}</p>
         <CodeBlock>{`claude mcp add jimi-wiki \\
   -e JIMI_WIKI_URL=${BASE} \\
   -e JIMI_WIKI_API_KEY=<발급받은-키> \\
   -e JIMI_WIKI_SLUG=${SLUG} \\
   -- node <repo>/mcp/server.mjs`}</CodeBlock>
-        <p className="text-sm text-stone-600">노출되는 도구(11종):</p>
+        <p className="text-sm text-stone-600">{t("section2.toolsLabel")}</p>
         <p className="text-sm text-stone-600">
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">search_wiki</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">list_pages</code>,{" "}
@@ -100,33 +113,21 @@ export default async function DocsPage({
         </p>
       </Section>
 
-      <Section title="3. 방법 B — 유지보수자 스킬 (Claude Code·Codex 등)">
-        <p className="text-sm text-stone-600">
-          저장소의 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">skills/wiki-ingest/</code> 스킬 번들은
-          외부 유지보수자용 워크플로우입니다 — 원문 편입(ingest)뿐 아니라 분류·정리(organize)·기계 점검(lint)·조회(query)까지.
-          특정 에이전트에 묶이지 않아 <strong>MCP를 지원하면 도구로, 아니면 REST로 같은 절차</strong>를 실행합니다. 내부 ingest
-          에이전트와 <strong>동일한 분류 규칙</strong>(온톨로지/카테고리)을 정본에서 복사해 CI로 byte-parity를 강제하므로,
-          웹 UI로 넣든 스킬로 넣든 위키의 분류가 일관됩니다.
-        </p>
-        <p className="text-sm text-stone-600">
-          ingest 절차: ① <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">create_source</code>로 원문 불변 저장 →
-          ② <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">search</code>/<code className="rounded bg-stone-100 px-1 py-0.5 text-xs">list_pages</code>로 중복 확인 →
-          ③ <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">kind=note</code> 소스 노트 작성(원문 복붙 금지, 요약) →
-          ④ 영향받는 concept/entity 갱신(<code className="rounded bg-stone-100 px-1 py-0.5 text-xs">[[slug]]</code> 링크·category 재사용) →
-          ⑤ 마지막 호출에 <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">embed:true</code>로 시맨틱 색인.
-        </p>
-        <p className="text-sm text-stone-600">번들 구성(폴더째 복사해 어느 하네스에도 배치):</p>
+      <Section title={t("section3Title")}>
+        <p className="text-sm text-stone-600">{t.rich("section3.p1", { code, strong })}</p>
+        <p className="text-sm text-stone-600">{t.rich("section3.p2", { code })}</p>
+        <p className="text-sm text-stone-600">{t("section3.bundleLabel")}</p>
         <ul className="list-disc pl-5 text-sm text-stone-600 space-y-1">
-          <li><code className="rounded bg-stone-100 px-1 py-0.5 text-xs">SKILL.md</code> — 워크플로우 진입점(하네스 무관).</li>
-          <li><code className="rounded bg-stone-100 px-1 py-0.5 text-xs">references/ontology-rules.md</code> — 분류 규칙 정본 사본(CI byte-parity 검사).</li>
-          <li><code className="rounded bg-stone-100 px-1 py-0.5 text-xs">references/tools.md</code> — 능력 ↔ MCP 도구 ↔ REST 매핑 + 인증 경계.</li>
-          <li><code className="rounded bg-stone-100 px-1 py-0.5 text-xs">references/setup.md</code> — API 키 · MCP 등록 · 하네스별 배치(Claude Code·Codex 등).</li>
+          <li>{t.rich("section3.li1", { code })}</li>
+          <li>{t.rich("section3.li2", { code })}</li>
+          <li>{t.rich("section3.li3", { code })}</li>
+          <li>{t.rich("section3.li4", { code })}</li>
         </ul>
       </Section>
 
-      <Section title="4. 방법 C — REST 직접 호출">
+      <Section title={t("section4Title")}>
         <p className="text-sm text-stone-600">
-          베이스 URL: <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">{BASE}/api/wikis/{SLUG}</code>
+          {t.rich("section4.baseUrl", { code, url: `${BASE}/api/wikis/${SLUG}` })}
         </p>
         <CodeBlock>{`KEY="jw_..."; BASE="${BASE}/api/wikis/${SLUG}"
 
@@ -150,41 +151,26 @@ curl -sX POST "$BASE/pages" -H "Authorization: Bearer $KEY" \\
 
 # 하이브리드 검색
 curl -sH "Authorization: Bearer $KEY" "$BASE/search?q=attention&k=8"`}</CodeBlock>
-        <p className="text-xs text-stone-500">
-          전체 레퍼런스(모든 엔드포인트·응답·에러 코드)는 저장소의{" "}
-          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">docs/rest-api.md</code>에 있습니다.
-        </p>
+        <p className="text-xs text-stone-500">{t.rich("section4.fullRef", { code })}</p>
       </Section>
 
-      <Section title="인증 경계 — 무엇이 API 키로 되고 무엇이 안 되나">
-        <p className="text-sm text-stone-600">
-          &ldquo;인증 경계 = 비용 경계&rdquo;. 내부 AI(Gemini)를 대량 소비하는 라우트는 <strong>웹 UI의 쿠키 세션 전용</strong>이라
-          API 키로는 호출할 수 없습니다. 외부 경로에서는 primitive로 직접 작성하세요.
-        </p>
+      <Section title={t("sectionAuthTitle")}>
+        <p className="text-sm text-stone-600">{t.rich("auth.intro", { strong })}</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-md border border-stone-200 p-3">
-            <div className="mb-1 text-xs font-semibold text-emerald-700">API 키(Bearer)로 가능</div>
-            <p className="text-xs text-stone-600 leading-relaxed">
-              페이지 조회/작성/삭제, 원문 저장/조회, 하이브리드 검색, 온톨로지 조회·카테고리 매칭, 기계 점검 lint, 잡 상태 폴링
-            </p>
+            <div className="mb-1 text-xs font-semibold text-emerald-700">{t("auth.card1Title")}</div>
+            <p className="text-xs text-stone-600 leading-relaxed">{t("auth.card1Body")}</p>
           </div>
           <div className="rounded-md border border-stone-200 p-3">
-            <div className="mb-1 text-xs font-semibold text-amber-700">세션 전용 (API 키 불가)</div>
+            <div className="mb-1 text-xs font-semibold text-amber-700">{t("auth.card2Title")}</div>
             <p className="text-xs text-stone-600 leading-relaxed">
-              <code className="rounded bg-stone-100 px-1 py-0.5">POST /ingest</code>(내부 AI ingest),{" "}
-              <code className="rounded bg-stone-100 px-1 py-0.5">/query</code>,{" "}
-              <code className="rounded bg-stone-100 px-1 py-0.5">/reindex</code>,{" "}
-              <code className="rounded bg-stone-100 px-1 py-0.5">/lint {`{deep:true}`}</code> — 웹 UI에서만
+              {t.rich("auth.card2Body", { code: code2, lint: "/lint {deep:true}" })}
             </p>
           </div>
         </div>
       </Section>
 
-      <p className="text-xs text-stone-400">
-        참고 파일 — 스킬 번들: <code className="rounded bg-stone-100 px-1 py-0.5">skills/wiki-ingest/</code>(SKILL.md + references/) ·
-        MCP: <code className="rounded bg-stone-100 px-1 py-0.5">mcp/server.mjs</code> ·
-        REST: <code className="rounded bg-stone-100 px-1 py-0.5">docs/rest-api.md</code>
-      </p>
+      <p className="text-xs text-stone-400">{t.rich("footer", { code: code2 })}</p>
     </main>
   );
 }

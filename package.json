@@ -23,6 +23,7 @@
     "openai:smoke": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/openai-oauth-smoke.ts",
     "smoke": "tsx scripts/smoke.ts",
     "check:rules": "node scripts/check-rules-parity.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "mcp": "node mcp/server.mjs"
   },
   "dependencies": {
@@ -47,6 +48,7 @@
     "graphology-layout-noverlap": "0.4.2",
     "next": "16.2.10",
     "next-auth": "5.0.0-beta.31",
+    "next-intl": "4.13.1",
     "pg": "^8.22.0",
     "prisma": "^7.8.0",
     "react": "19.2.4",

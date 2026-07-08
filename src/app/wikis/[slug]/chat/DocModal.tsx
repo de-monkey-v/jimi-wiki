@@ -2,6 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import GithubSlugger from "github-slugger";
 import { fetchEvidenceDoc } from "./actions";
 
@@ -24,6 +25,7 @@ const cacheKey = (wikiSlug: string, d: { kind: string; slug: string }) => `${wik
  * + 접근성(portal, 포커스 트랩/복귀, aria-labelledby) + 캐시.
  */
 export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; wikiSlug: string; onClose: () => void }) {
+  const t = useTranslations("WikisSlugChatDocModal");
   // 이어보기 스택: prop doc이 바뀌면 [doc]으로 리셋
   const rootKey = doc ? `${doc.kind}:${doc.slug}:${doc.heading ?? ""}` : "";
   const [nav, setNav] = useState<{ rootKey: string; stack: EvidenceDoc[] }>({ rootKey: "", stack: [] });
@@ -148,12 +150,12 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
                 onClick={() => setNav({ rootKey, stack: stack.slice(0, -1) })}
                 className="shrink-0 rounded border border-stone-200 px-1.5 py-0.5 text-xs text-stone-500 hover:bg-stone-50"
               >
-                ← 뒤로
+                ← {t("back")}
               </button>
             )}
             <div className="min-w-0">
               <div className="text-xs uppercase tracking-wide text-stone-400">
-                {current.kind === "source" ? "원문" : "문서"}
+                {current.kind === "source" ? t("kind.source") : t("kind.page")}
               </div>
               <h2 id={titleId} className="truncate text-base font-semibold">
                 {state.data?.title ?? current.title}
@@ -161,18 +163,18 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            <a href={href} className="text-xs text-blue-600 hover:underline">전체 페이지로 →</a>
-            <button onClick={onClose} aria-label="닫기" className="text-lg leading-none text-stone-400 hover:text-stone-700">
+            <a href={href} className="text-xs text-blue-600 hover:underline">{t("fullPage")} →</a>
+            <button onClick={onClose} aria-label={t("close")} className="text-lg leading-none text-stone-400 hover:text-stone-700">
               ✕
             </button>
           </div>
         </div>
         <div ref={bodyRef} onClick={onBodyClick} className="overflow-y-auto px-6 py-5">
-          {state.loading && <p className="text-sm text-stone-400">불러오는 중…</p>}
+          {state.loading && <p className="text-sm text-stone-400">{t("loading")}</p>}
           {state.error && (
             <p className="text-sm text-red-600">
-              문서를 불러올 수 없습니다.{" "}
-              <button onClick={load} className="underline">재시도</button>
+              {t("loadError")}{" "}
+              <button onClick={load} className="underline">{t("retry")}</button>
             </p>
           )}
           {state.data && (
@@ -188,13 +190,13 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
                 </a>
               )}
               {state.data.empty ? (
-                <p className="text-sm text-stone-400">본문이 없습니다.</p>
+                <p className="text-sm text-stone-400">{t("emptyBody")}</p>
               ) : (
                 <article className="wiki-content" dangerouslySetInnerHTML={{ __html: state.data.html }} />
               )}
               {state.data.related.length > 0 && (
                 <div className="mt-6 border-t border-stone-200 pt-3">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">관련 문서</h3>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-400">{t("relatedDocs")}</h3>
                   <div className="flex flex-wrap gap-1.5">
                     {state.data.related.map((r) => (
                       <button

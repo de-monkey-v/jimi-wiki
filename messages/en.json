@@ -1,0 +1,535 @@
+{
+  "AdminSettingsModelsForm": {
+    "envDefaultOption": "Default (env: {env})",
+    "providerDisabled": " (disabled — no key/OAuth)",
+    "customOption": "Custom…",
+    "customPlaceholder": "Model id (e.g. gpt-5.5)",
+    "testing": "Testing…",
+    "test": "Test",
+    "title": "Model selection",
+    "description": "Leave blank (default) to follow the env settings. Saved changes apply without a restart (within seconds for other processes). Chat supports only Gemini and GPT (Claude is available for ingest, query, and lint).",
+    "chatLabel": "Chat (CHAT_MODEL)",
+    "ingestHint": "Ingest and curation. High leverage on quality.",
+    "genLabel": "General generation (GEN_MODEL — query, lint)",
+    "save": "Save"
+  },
+  "AdminSettingsOAuthPanel": {
+    "cancelled": "Cancelled.",
+    "startFailed": "Failed to start",
+    "openUrlPrompt": "Open the URL below and enter the code. Waiting for approval…",
+    "loginComplete": "✓ Signed in",
+    "codeExpired": "Code expired — please try again.",
+    "error": "Error: {message}",
+    "title": "Connect OpenAI (choose a method + ChatGPT sign-in)",
+    "connectionMethod": "Connection method",
+    "transport": {
+      "apikey": "API key",
+      "oauth": "ChatGPT subscription (OAuth)",
+      "proxy": "Proxy",
+      "oauthHint": "Sign-in required"
+    },
+    "optionUnavailable": "No {hint}",
+    "unavailable": "(unavailable)",
+    "currentDescription": "Current: <b>{transport}</b> — GPT models are called this way. Even if a key is set, only the <b>selected method</b> is used.",
+    "loggedIn": "Signed in",
+    "account": " (account {id}…)",
+    "expiresAt": " · expires {date}",
+    "notLoggedIn": "Not signed in — sign in to use GPT models with your personal ChatGPT subscription.",
+    "reLogin": "Sign in again",
+    "loginWithChatGPT": "Sign in with ChatGPT",
+    "cancel": "Cancel",
+    "logout": "Sign out",
+    "step1": "1)",
+    "openLink": "Open",
+    "step2": "2) Enter code: ",
+    "warning": "⚠️ Personal self-host only — for using your own subscription by yourself. Do not open it to others as a service (ChatGPT terms)."
+  },
+  "AdminSettingsPage": {
+    "appTitle": "App Settings",
+    "usersLink": "Manage Users",
+    "providersTitle": "Providers to Use (opt-in)",
+    "providersHint": "Even if a key exists, <b>only providers enabled here</b> can be selected and used (having a key ≠ using it automatically). Turn on the providers you want to use.",
+    "hasKey": "Key set",
+    "noKey": "No key",
+    "enabled": "Active",
+    "disabled": "Inactive",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "keyOrOAuthNeeded": "Key/OAuth required",
+    "embeddingTitle": "Embeddings (read-only)",
+    "embeddingWarning": "⚠️ Embedding model and dimensions are tied to the DB vector column and HNSW index, so they can only be changed via env. Changing them requires a full reindex.",
+    "refreshCatalog": "Refresh model list (models.dev)"
+  },
+  "AdminUsersPage": {
+    "title": "User Management",
+    "appSettings": "App Settings",
+    "noPassword": "No password",
+    "revokeAdmin": "Revoke admin",
+    "grantAdmin": "Make admin",
+    "newPasswordPlaceholder": "New password",
+    "reset": "Reset",
+    "createUser": "Create User",
+    "namePlaceholder": "Name (optional)",
+    "tempPasswordPlaceholder": "Temp password (8+ chars)",
+    "create": "Create",
+    "issueInvite": "Create Invite Link",
+    "targetEmailPlaceholder": "Recipient email (optional)",
+    "ttlDaysLabel": "Valid for (days)",
+    "issue": "Create",
+    "unusedInvites": "Unused Invites",
+    "none": "None",
+    "revoke": "Revoke"
+  },
+  "Common": {
+    "appName": "jimi-wiki",
+    "noscriptWarning": "JavaScript is not running — modals, chat, and folder expansion won't work. Disable script blocking for this site in Brave Shields (the lion icon in the address bar), or check your browser's JavaScript settings."
+  },
+  "DocsPage": {
+    "metaTitle": "Integration Guide — jimi-wiki",
+    "metaDescription": "How to maintain this wiki with external tools (MCP, Skill, REST) instead of the app's built-in AI",
+    "backToWiki": "To wiki",
+    "backToMyWikis": "My wikis",
+    "title": "Integration Guide",
+    "intro": "How to maintain this wiki with external tools <strong>without the app's built-in AI</strong> — the MCP and Skill of external agents (Claude Code, Codex, etc.), plus the REST API. Whichever path you use, they all follow the same content API and classification rules, so your wiki stays consistent.",
+    "introSlugFilled": "The <code>{slug}</code> in the examples below is already filled in with this wiki's slug.",
+    "introSlugPlaceholder": "Replace <code>{slug}</code> in the examples with the target wiki's slug.",
+    "section1Title": "1. First — Issue an API key",
+    "section2Title": "2. Method A — MCP server (recommended)",
+    "section3Title": "3. Method B — Maintainer skill (Claude Code, Codex, etc.)",
+    "section4Title": "4. Method C — Direct REST calls",
+    "sectionAuthTitle": "Auth boundary — what works with an API key and what doesn't",
+    "section1": {
+      "auth": "Every external call authenticates via the <code>{header}</code> header. The raw key is shown only once at issuance, so store it safely.",
+      "li1": "Issue one on the <link>API keys</link> screen (editor or higher for write operations).",
+      "li2": "You can <strong>scope</strong> a key to a specific wiki or set a <strong>max role (maxRole)</strong> and <strong>expiry</strong>. Effective role = min(membership role, maxRole).",
+      "li3": "Up to 20 active keys per account. Rate limit: 60/min and 1000/hour (on exceed, <code>429</code> + Retry-After)."
+    },
+    "section2": {
+      "intro": "Register the repo's <code>mcp/server.mjs</code> with your MCP client and the content API is exposed as tools. Claude Code example:",
+      "toolsLabel": "Tools exposed (11 total):"
+    },
+    "section3": {
+      "p1": "The repo's <code>skills/wiki-ingest/</code> skill bundle is a workflow for external maintainers — covering not just ingesting sources but also classifying, organizing, machine linting, and querying. It isn't tied to any specific agent, so it <strong>runs as tools where MCP is supported and via REST otherwise, following the same procedure</strong>. It copies the <strong>same classification rules</strong> (ontology/categories) from the canonical source as the internal ingest agent and enforces byte-parity in CI, so classification stays consistent whether you add content via the web UI or the skill.",
+      "p2": "Ingest procedure: 1. store the source immutably with <code>create_source</code>, 2. check for duplicates with <code>search</code>/<code>list_pages</code>, 3. write a source note with <code>kind=note</code> (summarize, don't paste the raw text), 4. update affected concepts/entities (<code>[[slug]]</code> links, reuse categories), 5. add <code>embed:true</code> on the final call for semantic indexing.",
+      "bundleLabel": "Bundle contents (copy the whole folder into any harness):",
+      "li1": "<code>SKILL.md</code> — workflow entry point (harness-agnostic).",
+      "li2": "<code>references/ontology-rules.md</code> — canonical copy of the classification rules (CI byte-parity check).",
+      "li3": "<code>references/tools.md</code> — capability ↔ MCP tool ↔ REST mapping + auth boundary.",
+      "li4": "<code>references/setup.md</code> — API key, MCP registration, per-harness placement (Claude Code, Codex, etc.)."
+    },
+    "section4": {
+      "baseUrl": "Base URL: <code>{url}</code>",
+      "fullRef": "The full reference (all endpoints, responses, and error codes) is in the repo at <code>docs/rest-api.md</code>."
+    },
+    "auth": {
+      "intro": "\"Auth boundary = cost boundary.\" Routes that heavily consume the internal AI (Gemini) are <strong>cookie-session only in the web UI</strong> and can't be called with an API key. On external paths, write directly with primitives.",
+      "card1Title": "Works with an API key (Bearer)",
+      "card1Body": "Read/write/delete pages, store/read sources, hybrid search, ontology lookup and category matching, machine lint, job status polling",
+      "card2Title": "Session only (no API key)",
+      "card2Body": "<code>POST /ingest</code> (internal-AI ingest), <code>/query</code>, <code>/reindex</code>, <code>{lint}</code> — web UI only"
+    },
+    "footer": "Reference files — Skill bundle: <code>skills/wiki-ingest/</code> (SKILL.md + references/) · MCP: <code>mcp/server.mjs</code> · REST: <code>docs/rest-api.md</code>"
+  },
+  "GraphGraphCanvas": {
+    "searchPlaceholder": "Search…",
+    "brokenLink": "Broken link",
+    "counts": "{nodes} nodes · {edges} links",
+    "nonexistentPage": "Page not yet created"
+  },
+  "GraphGraphMount": {
+    "loading": "Loading graph…"
+  },
+  "InviteTokenInviteForm": {
+    "passwordPlaceholder": "Password (8+ characters)",
+    "submitting": "Signing up…",
+    "submit": "Sign up and start"
+  },
+  "InviteTokenPage": {
+    "invalidTitle": "Invalid or expired invitation",
+    "invalidDescription": "Ask your admin for a new invite link.",
+    "acceptTitle": "Accept invite · Create account"
+  },
+  "KeysIssueKeyForm": {
+    "tokenIssued": "New token issued — copy it now. You won't be able to see it again after leaving this screen.",
+    "hideToken": "Hide token",
+    "close": "Close",
+    "copied": "Copied ✓",
+    "copy": "Copy",
+    "namePlaceholder": "Key name (e.g. ingest-bot)",
+    "scopeWiki": "Scope wiki",
+    "allWikis": "All wikis",
+    "maxRole": "Max role",
+    "noRoleLimit": "No role limit",
+    "role": {
+      "viewer": "Viewer",
+      "editor": "Editor"
+    },
+    "expiry": "Expiry",
+    "noExpiry": "Never",
+    "daysOption": "{days} days",
+    "issuing": "Issuing…",
+    "issue": "Issue"
+  },
+  "KeysPage": {
+    "backToWikis": "My Wikis",
+    "title": "API Keys",
+    "description": "Bearer tokens external skills use to call the content API.",
+    "issuedKeys": "Issued keys",
+    "empty": "None yet.",
+    "wikiLabel": "Wiki: {title}",
+    "allWikis": "All wikis",
+    "noRoleLimit": "No role limit",
+    "role": {
+      "viewer": "Viewer",
+      "editor": "Editor"
+    },
+    "expired": "Expired",
+    "expiresAt": "Expires {date}",
+    "noExpiry": "Never expires",
+    "lastUsed": "Last used {date}",
+    "neverUsed": "Never used"
+  },
+  "KeysRevokeButton": {
+    "revoke": "Revoke"
+  },
+  "Kinds": {
+    "note": "Source note",
+    "concept": "Concept",
+    "entity": "Entity",
+    "meta": "Meta",
+    "conceptOption": "Concept — ideas, patterns, theories, documents",
+    "entityOption": "Entity — people, organizations, tools, products"
+  },
+  "LoginLoginForm": {
+    "passwordPlaceholder": "Password",
+    "loggingIn": "Logging in…",
+    "login": "Log in"
+  },
+  "LoginPage": {
+    "title": "Sign in to jimi-wiki",
+    "subtitle": "Sign in with your email and password."
+  },
+  "Modal": {
+    "close": "Close"
+  },
+  "PageNav": {
+    "prev": "← Prev",
+    "next": "Next →"
+  },
+  "PublicWikiView": {
+    "readOnly": "Read-only",
+    "emptyPage": "This page is empty.",
+    "emptyTitle": "No published pages yet",
+    "emptyBody": "Once pages are added to this read-only shared wiki, you'll be able to view them here."
+  },
+  "ReadingPane": {
+    "edit": "Edit",
+    "derivedHeading": "Documents derived from this source",
+    "derivedEmpty": "No documents have been derived from this source yet."
+  },
+  "ReadingProvenanceCard": {
+    "sectionLabel": "Source",
+    "viewStoredSource": "View stored source",
+    "originalSite": "Original site"
+  },
+  "ReadingRelatedPanel": {
+    "title": "Related pages",
+    "empty": "No pages are linked to this one.",
+    "outlinks": "This page references",
+    "backlinks": "Referenced by this page"
+  },
+  "ReadingSourcesPanel": {
+    "heading": "Sources & Originals"
+  },
+  "SetupPage": {
+    "title": "Initial admin setup",
+    "subtitle": "Create the first admin account for this instance."
+  },
+  "SetupSetupForm": {
+    "namePlaceholder": "Name (optional)",
+    "passwordPlaceholder": "Password (8+ characters)",
+    "creating": "Creating…",
+    "createAdmin": "Create admin"
+  },
+  "Sidebar": {
+    "role": {
+      "editor": "Editor",
+      "viewer": "Viewer"
+    },
+    "chat": "Chat",
+    "lint": "Health Check",
+    "settings": "Settings",
+    "myWikis": "My Wikis",
+    "empty": "None",
+    "sharedWikis": "Shared with Me",
+    "newWiki": "+ New Wiki",
+    "apiKeys": "API Keys",
+    "logout": "Log Out"
+  },
+  "WikiToc": {
+    "toggleToc": "Toggle table of contents",
+    "myWikis": "My Wikis",
+    "emptyTitle": "No pages",
+    "emptyBody": "Once pages are added, the table of contents will appear here.",
+    "askAi": "Ask AI",
+    "newPage": "New page",
+    "ingestSource": "Ingest source",
+    "graph": "Graph",
+    "healthCheck": "Health check",
+    "integrationGuide": "Integration guide",
+    "settings": "Settings",
+    "logout": "Log out"
+  },
+  "WikisPage": {
+    "apiKeys": "API keys",
+    "integrationGuide": "Integration guide",
+    "logout": "Log out",
+    "myWikis": "My wikis",
+    "noOwnedWikis": "You haven't created any wikis yet. Create one below.",
+    "pageCount": "{count} pages",
+    "sharedWikis": "Shared with me",
+    "authoredBy": "by {name}",
+    "role": {
+      "owner": "Owner",
+      "editor": "Editor",
+      "viewer": "Viewer"
+    },
+    "emptyTitle": "No wikis yet",
+    "emptyBody": "Create your first wiki below and your documents and their links will start collecting here.",
+    "createWiki": "Create a new wiki",
+    "titlePlaceholder": "Wiki title",
+    "kindPersonal": "personal",
+    "kindProject": "project",
+    "create": "Create"
+  },
+  "WikisSlugCategoryPathPage": {
+    "myWikis": "My Wikis",
+    "emptyCategory": "No pages in this category yet."
+  },
+  "WikisSlugChatChatModal": {
+    "askAi": "Ask AI",
+    "askAiWithShortcut": "Ask AI ({shortcut} · /)",
+    "dialogLabel": "{title} — Ask AI",
+    "basisDescription": "Answers are grounded in {title}'s knowledge (sources, concepts, entities)",
+    "fullScreen": "Full screen →",
+    "close": "Close"
+  },
+  "WikisSlugChatDocModal": {
+    "back": "Back",
+    "kind": {
+      "source": "Source",
+      "page": "Page"
+    },
+    "fullPage": "Open full page",
+    "close": "Close",
+    "loading": "Loading…",
+    "loadError": "Couldn't load this document.",
+    "retry": "Retry",
+    "emptyBody": "No content.",
+    "relatedDocs": "Related pages"
+  },
+  "WikisSlugChatLoading": {
+    "callingJimi": "Calling Jimi…"
+  },
+  "WikisSlugChatPage": {
+    "myWikis": "My Wikis",
+    "askAi": "Ask AI",
+    "subtitle": "Answers grounded in {title}'s knowledge (sources, concepts, entities)."
+  },
+  "WikisSlugChatWikiChat": {
+    "openEvidence": "Open evidence [{n}]",
+    "sourceBadge": "Source",
+    "evidenceTitle": "Evidence",
+    "evidenceEmptyTitle": "Awaiting evidence",
+    "evidenceEmptyBody": "Ask a question and the source documents behind the answer will appear here.",
+    "otherDocs": "{count} other docs found (not cited in the answer)",
+    "emptyTitle": "Ask anything about this wiki",
+    "emptyBody": "Answers are grounded in your saved content, with source documents shown alongside.",
+    "searching": "Searching…",
+    "error": "Error: {message}",
+    "retry": "Retry",
+    "close": "Close",
+    "inputPlaceholder": "Ask the wiki…  (Enter to send · Shift+Enter for a new line)",
+    "stop": "Stop",
+    "send": "Send"
+  },
+  "WikisSlugGraphPage": {
+    "title": "Graph",
+    "emptyTitle": "No pages to graph yet",
+    "emptyBody": "Once you add pages, the links and concept connections between documents will show up here."
+  },
+  "WikisSlugHomeActions": {
+    "ingestTitle": "Ingest Source",
+    "ingestDesc": "Give it a URL or text and the LLM reads it, then organizes it into notes and concept pages.",
+    "ingestOpen": "Open Ingest",
+    "newPageTitle": "New Page (Manual)",
+    "newPageDesc": "Set a title, kind, and category to create a blank page and edit it right away.",
+    "newPageCreate": "Create New Page →"
+  },
+  "WikisSlugIngestPanel": {
+    "submitPending": "Queuing job…",
+    "submit": "Ingest",
+    "emptyTitle": "Ingest a Source",
+    "emptyBody": "Drop a web link (body text only), YouTube (captions), or plain text, and the LLM reads it and organizes it into notes and concept pages.",
+    "urlPlaceholder": "https://…  (web article or YouTube link)",
+    "textPlaceholder": "Or paste text / a video transcript directly",
+    "titlePlaceholder": "Title (optional)"
+  },
+  "WikisSlugJobsIndicator": {
+    "type": {
+      "ingest": "Source ingest",
+      "query": "Query",
+      "lint": "Health check"
+    },
+    "secondsElapsed": "{sec}s",
+    "minutesElapsed": "{min}m {sec}s",
+    "title": "Agent jobs",
+    "close": "Close",
+    "empty": "No recent jobs.",
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed",
+    "pagesTouched": "{count} pages",
+    "activeCount": "{count} jobs running",
+    "allDone": "All done"
+  },
+  "WikisSlugLintPage": {
+    "empty": "None",
+    "missingPage": "Missing page",
+    "editorOnly": "Only editors and above can run the health check.",
+    "title": "Health Check (Lint)",
+    "pageCountLabel": "{count} pages total",
+    "healthScore": "Health score",
+    "trendLabel": "Trend (last {count} lints)",
+    "machineCheck": "Machine check",
+    "deepCheckButton": "+ LLM deep check",
+    "brokenLinks": "Broken links",
+    "orphanPages": "Orphan pages (no incoming links)",
+    "noOutLinks": "Pages with no outgoing links",
+    "untreatedSources": "Sources without a note",
+    "sourceDupTitle": "Pages likely duplicating a source",
+    "sourceDupDesc": "The body is virtually identical to its source. The same content shows up twice as evidence in search and AI answers, so rewrite it as a summary or consider deleting it.",
+    "approxSource": "≈ source",
+    "junkNotesTitle": "Junk notes (no origin)",
+    "junkNotesDesc": "Notes not linked to any Source (no provenance). Delete empty or short test leftovers; if they have real content, consider re-ingesting to reconnect the source.",
+    "delete": "Delete",
+    "linkSuggestTitle": "Link suggestions (isolated pages)",
+    "linkSuggestPrompt": "Find related pages to link from isolated derived pages using embedding similarity (incurs cost).",
+    "calculate": "Calculate",
+    "noIsolatedPages": "No isolated derived pages",
+    "linkSuggestDesc": "Derived pages with no incoming or outgoing links. \"Apply\" adds a `[[link]]` under \"## Related\" in the direction that's missing (missing outbound → on this page, missing inbound → on the candidate page).",
+    "noInbound": "No inbound",
+    "noOutbound": "No outbound",
+    "apply": "Apply",
+    "categoryHealth": "Category health",
+    "nearDupTitle": "Likely duplicate pairs",
+    "orphanCatsTitle": "Orphan categories (no pages)",
+    "retire": "Retire",
+    "uncategorizedTitle": "Uncategorized derived pages",
+    "assign": "Assign",
+    "deepSparseTitle": "Categories too deep or sparse",
+    "depthPages": "Depth {depth} · {count} pages",
+    "flatten": "Flatten",
+    "deepCheckTitle": "LLM deep check"
+  },
+  "WikisSlugNewNewPageForm": {
+    "submitting": "Creating…",
+    "create": "Create",
+    "categoryLabel": "Category",
+    "categoryLabelHint": "(optional · sidebar folder)",
+    "categoryPlaceholder": "Leave empty for Uncategorized · type to match an existing category",
+    "createCategory": "＋ Create new category: {slug}",
+    "reuseHint": "Reusing an existing category is recommended. Formatting is normalized automatically on save.",
+    "kindHint": {
+      "personal": "Personal knowledge wiki — organize concepts and entities freely.",
+      "project": "Project wiki — group meeting notes, decisions, and specs into categories to find them faster.",
+      "channel": "Public channel — others will browse it. Keep titles and categories clear."
+    },
+    "titleLabel": "Title",
+    "titlePlaceholder": "Page title",
+    "kindLabel": "Kind",
+    "ingestHint": "Source notes distilled from original material are created via <link>Ingest</link>; saved AI answers are created with ‘Save to wiki’ in chat.",
+    "bodyLabel": "Content",
+    "bodyLabelHint": "(optional · editable later)",
+    "bodyPlaceholder": "Write in Markdown. Wikilinks use [[page-slug]] or [[slug|display name]]",
+    "cancel": "Cancel"
+  },
+  "WikisSlugNewPage": {
+    "myWikis": "My Wikis",
+    "newPage": "New Page",
+    "description": "A page you write yourself."
+  },
+  "WikisSlugPage": {
+    "emptyTitle": "No pages yet",
+    "emptyBodyWrite": "Collect sources below or create a new page, and your documents and concept links will come together here.",
+    "emptyBodyRead": "Once pages are added, readable documents and concept links will show up here.",
+    "recentActivity": "Recent activity"
+  },
+  "WikisSlugPageSlugEditPage": {
+    "backTo": "Back to {title}",
+    "bodyPlaceholder": "Write in Markdown. Wikilinks: [[page-slug]] or [[slug|display name]]",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "WikisSlugPageSlugPage": {
+    "connectionGraph": "Connection graph",
+    "myWikis": "My wikis",
+    "emptyEditable": "This page is empty. Click Edit to add content.",
+    "empty": "This page is empty."
+  },
+  "WikisSlugReindexForm": {
+    "reindexing": "Reindexing…",
+    "reindex": "Semantic reindex",
+    "hint": "Manually saved pages are only FTS-indexed. Use this button to build embeddings and enable semantic search."
+  },
+  "WikisSlugRunStatusBadge": {
+    "prefix": "Source ingest:",
+    "inProgressHint": "— The LLM is reading the source and organizing it into pages…",
+    "pagesTouched": "{count} page(s) created or updated",
+    "status": {
+      "pending": "Pending",
+      "running": "Processing",
+      "done": "Done",
+      "error": "Failed"
+    }
+  },
+  "WikisSlugSettingsPage": {
+    "ownerOnly": "Only the owner can view this wiki's settings. (Your role: {role})",
+    "title": "Wiki Settings",
+    "generalHeading": "General",
+    "titleLabel": "Title",
+    "descriptionLabel": "Description",
+    "visibilityLabel": "Visibility",
+    "visibilityPrivate": "Private (members only)",
+    "visibilityUnlisted": "Unlisted (share via link)",
+    "save": "Save",
+    "membersHeading": "Members",
+    "changeRole": "Change",
+    "remove": "Remove",
+    "invitePlaceholder": "Email to invite",
+    "invite": "Invite",
+    "shareLinksHeading": "Share Links (read-only)",
+    "noShareLinks": "None yet.",
+    "revoke": "Revoke",
+    "createShareLink": "+ Create share link",
+    "dangerZone": "Danger Zone",
+    "deleteWiki": "Delete this wiki (cannot be undone)"
+  },
+  "WikisSlugSourcesSourceSlugDeleteSourceButton": {
+    "confirmIrreversible": "Deleting this source cannot be undone.",
+    "confirmDeletedNotes": "· Notes deleted along with it: {titles}",
+    "confirmOrphanedKnowledge": "· Curated knowledge that stays but loses this source: {titles}",
+    "confirmContinue": "Continue?",
+    "none": "None",
+    "deleteButton": "Delete source"
+  },
+  "WikisSlugSourcesSourceSlugPage": {
+    "source": "Source",
+    "readOnlyBadge": "Source · Read-only",
+    "emptyBody": "This source has no content."
+  },
+  "WikisSlugWikiActions": {
+    "ingestTitle": "Ingest source",
+    "newPageTitle": "New page"
+  }
+}

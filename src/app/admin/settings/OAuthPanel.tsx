@@ -1,16 +1,17 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { OpenAITransport } from "@/lib/provider";
 import { logoutOAuthAction, setOpenAITransportAction } from "./actions";
 
 type Status = { exists: boolean; accountId?: string; expires?: number };
 type Avail = { apikey: boolean; oauth: boolean; proxy: boolean };
 
-const TRANSPORT_OPTIONS: { id: OpenAITransport; label: string; hint: string }[] = [
-  { id: "apikey", label: "API 키", hint: "OPENAI_API_KEY" },
-  { id: "oauth", label: "ChatGPT 구독(OAuth)", hint: "로그인 필요" },
-  { id: "proxy", label: "프록시", hint: "OPENAI_BASE_URL" },
+const TRANSPORT_OPTIONS: { id: OpenAITransport; hint: string }[] = [
+  { id: "apikey", hint: "OPENAI_API_KEY" },
+  { id: "oauth", hint: "" },
+  { id: "proxy", hint: "OPENAI_BASE_URL" },
 ];
 type PollResult = { status: "complete" | "error" | "expired" | "cancelled"; message?: string };
 
@@ -50,6 +51,7 @@ async function pollDevice(
 
 export function OAuthPanel({ status, transport, avail }: { status: Status; transport: OpenAITransport; avail: Avail }) {
   const router = useRouter();
+  const t = useTranslations("AdminSettingsOAuthPanel");
   const [device, setDevice] = useState<{ userCode: string; url: string } | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -64,7 +66,7 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
     ctrlRef.current?.abort();
     setBusy(false);
     setDevice(null);
-    setMsg("취소됨.");
+    setMsg(t("cancelled"));
   }
 
   async function startLogin() {
@@ -76,9 +78,9 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
     try {
       const res = await fetch("/api/admin/openai/device/start", { method: "POST", signal: ctrl.signal });
       const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "시작 실패");
+      if (!res.ok) throw new Error(d.error || t("startFailed"));
       setDevice({ userCode: d.userCode, url: d.verificationUrl });
-      setMsg("아래 URL 을 열어 코드를 입력하세요. 승인 대기 중…");
+      setMsg(t("openUrlPrompt"));
       const result = await pollDevice(
         d.deviceAuthId,
         d.userCode,
@@ -90,16 +92,16 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
       setBusy(false);
       setDevice(null);
       if (result.status === "complete") {
-        setMsg("✓ 로그인 완료");
+        setMsg(t("loginComplete"));
         router.refresh();
       } else if (result.status === "expired") {
-        setMsg("코드가 만료됐습니다 — 다시 시도하세요.");
+        setMsg(t("codeExpired"));
       } else {
-        setMsg("오류: " + result.message);
+        setMsg(t("error", { message: result.message ?? "" }));
       }
     } catch (e) {
       if (!ctrl.signal.aborted) {
-        setMsg("오류: " + (e as Error).message);
+        setMsg(t("error", { message: (e as Error).message }));
         setBusy(false);
       }
     }
@@ -107,21 +109,22 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
 
   return (
     <section className="border rounded-lg p-4 space-y-3">
-      <h2 className="font-semibold">OpenAI 연결 (방식 선택 + ChatGPT 로그인)</h2>
+      <h2 className="font-semibold">{t("title")}</h2>
 
       {/* 연결 방식 선택 — 사용 가능한 것만 고를 수 있다. 현재 선택은 강조. */}
       <div className="space-y-1">
-        <p className="text-sm font-medium">연결 방식</p>
+        <p className="text-sm font-medium">{t("connectionMethod")}</p>
         <div className="flex flex-wrap gap-2">
           {TRANSPORT_OPTIONS.map((o) => {
             const ok = avail[o.id];
             const current = transport === o.id;
+            const hintText = o.id === "oauth" ? t("transport.oauthHint") : o.hint;
             return (
               <form key={o.id} action={setOpenAITransportAction}>
                 <input type="hidden" name="transport" value={o.id} />
                 <button
                   disabled={!ok || current}
-                  title={ok ? "" : `${o.hint} 없음`}
+                  title={ok ? "" : t("optionUnavailable", { hint: hintText })}
                   className={`text-sm rounded border px-3 py-1.5 disabled:cursor-not-allowed ${
                     current
                       ? "border-stone-900 bg-stone-900 text-white"
@@ -129,40 +132,40 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
                   }`}
                 >
                   {current ? "✓ " : ""}
-                  {o.label}
-                  {ok ? "" : " (불가)"}
+                  {t(`transport.${o.id}`)}
+                  {ok ? "" : ` ${t("unavailable")}`}
                 </button>
               </form>
             );
           })}
         </div>
         <p className="text-xs text-gray-500">
-          현재: <b>{transport}</b> — 이 방식으로 GPT 모델을 호출합니다. 키가 있어도 <b>고른 방식</b>만 씁니다.
+          {t.rich("currentDescription", { transport, b: (chunks) => <b>{chunks}</b> })}
         </p>
       </div>
 
       {status.exists ? (
         <p className="text-sm text-emerald-600">
-          로그인됨
-          {status.accountId ? ` (계정 ${status.accountId.slice(0, 8)}…)` : ""}
-          {status.expires ? ` · 만료 ${new Date(status.expires).toLocaleString()}` : ""}
+          {t("loggedIn")}
+          {status.accountId ? t("account", { id: status.accountId.slice(0, 8) }) : ""}
+          {status.expires ? t("expiresAt", { date: new Date(status.expires).toLocaleString() }) : ""}
         </p>
       ) : (
-        <p className="text-sm text-gray-500">미로그인 — 개인 ChatGPT 구독으로 GPT 모델을 쓰려면 로그인하세요.</p>
+        <p className="text-sm text-gray-500">{t("notLoggedIn")}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={startLogin} disabled={busy} className="bg-stone-900 text-white rounded px-4 py-2 text-sm disabled:opacity-50">
-          {status.exists ? "다시 로그인" : "ChatGPT로 로그인"}
+          {status.exists ? t("reLogin") : t("loginWithChatGPT")}
         </button>
         {busy && (
           <button type="button" onClick={stop} className="text-sm underline text-gray-600">
-            취소
+            {t("cancel")}
           </button>
         )}
         {status.exists && (
           <form action={logoutOAuthAction}>
-            <button className="text-sm text-red-600 underline">로그아웃</button>
+            <button className="text-sm text-red-600 underline">{t("logout")}</button>
           </form>
         )}
       </div>
@@ -170,22 +173,21 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
       {device && (
         <div className="text-sm border rounded p-3 bg-gray-50 space-y-1">
           <p>
-            1){" "}
+            {t("step1")}{" "}
             <a href={device.url} target="_blank" rel="noreferrer" className="underline text-blue-600">
               {device.url}
             </a>{" "}
-            열기
+            {t("openLink")}
           </p>
           <p>
-            2) 코드 입력: <code className="text-lg font-mono">{device.userCode}</code>
+            {t("step2")}
+            <code className="text-lg font-mono">{device.userCode}</code>
           </p>
         </div>
       )}
       {msg && <p className="text-sm text-gray-600">{msg}</p>}
 
-      <p className="text-xs text-amber-600">
-        ⚠️ 개인 self-host 전용 — 개인 구독을 나 혼자 쓰는 용도. 여러 사람에게 서비스로 열지 말 것(ChatGPT 약관).
-      </p>
+      <p className="text-xs text-amber-600">{t("warning")}</p>
     </section>
   );
 }

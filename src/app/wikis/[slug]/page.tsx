@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser, listPages, KIND_LABEL } from "@/lib/wiki";
+import { getWikiForUser, listPages } from "@/lib/wiki";
 import { prisma } from "@/lib/db";
 import { EmptyState } from "@/components/EmptyState";
 import { HomeActions } from "./HomeActions";
@@ -15,6 +16,8 @@ export default async function WikiHome({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ run?: string }>;
 }) {
+  const t = await getTranslations("WikisSlugPage");
+  const tk = await getTranslations("Kinds");
   const { slug: rawSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
   const { run } = await searchParams;
@@ -68,19 +71,15 @@ export default async function WikiHome({
         <div className="mb-8 rounded-lg border border-stone-200 bg-white p-5">
           <EmptyState
             asset="empty-pages"
-            title="아직 페이지가 없습니다"
-            body={
-              canWrite
-                ? "아래에서 소스를 수집하거나 새 페이지를 만들면 문서와 개념 연결이 이곳에 정리됩니다."
-                : "페이지가 추가되면 읽을 수 있는 문서와 개념 연결이 이곳에 표시됩니다."
-            }
+            title={t("emptyTitle")}
+            body={canWrite ? t("emptyBodyWrite") : t("emptyBodyRead")}
           />
         </div>
       )}
       <div className="space-y-6 mb-10">
         {[...groups.entries()].map(([kind, ps]) => (
           <section key={kind}>
-            <h2 className="font-semibold text-gray-700 mb-2">{KIND_LABEL[kind as keyof typeof KIND_LABEL] ?? kind}</h2>
+            <h2 className="font-semibold text-gray-700 mb-2">{tk.has(kind) ? tk(kind) : kind}</h2>
             <ul className="space-y-1">
               {ps.map((p) => (
                 <li key={p.id}>
@@ -106,7 +105,7 @@ export default async function WikiHome({
 
       {logs.length > 0 && (
         <section className="mt-8 border-t pt-4">
-          <h2 className="text-sm font-semibold text-gray-500 mb-2">최근 활동</h2>
+          <h2 className="text-sm font-semibold text-gray-500 mb-2">{t("recentActivity")}</h2>
           <ul className="space-y-1 text-sm text-gray-500">
             {logs.map((l) => (
               <li key={l.id} className="flex gap-2">

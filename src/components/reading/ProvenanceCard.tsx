@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 /**
  * 소스 노트의 원문(provenance) 카드.
@@ -7,14 +8,15 @@ import Link from "next/link";
  * 둘을 명확히 구분해 라벨링한다 — "저장된 원문"(우리가 보관한 감사본) vs "원본 사이트"(외부).
  */
 export function ProvenanceCard({ title, href, url }: { title: string; href?: string; url?: string | null }) {
+  const t = useTranslations("ReadingProvenanceCard");
   return (
     <div className="mb-6 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3">
-      <div className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-stone-400">원문 (Source)</div>
+      <div className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-stone-400">{t("sectionLabel")}</div>
       <div className="text-sm font-medium text-stone-700">{title}</div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         {href && (
           <Link href={href} className="font-medium text-blue-600 hover:underline">
-            📄 저장된 원문 보기
+            📄 {t("viewStoredSource")}
           </Link>
         )}
         {url && (
@@ -25,7 +27,7 @@ export function ProvenanceCard({ title, href, url }: { title: string; href?: str
             className="text-stone-500 hover:text-stone-700 hover:underline"
             title={url}
           >
-            🔗 원본 사이트 ↗
+            🔗 {t("originalSite")} ↗
           </a>
         )}
       </div>

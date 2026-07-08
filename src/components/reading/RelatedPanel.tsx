@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 type Item = { slug: string; title: string };
 
@@ -33,15 +34,16 @@ export function RelatedPanel({
   backlinks: Item[];
   hrefFor: (slug: string) => string;
 }) {
+  const t = useTranslations("ReadingRelatedPanel");
   return (
     <section className="mt-12 border-t border-stone-200 pt-4">
-      <h2 className="mb-3 text-sm font-semibold text-stone-500">관련 문서</h2>
+      <h2 className="mb-3 text-sm font-semibold text-stone-500">{t("title")}</h2>
       {outlinks.length === 0 && backlinks.length === 0 ? (
-        <p className="text-sm text-stone-400">이 페이지와 연결된 문서가 없습니다.</p>
+        <p className="text-sm text-stone-400">{t("empty")}</p>
       ) : (
         <div className="space-y-3">
-          <LinkGroup label="이 문서가 참조" items={outlinks} hrefFor={hrefFor} />
-          <LinkGroup label="이 문서를 참조" items={backlinks} hrefFor={hrefFor} />
+          <LinkGroup label={t("outlinks")} items={outlinks} hrefFor={hrefFor} />
+          <LinkGroup label={t("backlinks")} items={backlinks} hrefFor={hrefFor} />
         </div>
       )}
     </section>

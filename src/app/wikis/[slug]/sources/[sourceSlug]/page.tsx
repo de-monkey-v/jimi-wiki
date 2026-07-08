@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getSource, getSourceImpact } from "@/lib/wiki";
 import { renderMarkdown } from "@/lib/markdown";
@@ -11,6 +12,7 @@ export default async function SourceView({
 }: {
   params: Promise<{ slug: string; sourceSlug: string }>;
 }) {
+  const t = await getTranslations("WikisSlugSourcesSourceSlugPage");
   const { slug: rawSlug, sourceSlug: rawSourceSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
   const sourceSlug = decodeURIComponent(rawSourceSlug);
@@ -28,12 +30,12 @@ export default async function SourceView({
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-1 text-sm text-stone-400">
-        <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link> / 원문
+        <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link> / {t("source")}
       </div>
       <div className="mb-4 flex items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">{source.title}</h1>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-500">원문 · 읽기 전용</span>
+          <span className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-500">{t("readOnlyBadge")}</span>
           {canWrite && impact && (
             <DeleteSourceButton
               wikiSlug={slug}
@@ -55,7 +57,7 @@ export default async function SourceView({
         </a>
       )}
       {(source.body ?? "").trim() === "" ? (
-        <p className="text-stone-400">원문 본문이 없습니다.</p>
+        <p className="text-stone-400">{t("emptyBody")}</p>
       ) : (
         <article className="wiki-content" dangerouslySetInnerHTML={{ __html: html }} />
       )}

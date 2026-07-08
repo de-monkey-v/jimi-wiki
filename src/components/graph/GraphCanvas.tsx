@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import Graph from "graphology";
 import Sigma from "sigma";
 import type { NodeDisplayData, EdgeDisplayData } from "sigma/types";
@@ -8,7 +9,7 @@ import FA2Layout from "graphology-layout-forceatlas2/worker";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import noverlap from "graphology-layout-noverlap";
 import { createNodeBorderProgram } from "@sigma/node-border";
-import { nodeColor, KIND_COLOR, KIND_LABEL, KIND_ORDER, type WikiGraph } from "@/lib/kinds";
+import { nodeColor, KIND_COLOR, KIND_ORDER, type WikiGraph } from "@/lib/kinds";
 import type { PageKind } from "@/generated/prisma/client";
 
 const DIM = "#e7e5e4"; // stone-200 — dim 처리 색
@@ -37,6 +38,8 @@ export default function GraphCanvas({
   height?: number;
   controls?: boolean;
 }) {
+  const t = useTranslations("GraphGraphCanvas");
+  const tk = useTranslations("Kinds");
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   // 그래프 기본은 "정리된 지식"만 — 소스 노트(원문)는 기본 숨김(체크박스로 재표시).
@@ -310,7 +313,7 @@ export default function GraphCanvas({
           <input
             value={search}
             onChange={(e) => onSearch(e.target.value)}
-            placeholder="검색…"
+            placeholder={t("searchPlaceholder")}
             className="w-full rounded border border-stone-200 px-2 py-1 text-sm"
           />
           <div className="space-y-1">
@@ -318,19 +321,19 @@ export default function GraphCanvas({
               <label key={k} className="flex cursor-pointer items-center gap-2 text-xs text-stone-600">
                 <input type="checkbox" checked={!hiddenKinds.has(k)} onChange={() => toggleKind(k)} />
                 <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: KIND_COLOR[k] }} />
-                {KIND_LABEL[k]}
+                {tk(k)}
               </label>
             ))}
             {hasBroken && (
               <label className="flex cursor-pointer items-center gap-2 text-xs text-stone-600">
                 <input type="checkbox" checked={showBroken} onChange={(e) => { clearHoverChrome(); setShowBroken(e.target.checked); }} />
                 <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#dc2626" }} />
-                깨진 링크
+                {t("brokenLink")}
               </label>
             )}
           </div>
           <div className="border-t border-stone-100 pt-1 text-xs text-stone-400">
-            노드 {nodes.length} · 링크 {edges.length}
+            {t("counts", { nodes: nodes.length, edges: edges.length })}
           </div>
         </div>
       )}
@@ -345,7 +348,7 @@ export default function GraphCanvas({
         >
           <span className="font-medium text-red-600">{tip.slug}</span>
           <span className="text-stone-400"> · </span>
-          아직 없는 페이지
+          {t("nonexistentPage")}
         </div>
       )}
     </div>

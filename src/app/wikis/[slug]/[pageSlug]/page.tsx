@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getPage, getBacklinks, getOutlinks, existingSlugSet, getPrevNext, getPageProvenance, getPageSources, getPageNeighborhood } from "@/lib/wiki";
 import { renderMarkdown } from "@/lib/markdown";
@@ -12,6 +13,7 @@ export default async function PageView({
 }: {
   params: Promise<{ slug: string; pageSlug: string }>;
 }) {
+  const t = await getTranslations("WikisSlugPageSlugPage");
   const { slug: rawSlug, pageSlug: rawPageSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
   const pageSlug = decodeURIComponent(rawPageSlug);
@@ -46,7 +48,7 @@ export default async function PageView({
   const localGraph =
     neighborhood.nodes.length > 1 ? (
       <section className="mt-10">
-        <h2 className="mb-2 text-sm font-semibold text-stone-500">연결 그래프</h2>
+        <h2 className="mb-2 text-sm font-semibold text-stone-500">{t("connectionGraph")}</h2>
         <GraphMount
           nodes={neighborhood.nodes}
           edges={neighborhood.edges}
@@ -60,7 +62,7 @@ export default async function PageView({
   const crumb = (
     <>
       <div className="mb-1 text-sm text-stone-400">
-        <Link href="/wikis" className="hover:underline">내 위키</Link> /{" "}
+        <Link href="/wikis" className="hover:underline">{t("myWikis")}</Link> /{" "}
         <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link>
       </div>
       {!isNote && page.category && <CategoryBreadcrumb wikiSlug={slug} category={page.category} />}
@@ -72,7 +74,7 @@ export default async function PageView({
       title={page.title}
       html={html}
       isEmpty={page.body.trim() === ""}
-      emptyText={wiki.role !== "viewer" ? "빈 페이지입니다. 편집을 눌러 내용을 작성하세요." : "빈 페이지입니다."}
+      emptyText={wiki.role !== "viewer" ? t("emptyEditable") : t("empty")}
       isNote={isNote}
       provenance={provenance}
       sources={sources}

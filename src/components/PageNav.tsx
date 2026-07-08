@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 type NavItem = { slug: string; title: string } | null;
 
@@ -12,6 +13,7 @@ export function PageNav({
   next: NavItem;
   hrefFor: (slug: string) => string;
 }) {
+  const t = useTranslations("PageNav");
   if (!prev && !next) return null;
   return (
     <nav className="mt-10 flex items-stretch justify-between gap-3">
@@ -20,7 +22,7 @@ export function PageNav({
           href={hrefFor(prev.slug)}
           className="flex-1 rounded-lg border border-stone-200 px-4 py-3 hover:bg-stone-50"
         >
-          <div className="text-xs text-stone-400">← 이전</div>
+          <div className="text-xs text-stone-400">{t("prev")}</div>
           <div className="truncate text-sm font-medium text-stone-800">{prev.title}</div>
         </Link>
       ) : (
@@ -31,7 +33,7 @@ export function PageNav({
           href={hrefFor(next.slug)}
           className="flex-1 rounded-lg border border-stone-200 px-4 py-3 text-right hover:bg-stone-50"
         >
-          <div className="text-xs text-stone-400">다음 →</div>
+          <div className="text-xs text-stone-400">{t("next")}</div>
           <div className="truncate text-sm font-medium text-stone-800">{next.title}</div>
         </Link>
       ) : (

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser } from "@/lib/wiki";
-import { KIND_LABEL } from "@/lib/kinds";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +16,8 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   const userId = await getCurrentUserId();
   const wiki = await getWikiForUser(userId, slug);
   if (!wiki) notFound();
+  const t = await getTranslations("WikisSlugCategoryPathPage");
+  const tk = await getTranslations("Kinds");
 
   // 정확 일치(prefix) + 하위(prefix/*). Prisma startsWith는 LIKE 메타문자(_ %)를 이스케이프하지 않으므로 직접 이스케이프(과매칭 방지: gpt_4가 gpt-4를 매칭하는 문제).
   const likePrefix = prefix.replace(/[\\%_]/g, (c) => "\\" + c) + "/";
@@ -28,13 +30,13 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-1 text-sm text-stone-400">
-        <Link href="/wikis" className="hover:underline">내 위키</Link> /{" "}
+        <Link href="/wikis" className="hover:underline">{t("myWikis")}</Link> /{" "}
         <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link>
       </div>
       <CategoryBreadcrumb wikiSlug={slug} category={prefix} />
       <h1 className="mb-6 text-2xl font-bold">{segLast(prefix)}</h1>
       {pages.length === 0 ? (
-        <p className="text-stone-400">이 카테고리에 페이지가 없습니다.</p>
+        <p className="text-stone-400">{t("emptyCategory")}</p>
       ) : (
         <ul className="space-y-1">
           {pages.map((p) => (
@@ -43,7 +45,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
                 {p.title}
               </Link>
               {p.category && p.category !== prefix && <span className="text-xs text-stone-400">{p.category}</span>}
-              <span className="text-xs text-stone-300">{KIND_LABEL[p.kind]}</span>
+              <span className="text-xs text-stone-300">{tk(p.kind)}</span>
             </li>
           ))}
         </ul>

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 
 /**
  * 일반 모달 셸. portal 오버레이 + 바깥 클릭/Escape 닫기 + body 스크롤 잠금 + 첫 입력 포커스/복귀.
@@ -17,6 +18,7 @@ export function Modal({
   title: string;
   children: React.ReactNode;
 }) {
+  const t = useTranslations("Modal");
   const panelRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
 
@@ -65,7 +67,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="닫기"
+            aria-label={t("close")}
             className="text-lg leading-none text-stone-400 hover:text-stone-700"
           >
             ✕

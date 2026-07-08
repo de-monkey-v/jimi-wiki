@@ -1,0 +1,535 @@
+{
+  "AdminSettingsModelsForm": {
+    "envDefaultOption": "기본값 (env: {env})",
+    "providerDisabled": " (비활성 — 키/OAuth 없음)",
+    "customOption": "직접 입력…",
+    "customPlaceholder": "모델 id (예: gpt-5.5)",
+    "testing": "테스트 중…",
+    "test": "테스트",
+    "title": "모델 선택",
+    "description": "비워두면(기본값) env 설정을 따릅니다. 저장하면 재시작 없이 반영됩니다(다른 프로세스는 몇 초 내). 채팅은 Gemini·GPT 만 지원합니다(Claude 는 ingest·query·lint 에서 사용 가능).",
+    "chatLabel": "채팅 (CHAT_MODEL)",
+    "ingestHint": "원문 편입·큐레이션. 품질 레버리지가 큼.",
+    "genLabel": "일반 생성 (GEN_MODEL — query·lint)",
+    "save": "저장"
+  },
+  "AdminSettingsOAuthPanel": {
+    "cancelled": "취소됨.",
+    "startFailed": "시작 실패",
+    "openUrlPrompt": "아래 URL 을 열어 코드를 입력하세요. 승인 대기 중…",
+    "loginComplete": "✓ 로그인 완료",
+    "codeExpired": "코드가 만료됐습니다 — 다시 시도하세요.",
+    "error": "오류: {message}",
+    "title": "OpenAI 연결 (방식 선택 + ChatGPT 로그인)",
+    "connectionMethod": "연결 방식",
+    "transport": {
+      "apikey": "API 키",
+      "oauth": "ChatGPT 구독(OAuth)",
+      "proxy": "프록시",
+      "oauthHint": "로그인 필요"
+    },
+    "optionUnavailable": "{hint} 없음",
+    "unavailable": "(불가)",
+    "currentDescription": "현재: <b>{transport}</b> — 이 방식으로 GPT 모델을 호출합니다. 키가 있어도 <b>고른 방식</b>만 씁니다.",
+    "loggedIn": "로그인됨",
+    "account": " (계정 {id}…)",
+    "expiresAt": " · 만료 {date}",
+    "notLoggedIn": "미로그인 — 개인 ChatGPT 구독으로 GPT 모델을 쓰려면 로그인하세요.",
+    "reLogin": "다시 로그인",
+    "loginWithChatGPT": "ChatGPT로 로그인",
+    "cancel": "취소",
+    "logout": "로그아웃",
+    "step1": "1)",
+    "openLink": "열기",
+    "step2": "2) 코드 입력: ",
+    "warning": "⚠️ 개인 self-host 전용 — 개인 구독을 나 혼자 쓰는 용도. 여러 사람에게 서비스로 열지 말 것(ChatGPT 약관)."
+  },
+  "AdminSettingsPage": {
+    "appTitle": "앱 설정",
+    "usersLink": "유저 관리",
+    "providersTitle": "사용할 Provider (opt-in)",
+    "providersHint": "키가 있어도 <b>여기서 켠 provider 만</b> 모델 선택·사용이 가능합니다(키 존재 ≠ 자동 사용). 쓸 provider 를 켜세요.",
+    "hasKey": "키 있음",
+    "noKey": "키 없음",
+    "enabled": "활성",
+    "disabled": "비활성",
+    "deactivate": "비활성화",
+    "activate": "활성화",
+    "keyOrOAuthNeeded": "키/OAuth 필요",
+    "embeddingTitle": "임베딩 (읽기전용)",
+    "embeddingWarning": "⚠️ 임베딩 모델·차원은 DB vector 컬럼·HNSW 인덱스와 결합되어 있어 env 로만 변경합니다. 바꾸면 전체 재색인이 필요합니다.",
+    "refreshCatalog": "모델 목록 새로고침 (models.dev)"
+  },
+  "AdminUsersPage": {
+    "title": "유저 관리",
+    "appSettings": "앱 설정",
+    "noPassword": "비번 미설정",
+    "revokeAdmin": "관리자 해제",
+    "grantAdmin": "관리자 지정",
+    "newPasswordPlaceholder": "새 비번",
+    "reset": "재설정",
+    "createUser": "유저 생성",
+    "namePlaceholder": "이름(선택)",
+    "tempPasswordPlaceholder": "임시 비밀번호(8자+)",
+    "create": "생성",
+    "issueInvite": "초대 링크 발급",
+    "targetEmailPlaceholder": "대상 이메일(선택)",
+    "ttlDaysLabel": "유효기간(일)",
+    "issue": "발급",
+    "unusedInvites": "미사용 초대",
+    "none": "없음",
+    "revoke": "폐기"
+  },
+  "Common": {
+    "appName": "jimi-wiki",
+    "noscriptWarning": "JavaScript가 실행되지 않고 있습니다 — 모달·채팅·폴더 펼침이 동작하지 않습니다. Brave Shields(주소창의 사자 아이콘)에서 이 사이트의 스크립트 차단을 해제하거나, 브라우저의 JavaScript 설정을 확인하세요."
+  },
+  "DocsPage": {
+    "metaTitle": "연동 가이드 — jimi-wiki",
+    "metaDescription": "이 위키를 앱 내부 AI 없이 외부 도구(MCP·Skill·REST)로 유지보수하는 법",
+    "backToWiki": "위키로",
+    "backToMyWikis": "내 위키",
+    "title": "연동 가이드",
+    "intro": "이 위키를 <strong>앱 내부 AI 없이</strong> 외부 도구로 유지보수하는 법 — 외부 에이전트(Claude Code·Codex 등)의 MCP·Skill, 그리고 REST API. 어느 경로로 쓰든 같은 콘텐츠 API와 분류 규칙을 따르므로 위키의 일관성이 유지됩니다.",
+    "introSlugFilled": "아래 예시의 <code>{slug}</code>는 지금 위키의 slug로 채워져 있습니다.",
+    "introSlugPlaceholder": "예시의 <code>{slug}</code>는 대상 위키의 slug로 바꾸세요.",
+    "section1Title": "1. 먼저 — API 키 발급",
+    "section2Title": "2. 방법 A — MCP 서버 (권장)",
+    "section3Title": "3. 방법 B — 유지보수자 스킬 (Claude Code·Codex 등)",
+    "section4Title": "4. 방법 C — REST 직접 호출",
+    "sectionAuthTitle": "인증 경계 — 무엇이 API 키로 되고 무엇이 안 되나",
+    "section1": {
+      "auth": "모든 외부 호출은 <code>{header}</code> 헤더로 인증합니다. 원문 키는 발급 시 한 번만 표시되니 안전하게 보관하세요.",
+      "li1": "<link>API 키</link> 화면에서 발급 (쓰기 작업은 editor 이상).",
+      "li2": "키를 특정 위키로 <strong>스코프</strong>하거나 <strong>상한 역할(maxRole)</strong>·<strong>만료일</strong>을 걸 수 있습니다. 유효 역할 = min(멤버십 역할, maxRole).",
+      "li3": "계정당 활성 키 최대 20개. 레이트리밋: 분당 60회 / 시간당 1000회(초과 시 <code>429</code> + Retry-After)."
+    },
+    "section2": {
+      "intro": "저장소의 <code>mcp/server.mjs</code>를 MCP 클라이언트에 등록하면 콘텐츠 API가 도구로 노출됩니다. Claude Code 예:",
+      "toolsLabel": "노출되는 도구(11종):"
+    },
+    "section3": {
+      "p1": "저장소의 <code>skills/wiki-ingest/</code> 스킬 번들은 외부 유지보수자용 워크플로우입니다 — 원문 편입(ingest)뿐 아니라 분류·정리(organize)·기계 점검(lint)·조회(query)까지. 특정 에이전트에 묶이지 않아 <strong>MCP를 지원하면 도구로, 아니면 REST로 같은 절차</strong>를 실행합니다. 내부 ingest 에이전트와 <strong>동일한 분류 규칙</strong>(온톨로지/카테고리)을 정본에서 복사해 CI로 byte-parity를 강제하므로, 웹 UI로 넣든 스킬로 넣든 위키의 분류가 일관됩니다.",
+      "p2": "ingest 절차: ① <code>create_source</code>로 원문 불변 저장 → ② <code>search</code>/<code>list_pages</code>로 중복 확인 → ③ <code>kind=note</code> 소스 노트 작성(원문 복붙 금지, 요약) → ④ 영향받는 concept/entity 갱신(<code>[[slug]]</code> 링크·category 재사용) → ⑤ 마지막 호출에 <code>embed:true</code>로 시맨틱 색인.",
+      "bundleLabel": "번들 구성(폴더째 복사해 어느 하네스에도 배치):",
+      "li1": "<code>SKILL.md</code> — 워크플로우 진입점(하네스 무관).",
+      "li2": "<code>references/ontology-rules.md</code> — 분류 규칙 정본 사본(CI byte-parity 검사).",
+      "li3": "<code>references/tools.md</code> — 능력 ↔ MCP 도구 ↔ REST 매핑 + 인증 경계.",
+      "li4": "<code>references/setup.md</code> — API 키 · MCP 등록 · 하네스별 배치(Claude Code·Codex 등)."
+    },
+    "section4": {
+      "baseUrl": "베이스 URL: <code>{url}</code>",
+      "fullRef": "전체 레퍼런스(모든 엔드포인트·응답·에러 코드)는 저장소의 <code>docs/rest-api.md</code>에 있습니다."
+    },
+    "auth": {
+      "intro": "“인증 경계 = 비용 경계”. 내부 AI(Gemini)를 대량 소비하는 라우트는 <strong>웹 UI의 쿠키 세션 전용</strong>이라 API 키로는 호출할 수 없습니다. 외부 경로에서는 primitive로 직접 작성하세요.",
+      "card1Title": "API 키(Bearer)로 가능",
+      "card1Body": "페이지 조회/작성/삭제, 원문 저장/조회, 하이브리드 검색, 온톨로지 조회·카테고리 매칭, 기계 점검 lint, 잡 상태 폴링",
+      "card2Title": "세션 전용 (API 키 불가)",
+      "card2Body": "<code>POST /ingest</code>(내부 AI ingest), <code>/query</code>, <code>/reindex</code>, <code>{lint}</code> — 웹 UI에서만"
+    },
+    "footer": "참고 파일 — 스킬 번들: <code>skills/wiki-ingest/</code>(SKILL.md + references/) · MCP: <code>mcp/server.mjs</code> · REST: <code>docs/rest-api.md</code>"
+  },
+  "GraphGraphCanvas": {
+    "searchPlaceholder": "검색…",
+    "brokenLink": "깨진 링크",
+    "counts": "노드 {nodes} · 링크 {edges}",
+    "nonexistentPage": "아직 없는 페이지"
+  },
+  "GraphGraphMount": {
+    "loading": "그래프 로딩…"
+  },
+  "InviteTokenInviteForm": {
+    "passwordPlaceholder": "비밀번호(8자 이상)",
+    "submitting": "가입 중…",
+    "submit": "가입하고 시작"
+  },
+  "InviteTokenPage": {
+    "invalidTitle": "유효하지 않거나 만료된 초대입니다",
+    "invalidDescription": "관리자에게 새 초대 링크를 요청하세요.",
+    "acceptTitle": "초대 수락 · 계정 만들기"
+  },
+  "KeysIssueKeyForm": {
+    "tokenIssued": "새 토큰이 발급되었습니다 — 지금 복사하세요. 이 화면을 벗어나면 다시 볼 수 없습니다.",
+    "hideToken": "토큰 숨기기",
+    "close": "닫기",
+    "copied": "복사됨 ✓",
+    "copy": "복사",
+    "namePlaceholder": "키 이름 (예: ingest-bot)",
+    "scopeWiki": "스코프 위키",
+    "allWikis": "전체 위키",
+    "maxRole": "상한 역할",
+    "noRoleLimit": "권한 제한 없음",
+    "role": {
+      "viewer": "읽기 전용",
+      "editor": "편집"
+    },
+    "expiry": "만료",
+    "noExpiry": "무기한",
+    "daysOption": "{days}일",
+    "issuing": "발급 중…",
+    "issue": "발급"
+  },
+  "KeysPage": {
+    "backToWikis": "내 위키",
+    "title": "API 키",
+    "description": "외부 스킬이 콘텐츠 API를 호출할 때 쓰는 Bearer 토큰입니다.",
+    "issuedKeys": "발급된 키",
+    "empty": "아직 없음.",
+    "wikiLabel": "위키: {title}",
+    "allWikis": "전체 위키",
+    "noRoleLimit": "권한 제한 없음",
+    "role": {
+      "viewer": "읽기 전용",
+      "editor": "편집"
+    },
+    "expired": "만료됨",
+    "expiresAt": "만료 {date}",
+    "noExpiry": "무기한",
+    "lastUsed": "마지막 사용 {date}",
+    "neverUsed": "미사용"
+  },
+  "KeysRevokeButton": {
+    "revoke": "폐기"
+  },
+  "Kinds": {
+    "note": "소스 노트",
+    "concept": "개념",
+    "entity": "개체",
+    "meta": "메타",
+    "conceptOption": "개념 — 아이디어·패턴·이론·문서",
+    "entityOption": "개체 — 인물·조직·도구·제품"
+  },
+  "LoginLoginForm": {
+    "passwordPlaceholder": "비밀번호",
+    "loggingIn": "로그인 중…",
+    "login": "로그인"
+  },
+  "LoginPage": {
+    "title": "jimi-wiki 로그인",
+    "subtitle": "이메일과 비밀번호로 로그인하세요."
+  },
+  "Modal": {
+    "close": "닫기"
+  },
+  "PageNav": {
+    "prev": "← 이전",
+    "next": "다음 →"
+  },
+  "PublicWikiView": {
+    "readOnly": "읽기 전용",
+    "emptyPage": "빈 페이지입니다.",
+    "emptyTitle": "공개된 페이지가 없습니다",
+    "emptyBody": "읽기 전용 공유 위키에 페이지가 추가되면 이곳에서 열람할 수 있습니다."
+  },
+  "ReadingPane": {
+    "edit": "편집",
+    "derivedHeading": "이 소스에서 파생된 문서",
+    "derivedEmpty": "아직 이 소스에서 파생된 문서가 없습니다."
+  },
+  "ReadingProvenanceCard": {
+    "sectionLabel": "원문 (Source)",
+    "viewStoredSource": "저장된 원문 보기",
+    "originalSite": "원본 사이트"
+  },
+  "ReadingRelatedPanel": {
+    "title": "관련 문서",
+    "empty": "이 페이지와 연결된 문서가 없습니다.",
+    "outlinks": "이 문서가 참조",
+    "backlinks": "이 문서를 참조"
+  },
+  "ReadingSourcesPanel": {
+    "heading": "출처 · 원본"
+  },
+  "SetupPage": {
+    "title": "최초 관리자 설정",
+    "subtitle": "이 인스턴스의 첫 관리자 계정을 만듭니다."
+  },
+  "SetupSetupForm": {
+    "namePlaceholder": "이름(선택)",
+    "passwordPlaceholder": "비밀번호(8자 이상)",
+    "creating": "생성 중…",
+    "createAdmin": "관리자 생성"
+  },
+  "Sidebar": {
+    "role": {
+      "editor": "편집",
+      "viewer": "뷰어"
+    },
+    "chat": "채팅",
+    "lint": "건강검진",
+    "settings": "설정",
+    "myWikis": "내 위키",
+    "empty": "없음",
+    "sharedWikis": "공유받은 위키",
+    "newWiki": "+ 새 위키",
+    "apiKeys": "API 키",
+    "logout": "로그아웃"
+  },
+  "WikiToc": {
+    "toggleToc": "목차 열기/닫기",
+    "myWikis": "내 위키",
+    "emptyTitle": "페이지 없음",
+    "emptyBody": "페이지가 추가되면 목차가 여기에 표시됩니다.",
+    "askAi": "AI에게 질문",
+    "newPage": "새 페이지",
+    "ingestSource": "소스 편입",
+    "graph": "그래프",
+    "healthCheck": "건강검진",
+    "integrationGuide": "연동 가이드",
+    "settings": "설정",
+    "logout": "로그아웃"
+  },
+  "WikisPage": {
+    "apiKeys": "API 키",
+    "integrationGuide": "연동 가이드",
+    "logout": "로그아웃",
+    "myWikis": "내 위키",
+    "noOwnedWikis": "아직 만든 위키가 없습니다. 아래에서 만들어보세요.",
+    "pageCount": "{count} 페이지",
+    "sharedWikis": "공유받은 위키",
+    "authoredBy": "by {name}",
+    "role": {
+      "owner": "소유자",
+      "editor": "편집자",
+      "viewer": "뷰어"
+    },
+    "emptyTitle": "아직 위키가 없습니다",
+    "emptyBody": "아래에서 첫 위키를 만들면 문서와 연결 관계가 여기에 쌓입니다.",
+    "createWiki": "새 위키 만들기",
+    "titlePlaceholder": "위키 제목",
+    "kindPersonal": "personal (개인)",
+    "kindProject": "project (프로젝트)",
+    "create": "만들기"
+  },
+  "WikisSlugCategoryPathPage": {
+    "myWikis": "내 위키",
+    "emptyCategory": "이 카테고리에 페이지가 없습니다."
+  },
+  "WikisSlugChatChatModal": {
+    "askAi": "AI에게 질문",
+    "askAiWithShortcut": "AI에게 질문 ({shortcut} · /)",
+    "dialogLabel": "{title} — AI에게 질문",
+    "basisDescription": "{title}의 지식(원문·개념·개체)을 근거로 답합니다",
+    "fullScreen": "전체 화면으로 →",
+    "close": "닫기"
+  },
+  "WikisSlugChatDocModal": {
+    "back": "뒤로",
+    "kind": {
+      "source": "원문",
+      "page": "문서"
+    },
+    "fullPage": "전체 페이지로",
+    "close": "닫기",
+    "loading": "불러오는 중…",
+    "loadError": "문서를 불러올 수 없습니다.",
+    "retry": "재시도",
+    "emptyBody": "본문이 없습니다.",
+    "relatedDocs": "관련 문서"
+  },
+  "WikisSlugChatLoading": {
+    "callingJimi": "지미를 부르는 중…"
+  },
+  "WikisSlugChatPage": {
+    "myWikis": "내 위키",
+    "askAi": "AI에게 질문",
+    "subtitle": "{title}의 지식(원문·개념·개체)을 근거로 답합니다."
+  },
+  "WikisSlugChatWikiChat": {
+    "openEvidence": "근거 [{n}] 열기",
+    "sourceBadge": "원문",
+    "evidenceTitle": "근거 자료",
+    "evidenceEmptyTitle": "근거 대기 중",
+    "evidenceEmptyBody": "질문하면 답변의 근거 문서가 여기 표시됩니다.",
+    "otherDocs": "함께 검색된 문서 {count}건 (답변에 인용되지 않음)",
+    "emptyTitle": "이 위키에 대해 물어보세요",
+    "emptyBody": "저장된 내용을 근거로 답하고, 근거 문서는 답변과 함께 표시됩니다.",
+    "searching": "검색 중…",
+    "error": "오류: {message}",
+    "retry": "재시도",
+    "close": "닫기",
+    "inputPlaceholder": "위키에 질문…  (Enter 전송 · Shift+Enter 줄바꿈)",
+    "stop": "중지",
+    "send": "보내기"
+  },
+  "WikisSlugGraphPage": {
+    "title": "그래프",
+    "emptyTitle": "그래프를 만들 페이지가 없습니다",
+    "emptyBody": "페이지가 추가되면 문서 사이의 링크와 개념 연결이 이곳에 표시됩니다."
+  },
+  "WikisSlugHomeActions": {
+    "ingestTitle": "소스 편입 (Ingest)",
+    "ingestDesc": "URL이나 텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다.",
+    "ingestOpen": "소스 편입 열기",
+    "newPageTitle": "새 페이지 (수동)",
+    "newPageDesc": "제목·종류·카테고리를 정해 빈 페이지를 만들고 바로 편집합니다.",
+    "newPageCreate": "새 페이지 만들기 →"
+  },
+  "WikisSlugIngestPanel": {
+    "submitPending": "잡 등록 중…",
+    "submit": "수집",
+    "emptyTitle": "소스 편입 (Ingest)",
+    "emptyBody": "웹 링크(본문만 추출)·유튜브(자막)·텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다.",
+    "urlPlaceholder": "https://…  (웹 기사 또는 유튜브 링크)",
+    "textPlaceholder": "또는 텍스트/영상 대본 직접 붙여넣기",
+    "titlePlaceholder": "제목(선택)"
+  },
+  "WikisSlugJobsIndicator": {
+    "type": {
+      "ingest": "소스 편입",
+      "query": "질문",
+      "lint": "건강검진"
+    },
+    "secondsElapsed": "{sec}초",
+    "minutesElapsed": "{min}분 {sec}초",
+    "title": "에이전트 작업",
+    "close": "닫기",
+    "empty": "최근 작업이 없습니다.",
+    "running": "실행 중",
+    "done": "완료",
+    "failed": "실패",
+    "pagesTouched": "페이지 {count}개",
+    "activeCount": "작업 {count}개 실행 중",
+    "allDone": "작업 완료"
+  },
+  "WikisSlugLintPage": {
+    "empty": "없음",
+    "missingPage": "없는 페이지",
+    "editorOnly": "건강검진은 editor 이상만 실행할 수 있습니다.",
+    "title": "건강검진 (Lint)",
+    "pageCountLabel": "전체 {count} 페이지",
+    "healthScore": "건강 점수",
+    "trendLabel": "추이 (최근 {count}회 lint)",
+    "machineCheck": "기계 점검",
+    "deepCheckButton": "+ LLM 심층 점검",
+    "brokenLinks": "깨진 링크",
+    "orphanPages": "고아 페이지 (들어오는 링크 없음)",
+    "noOutLinks": "나가는 링크 없는 페이지",
+    "untreatedSources": "소스 노트 없는 원문",
+    "sourceDupTitle": "원문 중복 의심 페이지",
+    "sourceDupDesc": "본문이 원문과 사실상 동일한 페이지입니다. 검색·AI 답변에서 같은 내용이 근거로 중복 노출되니, 요약으로 고쳐 쓰거나 삭제를 검토하세요.",
+    "approxSource": "≈ 원문",
+    "junkNotesTitle": "정크 노트 (출처 없음)",
+    "junkNotesDesc": "원문(Source)에 연결되지 않은 노트입니다(provenance 없음). 빈/짧은 테스트 잔재면 삭제하고, 내용이 있으면 원문 재연결(재-ingest)을 검토하세요.",
+    "delete": "삭제",
+    "linkSuggestTitle": "링크 제안 (고립 페이지)",
+    "linkSuggestPrompt": "고립된 파생 페이지에 연결할 관련 페이지를 임베딩 유사도로 찾습니다(비용 발생).",
+    "calculate": "계산하기",
+    "noIsolatedPages": "고립된 파생 페이지 없음",
+    "linkSuggestDesc": "들어오거나 나가는 링크가 없는 파생 페이지입니다. \"적용\"하면 부족한 방향에 맞춰 \"## 관련 문서\"에 `[[링크]]`를 추가합니다(아웃바운드 부족→이 페이지에, 인바운드 부족→후보 페이지에).",
+    "noInbound": "인바운드 없음",
+    "noOutbound": "아웃바운드 없음",
+    "apply": "적용",
+    "categoryHealth": "카테고리 건강",
+    "nearDupTitle": "중복 의심 쌍",
+    "orphanCatsTitle": "고아 category (페이지 없음)",
+    "retire": "폐기",
+    "uncategorizedTitle": "미분류 파생 페이지",
+    "assign": "지정",
+    "deepSparseTitle": "너무 깊거나 희소한 category",
+    "depthPages": "{depth}단 · 페이지 {count}개",
+    "flatten": "평탄화",
+    "deepCheckTitle": "LLM 심층 점검"
+  },
+  "WikisSlugNewNewPageForm": {
+    "submitting": "만드는 중…",
+    "create": "만들기",
+    "categoryLabel": "카테고리",
+    "categoryLabelHint": "(선택 · 사이드바 폴더)",
+    "categoryPlaceholder": "비워두면 미분류 · 입력하면 기존 카테고리를 추천",
+    "createCategory": "＋ 새 카테고리 만들기: {slug}",
+    "reuseHint": "기존 카테고리 재사용을 권장합니다. 저장 시 표기가 자동 정규화됩니다.",
+    "kindHint": {
+      "personal": "개인 지식 위키 — 개념과 개체를 자유롭게 정리하세요.",
+      "project": "프로젝트 위키 — 회의록·결정·스펙은 카테고리로 묶으면 찾기 쉽습니다.",
+      "channel": "공개 채널 — 다른 사람이 둘러봅니다. 제목과 분류를 명확히."
+    },
+    "titleLabel": "제목",
+    "titlePlaceholder": "페이지 제목",
+    "kindLabel": "종류",
+    "ingestHint": "원문을 정리한 소스 노트는 <link>소스 편입(Ingest)</link>으로, AI 답변 저장은 채팅의 ‘위키에 저장’으로 만들어집니다.",
+    "bodyLabel": "내용",
+    "bodyLabelHint": "(선택 · 나중에 편집 가능)",
+    "bodyPlaceholder": "마크다운으로 작성. 위키링크는 [[페이지-슬러그]] 또는 [[슬러그|표시명]]",
+    "cancel": "취소"
+  },
+  "WikisSlugNewPage": {
+    "myWikis": "내 위키",
+    "newPage": "새 페이지",
+    "description": "직접 작성하는 페이지입니다."
+  },
+  "WikisSlugPage": {
+    "emptyTitle": "아직 페이지가 없습니다",
+    "emptyBodyWrite": "아래에서 소스를 수집하거나 새 페이지를 만들면 문서와 개념 연결이 이곳에 정리됩니다.",
+    "emptyBodyRead": "페이지가 추가되면 읽을 수 있는 문서와 개념 연결이 이곳에 표시됩니다.",
+    "recentActivity": "최근 활동"
+  },
+  "WikisSlugPageSlugEditPage": {
+    "backTo": "{title}로 돌아가기",
+    "bodyPlaceholder": "마크다운으로 작성. 위키링크는 [[페이지-슬러그]] 또는 [[슬러그|표시명]]",
+    "save": "저장",
+    "cancel": "취소"
+  },
+  "WikisSlugPageSlugPage": {
+    "connectionGraph": "연결 그래프",
+    "myWikis": "내 위키",
+    "emptyEditable": "빈 페이지입니다. 편집을 눌러 내용을 작성하세요.",
+    "empty": "빈 페이지입니다."
+  },
+  "WikisSlugReindexForm": {
+    "reindexing": "재색인 중…",
+    "reindex": "시맨틱 재색인",
+    "hint": "수동 저장한 페이지는 FTS만 색인됩니다. 이 버튼으로 임베딩을 채워 시맨틱 검색을 활성화하세요."
+  },
+  "WikisSlugRunStatusBadge": {
+    "prefix": "소스 편입:",
+    "inProgressHint": "— LLM이 원문을 읽고 페이지로 정리하는 중입니다…",
+    "pagesTouched": "페이지 {count}개 생성·갱신됨",
+    "status": {
+      "pending": "대기 중",
+      "running": "처리 중",
+      "done": "완료",
+      "error": "실패"
+    }
+  },
+  "WikisSlugSettingsPage": {
+    "ownerOnly": "이 위키의 설정은 owner만 볼 수 있습니다. (현재 역할: {role})",
+    "title": "위키 설정",
+    "generalHeading": "일반",
+    "titleLabel": "제목",
+    "descriptionLabel": "설명",
+    "visibilityLabel": "공개 범위",
+    "visibilityPrivate": "private (멤버만)",
+    "visibilityUnlisted": "unlisted (링크 공유)",
+    "save": "저장",
+    "membersHeading": "멤버",
+    "changeRole": "변경",
+    "remove": "제거",
+    "invitePlaceholder": "초대할 이메일",
+    "invite": "초대",
+    "shareLinksHeading": "공유 링크 (읽기 전용)",
+    "noShareLinks": "아직 없음.",
+    "revoke": "폐기",
+    "createShareLink": "+ 공유 링크 생성",
+    "dangerZone": "위험 구역",
+    "deleteWiki": "이 위키 삭제 (되돌릴 수 없음)"
+  },
+  "WikisSlugSourcesSourceSlugDeleteSourceButton": {
+    "confirmIrreversible": "이 원문을 삭제하면 되돌릴 수 없습니다.",
+    "confirmDeletedNotes": "· 함께 삭제되는 노트: {titles}",
+    "confirmOrphanedKnowledge": "· 남지만 이 원문 출처를 잃는 정리된 지식: {titles}",
+    "confirmContinue": "계속할까요?",
+    "none": "없음",
+    "deleteButton": "원문 삭제"
+  },
+  "WikisSlugSourcesSourceSlugPage": {
+    "source": "원문",
+    "readOnlyBadge": "원문 · 읽기 전용",
+    "emptyBody": "원문 본문이 없습니다."
+  },
+  "WikisSlugWikiActions": {
+    "ingestTitle": "소스 편입",
+    "newPageTitle": "새 페이지"
+  }
+}

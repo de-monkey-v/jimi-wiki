@@ -1,0 +1,535 @@
+{
+  "AdminSettingsModelsForm": {
+    "envDefaultOption": "デフォルト (env: {env})",
+    "providerDisabled": " (無効 — キー/OAuth なし)",
+    "customOption": "直接入力…",
+    "customPlaceholder": "モデル id (例: gpt-5.5)",
+    "testing": "テスト中…",
+    "test": "テスト",
+    "title": "モデル選択",
+    "description": "空欄（デフォルト）にすると env 設定に従います。保存すると再起動なしで反映されます（他プロセスは数秒以内）。チャットは Gemini・GPT のみ対応です（Claude は ingest・query・lint で利用可能）。",
+    "chatLabel": "チャット (CHAT_MODEL)",
+    "ingestHint": "原文の取り込み・キュレーション。品質へのレバレッジが大きい。",
+    "genLabel": "汎用生成 (GEN_MODEL — query・lint)",
+    "save": "保存"
+  },
+  "AdminSettingsOAuthPanel": {
+    "cancelled": "キャンセルしました。",
+    "startFailed": "開始に失敗しました",
+    "openUrlPrompt": "下記の URL を開いてコードを入力してください。承認待ち…",
+    "loginComplete": "✓ ログイン完了",
+    "codeExpired": "コードの有効期限が切れました — もう一度お試しください。",
+    "error": "エラー: {message}",
+    "title": "OpenAI 連携（方式の選択 + ChatGPT ログイン）",
+    "connectionMethod": "接続方式",
+    "transport": {
+      "apikey": "API キー",
+      "oauth": "ChatGPT サブスクリプション（OAuth）",
+      "proxy": "プロキシ",
+      "oauthHint": "ログインが必要"
+    },
+    "optionUnavailable": "{hint} なし",
+    "unavailable": "（不可）",
+    "currentDescription": "現在: <b>{transport}</b> — この方式で GPT モデルを呼び出します。キーがあっても<b>選択した方式</b>のみ使用します。",
+    "loggedIn": "ログイン済み",
+    "account": "（アカウント {id}…）",
+    "expiresAt": " · 有効期限 {date}",
+    "notLoggedIn": "未ログイン — 個人の ChatGPT サブスクリプションで GPT モデルを使うにはログインしてください。",
+    "reLogin": "再ログイン",
+    "loginWithChatGPT": "ChatGPT でログイン",
+    "cancel": "キャンセル",
+    "logout": "ログアウト",
+    "step1": "1)",
+    "openLink": "開く",
+    "step2": "2) コード入力: ",
+    "warning": "⚠️ 個人の self-host 専用 — 個人サブスクリプションを自分だけで使う用途。他の人へサービスとして公開しないこと（ChatGPT 規約）。"
+  },
+  "AdminSettingsPage": {
+    "appTitle": "アプリ設定",
+    "usersLink": "ユーザー管理",
+    "providersTitle": "使用するProvider（opt-in）",
+    "providersHint": "キーがあっても、<b>ここで有効にしたproviderのみ</b>モデルの選択・使用ができます（キーの存在 ≠ 自動使用）。使うproviderを有効にしてください。",
+    "hasKey": "キーあり",
+    "noKey": "キーなし",
+    "enabled": "有効",
+    "disabled": "無効",
+    "deactivate": "無効化",
+    "activate": "有効化",
+    "keyOrOAuthNeeded": "キー/OAuthが必要",
+    "embeddingTitle": "埋め込み（読み取り専用）",
+    "embeddingWarning": "⚠️ 埋め込みモデル・次元はDBのvectorカラム・HNSWインデックスと結合しているため、envでのみ変更します。変更すると全体の再インデックスが必要です。",
+    "refreshCatalog": "モデル一覧を更新（models.dev）"
+  },
+  "AdminUsersPage": {
+    "title": "ユーザー管理",
+    "appSettings": "アプリ設定",
+    "noPassword": "パスワード未設定",
+    "revokeAdmin": "管理者を解除",
+    "grantAdmin": "管理者に設定",
+    "newPasswordPlaceholder": "新しいパスワード",
+    "reset": "リセット",
+    "createUser": "ユーザー作成",
+    "namePlaceholder": "名前（任意）",
+    "tempPasswordPlaceholder": "仮パスワード（8文字以上）",
+    "create": "作成",
+    "issueInvite": "招待リンクを発行",
+    "targetEmailPlaceholder": "宛先メール（任意）",
+    "ttlDaysLabel": "有効期間（日）",
+    "issue": "発行",
+    "unusedInvites": "未使用の招待",
+    "none": "なし",
+    "revoke": "無効化"
+  },
+  "Common": {
+    "appName": "jimi-wiki",
+    "noscriptWarning": "JavaScript が実行されていません — モーダル・チャット・フォルダ展開が動作しません。Brave Shields（アドレスバーのライオンアイコン）でこのサイトのスクリプトブロックを解除するか、ブラウザの JavaScript 設定を確認してください。"
+  },
+  "DocsPage": {
+    "metaTitle": "連携ガイド — jimi-wiki",
+    "metaDescription": "このwikiをアプリ内蔵AIを使わず外部ツール（MCP・Skill・REST）でメンテナンスする方法",
+    "backToWiki": "wikiへ",
+    "backToMyWikis": "マイwiki",
+    "title": "連携ガイド",
+    "intro": "このwikiを<strong>アプリ内蔵AIを使わず</strong>外部ツールでメンテナンスする方法 — 外部エージェント（Claude Code・Codexなど）のMCP・Skill、そしてREST API。どの経路でも同じコンテンツAPIと分類ルールに従うため、wikiの一貫性が保たれます。",
+    "introSlugFilled": "下記の例の<code>{slug}</code>は、現在のwikiのslugがすでに入力されています。",
+    "introSlugPlaceholder": "例の<code>{slug}</code>は対象wikiのslugに置き換えてください。",
+    "section1Title": "1. まず — APIキーの発行",
+    "section2Title": "2. 方法A — MCPサーバー（推奨）",
+    "section3Title": "3. 方法B — メンテナー向けスキル（Claude Code・Codexなど）",
+    "section4Title": "4. 方法C — RESTを直接呼び出す",
+    "sectionAuthTitle": "認証境界 — APIキーでできること・できないこと",
+    "section1": {
+      "auth": "すべての外部呼び出しは<code>{header}</code>ヘッダーで認証します。生のキーは発行時に一度だけ表示されるので、安全に保管してください。",
+      "li1": "<link>APIキー</link>画面で発行（書き込み操作はeditor以上）。",
+      "li2": "キーを特定のwikiに<strong>スコープ</strong>したり、<strong>上限ロール（maxRole）</strong>・<strong>有効期限</strong>を設定できます。有効ロール = min(メンバーシップロール, maxRole)。",
+      "li3": "アカウントあたり有効キーは最大20個。レート制限：毎分60回／毎時1000回（超過時は<code>429</code> + Retry-After）。"
+    },
+    "section2": {
+      "intro": "リポジトリの<code>mcp/server.mjs</code>をMCPクライアントに登録すると、コンテンツAPIがツールとして公開されます。Claude Codeの例：",
+      "toolsLabel": "公開されるツール（11種）："
+    },
+    "section3": {
+      "p1": "リポジトリの<code>skills/wiki-ingest/</code>スキルバンドルは外部メンテナー向けのワークフローです — 原文の取り込み（ingest）だけでなく、分類・整理（organize）・機械チェック（lint）・照会（query）まで対応します。特定のエージェントに縛られないため、<strong>MCPをサポートすればツールとして、そうでなければRESTで同じ手順</strong>を実行します。内部ingestエージェントと<strong>同じ分類ルール</strong>（オントロジー／カテゴリ）を正本からコピーし、CIでbyte-parityを強制するので、Web UIから入れてもスキルで入れてもwikiの分類が一貫します。",
+      "p2": "ingest手順：① <code>create_source</code>で原文を不変保存 → ② <code>search</code>／<code>list_pages</code>で重複確認 → ③ <code>kind=note</code>でソースノートを作成（原文のコピペ禁止、要約する）→ ④ 影響を受けるconcept/entityを更新（<code>[[slug]]</code>リンク・categoryを再利用）→ ⑤ 最後の呼び出しで<code>embed:true</code>を指定してセマンティック索引化。",
+      "bundleLabel": "バンドル構成（フォルダごとコピーしてどのハーネスにも配置）：",
+      "li1": "<code>SKILL.md</code> — ワークフローの入口（ハーネス非依存）。",
+      "li2": "<code>references/ontology-rules.md</code> — 分類ルール正本のコピー（CI byte-parityチェック）。",
+      "li3": "<code>references/tools.md</code> — 能力 ↔ MCPツール ↔ RESTのマッピング + 認証境界。",
+      "li4": "<code>references/setup.md</code> — APIキー・MCP登録・ハーネス別の配置（Claude Code・Codexなど）。"
+    },
+    "section4": {
+      "baseUrl": "ベースURL：<code>{url}</code>",
+      "fullRef": "全リファレンス（すべてのエンドポイント・レスポンス・エラーコード）はリポジトリの<code>docs/rest-api.md</code>にあります。"
+    },
+    "auth": {
+      "intro": "「認証境界 = コスト境界」。内部AI（Gemini）を大量消費するルートは<strong>Web UIのCookieセッション専用</strong>のため、APIキーでは呼び出せません。外部経路ではprimitiveで直接作成してください。",
+      "card1Title": "APIキー（Bearer）で可能",
+      "card1Body": "ページの照会／作成／削除、原文の保存／照会、ハイブリッド検索、オントロジー照会・カテゴリマッチング、機械チェックlint、ジョブ状態のポーリング",
+      "card2Title": "セッション専用（APIキー不可）",
+      "card2Body": "<code>POST /ingest</code>（内部AI ingest）、<code>/query</code>、<code>/reindex</code>、<code>{lint}</code> — Web UIのみ"
+    },
+    "footer": "参考ファイル — スキルバンドル：<code>skills/wiki-ingest/</code>（SKILL.md + references/）· MCP：<code>mcp/server.mjs</code> · REST：<code>docs/rest-api.md</code>"
+  },
+  "GraphGraphCanvas": {
+    "searchPlaceholder": "検索…",
+    "brokenLink": "リンク切れ",
+    "counts": "ノード {nodes} · リンク {edges}",
+    "nonexistentPage": "未作成のページ"
+  },
+  "GraphGraphMount": {
+    "loading": "グラフを読み込み中…"
+  },
+  "InviteTokenInviteForm": {
+    "passwordPlaceholder": "パスワード（8文字以上）",
+    "submitting": "登録中…",
+    "submit": "登録して始める"
+  },
+  "InviteTokenPage": {
+    "invalidTitle": "無効または期限切れの招待です",
+    "invalidDescription": "管理者に新しい招待リンクをリクエストしてください。",
+    "acceptTitle": "招待を承認 · アカウント作成"
+  },
+  "KeysIssueKeyForm": {
+    "tokenIssued": "新しいトークンを発行しました — 今すぐコピーしてください。この画面を離れると再表示できません。",
+    "hideToken": "トークンを隠す",
+    "close": "閉じる",
+    "copied": "コピー済み ✓",
+    "copy": "コピー",
+    "namePlaceholder": "キー名（例: ingest-bot）",
+    "scopeWiki": "対象ウィキ",
+    "allWikis": "すべてのウィキ",
+    "maxRole": "上限ロール",
+    "noRoleLimit": "権限制限なし",
+    "role": {
+      "viewer": "閲覧のみ",
+      "editor": "編集"
+    },
+    "expiry": "有効期限",
+    "noExpiry": "無期限",
+    "daysOption": "{days}日",
+    "issuing": "発行中…",
+    "issue": "発行"
+  },
+  "KeysPage": {
+    "backToWikis": "マイウィキ",
+    "title": "APIキー",
+    "description": "外部スキルがコンテンツAPIを呼び出す際に使うBearerトークンです。",
+    "issuedKeys": "発行済みキー",
+    "empty": "まだありません。",
+    "wikiLabel": "ウィキ: {title}",
+    "allWikis": "すべてのウィキ",
+    "noRoleLimit": "権限制限なし",
+    "role": {
+      "viewer": "閲覧のみ",
+      "editor": "編集"
+    },
+    "expired": "期限切れ",
+    "expiresAt": "有効期限 {date}",
+    "noExpiry": "無期限",
+    "lastUsed": "最終使用 {date}",
+    "neverUsed": "未使用"
+  },
+  "KeysRevokeButton": {
+    "revoke": "破棄"
+  },
+  "Kinds": {
+    "note": "ソースノート",
+    "concept": "概念",
+    "entity": "エンティティ",
+    "meta": "メタ",
+    "conceptOption": "概念 — アイデア・パターン・理論・ドキュメント",
+    "entityOption": "エンティティ — 人物・組織・ツール・製品"
+  },
+  "LoginLoginForm": {
+    "passwordPlaceholder": "パスワード",
+    "loggingIn": "ログイン中…",
+    "login": "ログイン"
+  },
+  "LoginPage": {
+    "title": "jimi-wiki にログイン",
+    "subtitle": "メールアドレスとパスワードでログインしてください。"
+  },
+  "Modal": {
+    "close": "閉じる"
+  },
+  "PageNav": {
+    "prev": "← 前へ",
+    "next": "次へ →"
+  },
+  "PublicWikiView": {
+    "readOnly": "読み取り専用",
+    "emptyPage": "空のページです。",
+    "emptyTitle": "公開されたページがありません",
+    "emptyBody": "読み取り専用の共有ウィキにページが追加されると、ここで閲覧できます。"
+  },
+  "ReadingPane": {
+    "edit": "編集",
+    "derivedHeading": "このソースから派生したドキュメント",
+    "derivedEmpty": "このソースから派生したドキュメントはまだありません。"
+  },
+  "ReadingProvenanceCard": {
+    "sectionLabel": "原文 (Source)",
+    "viewStoredSource": "保存した原文を表示",
+    "originalSite": "元のサイト"
+  },
+  "ReadingRelatedPanel": {
+    "title": "関連ページ",
+    "empty": "このページにリンクされたページはありません。",
+    "outlinks": "このページが参照",
+    "backlinks": "このページを参照"
+  },
+  "ReadingSourcesPanel": {
+    "heading": "出典・原文"
+  },
+  "SetupPage": {
+    "title": "初期管理者セットアップ",
+    "subtitle": "このインスタンスの最初の管理者アカウントを作成します。"
+  },
+  "SetupSetupForm": {
+    "namePlaceholder": "名前（任意）",
+    "passwordPlaceholder": "パスワード（8文字以上）",
+    "creating": "作成中…",
+    "createAdmin": "管理者を作成"
+  },
+  "Sidebar": {
+    "role": {
+      "editor": "編集者",
+      "viewer": "閲覧者"
+    },
+    "chat": "チャット",
+    "lint": "ヘルスチェック",
+    "settings": "設定",
+    "myWikis": "マイウィキ",
+    "empty": "なし",
+    "sharedWikis": "共有されたウィキ",
+    "newWiki": "+ 新規ウィキ",
+    "apiKeys": "APIキー",
+    "logout": "ログアウト"
+  },
+  "WikiToc": {
+    "toggleToc": "目次の開閉",
+    "myWikis": "マイウィキ",
+    "emptyTitle": "ページなし",
+    "emptyBody": "ページが追加されると、ここに目次が表示されます。",
+    "askAi": "AIに質問",
+    "newPage": "新規ページ",
+    "ingestSource": "ソースを取り込む",
+    "graph": "グラフ",
+    "healthCheck": "ヘルスチェック",
+    "integrationGuide": "連携ガイド",
+    "settings": "設定",
+    "logout": "ログアウト"
+  },
+  "WikisPage": {
+    "apiKeys": "API キー",
+    "integrationGuide": "連携ガイド",
+    "logout": "ログアウト",
+    "myWikis": "マイウィキ",
+    "noOwnedWikis": "まだ作成したウィキがありません。下から作成してください。",
+    "pageCount": "{count} ページ",
+    "sharedWikis": "共有されたウィキ",
+    "authoredBy": "by {name}",
+    "role": {
+      "owner": "オーナー",
+      "editor": "編集者",
+      "viewer": "閲覧者"
+    },
+    "emptyTitle": "まだウィキがありません",
+    "emptyBody": "下から最初のウィキを作成すると、ドキュメントと関連リンクがここに蓄積されます。",
+    "createWiki": "新しいウィキを作成",
+    "titlePlaceholder": "ウィキのタイトル",
+    "kindPersonal": "personal（個人）",
+    "kindProject": "project（プロジェクト）",
+    "create": "作成"
+  },
+  "WikisSlugCategoryPathPage": {
+    "myWikis": "マイウィキ",
+    "emptyCategory": "このカテゴリにはページがありません。"
+  },
+  "WikisSlugChatChatModal": {
+    "askAi": "AIに質問",
+    "askAiWithShortcut": "AIに質問 ({shortcut} · /)",
+    "dialogLabel": "{title} — AIに質問",
+    "basisDescription": "{title}の知識（原文・概念・エンティティ）に基づいて回答します",
+    "fullScreen": "全画面表示 →",
+    "close": "閉じる"
+  },
+  "WikisSlugChatDocModal": {
+    "back": "戻る",
+    "kind": {
+      "source": "原文",
+      "page": "ドキュメント"
+    },
+    "fullPage": "全ページを開く",
+    "close": "閉じる",
+    "loading": "読み込み中…",
+    "loadError": "ドキュメントを読み込めませんでした。",
+    "retry": "再試行",
+    "emptyBody": "本文がありません。",
+    "relatedDocs": "関連ドキュメント"
+  },
+  "WikisSlugChatLoading": {
+    "callingJimi": "Jimiを呼び出し中…"
+  },
+  "WikisSlugChatPage": {
+    "myWikis": "マイウィキ",
+    "askAi": "AIに質問",
+    "subtitle": "{title}の知識（原文・概念・エンティティ）を根拠に回答します。"
+  },
+  "WikisSlugChatWikiChat": {
+    "openEvidence": "根拠 [{n}] を開く",
+    "sourceBadge": "原文",
+    "evidenceTitle": "根拠資料",
+    "evidenceEmptyTitle": "根拠を待機中",
+    "evidenceEmptyBody": "質問すると、回答の根拠となる文書がここに表示されます。",
+    "otherDocs": "併せて検索された文書 {count} 件（回答には引用されていません）",
+    "emptyTitle": "このwikiについて質問してください",
+    "emptyBody": "保存された内容を根拠に回答し、根拠文書を回答と一緒に表示します。",
+    "searching": "検索中…",
+    "error": "エラー: {message}",
+    "retry": "再試行",
+    "close": "閉じる",
+    "inputPlaceholder": "wikiに質問…  （Enterで送信・Shift+Enterで改行）",
+    "stop": "停止",
+    "send": "送信"
+  },
+  "WikisSlugGraphPage": {
+    "title": "グラフ",
+    "emptyTitle": "グラフにするページがありません",
+    "emptyBody": "ページを追加すると、ドキュメント間のリンクや概念のつながりがここに表示されます。"
+  },
+  "WikisSlugHomeActions": {
+    "ingestTitle": "ソースの取り込み (Ingest)",
+    "ingestDesc": "URLやテキストを渡すとLLMが読み込み、ノートやコンセプトページに整理します。",
+    "ingestOpen": "取り込みを開く",
+    "newPageTitle": "新規ページ（手動）",
+    "newPageDesc": "タイトル・種類・カテゴリを決めて空のページを作り、すぐに編集します。",
+    "newPageCreate": "新規ページを作成 →"
+  },
+  "WikisSlugIngestPanel": {
+    "submitPending": "ジョブを登録中…",
+    "submit": "取り込み",
+    "emptyTitle": "ソースの取り込み (Ingest)",
+    "emptyBody": "Webリンク（本文のみ抽出）・YouTube（字幕）・テキストを渡すと、LLMが読み取ってノートや概念ページに整理します。",
+    "urlPlaceholder": "https://…  (Web記事またはYouTubeリンク)",
+    "textPlaceholder": "またはテキスト／動画の字幕を直接貼り付け",
+    "titlePlaceholder": "タイトル（任意）"
+  },
+  "WikisSlugJobsIndicator": {
+    "type": {
+      "ingest": "ソース取り込み",
+      "query": "質問",
+      "lint": "健康チェック"
+    },
+    "secondsElapsed": "{sec}秒",
+    "minutesElapsed": "{min}分{sec}秒",
+    "title": "エージェント処理",
+    "close": "閉じる",
+    "empty": "最近の処理はありません。",
+    "running": "実行中",
+    "done": "完了",
+    "failed": "失敗",
+    "pagesTouched": "{count}ページ",
+    "activeCount": "{count}件を実行中",
+    "allDone": "処理完了"
+  },
+  "WikisSlugLintPage": {
+    "empty": "なし",
+    "missingPage": "存在しないページ",
+    "editorOnly": "ヘルスチェックはeditor以上のみ実行できます。",
+    "title": "ヘルスチェック（Lint）",
+    "pageCountLabel": "全{count}ページ",
+    "healthScore": "ヘルススコア",
+    "trendLabel": "推移（直近{count}回lint）",
+    "machineCheck": "機械チェック",
+    "deepCheckButton": "+ LLM深層チェック",
+    "brokenLinks": "切れたリンク",
+    "orphanPages": "孤立ページ（受けリンクなし）",
+    "noOutLinks": "発リンクのないページ",
+    "untreatedSources": "ソースノートのない原文",
+    "sourceDupTitle": "原文と重複している可能性のあるページ",
+    "sourceDupDesc": "本文が原文とほぼ同じページです。検索・AI回答で同じ内容が根拠として重複表示されるため、要約に書き直すか削除を検討してください。",
+    "approxSource": "≈ 原文",
+    "junkNotesTitle": "ジャンクノート（出典なし）",
+    "junkNotesDesc": "原文（Source）に紐づいていないノートです（provenanceなし）。空・短いテストの残骸なら削除し、内容があれば原文の再接続（再-ingest）を検討してください。",
+    "delete": "削除",
+    "linkSuggestTitle": "リンク提案（孤立ページ）",
+    "linkSuggestPrompt": "孤立した派生ページにリンクする関連ページを埋め込み類似度で探します（コスト発生）。",
+    "calculate": "計算",
+    "noIsolatedPages": "孤立した派生ページはありません",
+    "linkSuggestDesc": "受けリンクも発リンクもない派生ページです。「適用」すると不足している方向に合わせて「## 関連文書」に`[[リンク]]`を追加します（アウトバウンド不足→このページに、インバウンド不足→候補ページに）。",
+    "noInbound": "インバウンドなし",
+    "noOutbound": "アウトバウンドなし",
+    "apply": "適用",
+    "categoryHealth": "カテゴリの健全性",
+    "nearDupTitle": "重複の疑いのあるペア",
+    "orphanCatsTitle": "孤立カテゴリ（ページなし）",
+    "retire": "廃止",
+    "uncategorizedTitle": "未分類の派生ページ",
+    "assign": "指定",
+    "deepSparseTitle": "深すぎる・疎すぎるカテゴリ",
+    "depthPages": "{depth}階層 · {count}ページ",
+    "flatten": "平坦化",
+    "deepCheckTitle": "LLM深層チェック"
+  },
+  "WikisSlugNewNewPageForm": {
+    "submitting": "作成中…",
+    "create": "作成",
+    "categoryLabel": "カテゴリ",
+    "categoryLabelHint": "（任意 · サイドバーのフォルダ）",
+    "categoryPlaceholder": "空欄で「未分類」· 入力すると既存カテゴリを候補表示",
+    "createCategory": "＋ 新しいカテゴリを作成: {slug}",
+    "reuseHint": "既存カテゴリの再利用を推奨します。保存時に表記が自動で正規化されます。",
+    "kindHint": {
+      "personal": "個人ナレッジウィキ — 概念やエンティティを自由に整理できます。",
+      "project": "プロジェクトウィキ — 議事録・決定事項・仕様はカテゴリでまとめると見つけやすくなります。",
+      "channel": "公開チャンネル — 他の人が閲覧します。タイトルと分類を明確に。"
+    },
+    "titleLabel": "タイトル",
+    "titlePlaceholder": "ページタイトル",
+    "kindLabel": "種類",
+    "ingestHint": "原文を整理したソースノートは<link>ソース編入（Ingest）</link>で、AI回答の保存はチャットの「ウィキに保存」で作成されます。",
+    "bodyLabel": "内容",
+    "bodyLabelHint": "（任意 · 後から編集可能）",
+    "bodyPlaceholder": "マークダウンで記述。ウィキリンクは [[ページスラッグ]] または [[スラッグ|表示名]]",
+    "cancel": "キャンセル"
+  },
+  "WikisSlugNewPage": {
+    "myWikis": "マイウィキ",
+    "newPage": "新規ページ",
+    "description": "自分で作成するページです。"
+  },
+  "WikisSlugPage": {
+    "emptyTitle": "ページはまだありません",
+    "emptyBodyWrite": "下からソースを収集するか新しいページを作成すると、ドキュメントと概念のつながりがここに整理されます。",
+    "emptyBodyRead": "ページが追加されると、読めるドキュメントと概念のつながりがここに表示されます。",
+    "recentActivity": "最近のアクティビティ"
+  },
+  "WikisSlugPageSlugEditPage": {
+    "backTo": "{title}に戻る",
+    "bodyPlaceholder": "Markdownで記述。ウィキリンクは [[ページスラッグ]] または [[スラッグ|表示名]]",
+    "save": "保存",
+    "cancel": "キャンセル"
+  },
+  "WikisSlugPageSlugPage": {
+    "connectionGraph": "接続グラフ",
+    "myWikis": "マイウィキ",
+    "emptyEditable": "空のページです。「編集」を押して内容を入力してください。",
+    "empty": "空のページです。"
+  },
+  "WikisSlugReindexForm": {
+    "reindexing": "再インデックス中…",
+    "reindex": "セマンティック再インデックス",
+    "hint": "手動保存したページはFTSのみインデックスされます。このボタンで埋め込みを作成し、セマンティック検索を有効にしてください。"
+  },
+  "WikisSlugRunStatusBadge": {
+    "prefix": "ソース取り込み:",
+    "inProgressHint": "— LLMが原文を読み込み、ページに整理しています…",
+    "pagesTouched": "{count}件のページを作成・更新しました",
+    "status": {
+      "pending": "待機中",
+      "running": "処理中",
+      "done": "完了",
+      "error": "失敗"
+    }
+  },
+  "WikisSlugSettingsPage": {
+    "ownerOnly": "このウィキの設定はオーナーのみ閲覧できます。(現在のロール: {role})",
+    "title": "ウィキ設定",
+    "generalHeading": "一般",
+    "titleLabel": "タイトル",
+    "descriptionLabel": "説明",
+    "visibilityLabel": "公開範囲",
+    "visibilityPrivate": "非公開（メンバーのみ）",
+    "visibilityUnlisted": "限定公開（リンク共有）",
+    "save": "保存",
+    "membersHeading": "メンバー",
+    "changeRole": "変更",
+    "remove": "削除",
+    "invitePlaceholder": "招待するメールアドレス",
+    "invite": "招待",
+    "shareLinksHeading": "共有リンク（読み取り専用）",
+    "noShareLinks": "まだありません。",
+    "revoke": "無効化",
+    "createShareLink": "+ 共有リンクを作成",
+    "dangerZone": "危険な操作",
+    "deleteWiki": "このウィキを削除（取り消せません）"
+  },
+  "WikisSlugSourcesSourceSlugDeleteSourceButton": {
+    "confirmIrreversible": "この原文を削除すると元に戻せません。",
+    "confirmDeletedNotes": "· 一緒に削除されるノート: {titles}",
+    "confirmOrphanedKnowledge": "· 残るものの、この原文の出典を失う整理済みの知識: {titles}",
+    "confirmContinue": "続行しますか？",
+    "none": "なし",
+    "deleteButton": "原文を削除"
+  },
+  "WikisSlugSourcesSourceSlugPage": {
+    "source": "原文",
+    "readOnlyBadge": "原文 · 読み取り専用",
+    "emptyBody": "原文の本文がありません。"
+  },
+  "WikisSlugWikiActions": {
+    "ingestTitle": "ソースを取り込む",
+    "newPageTitle": "新規ページ"
+  }
+}

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -62,6 +63,7 @@ function MarkdownMessage({
   sources: ChatSource[];
   onOpenCite: (n: number) => void;
 }) {
+  const t = useTranslations("WikisSlugChatWikiChat");
   const linkable = new Set(sources.map((s) => s.n));
   // streamdown은 기본으로 rehype-sanitize + harden(위험 URL/프로토콜 차단) 내장 → 별도 prefix prop 불필요.
   return (
@@ -80,7 +82,7 @@ function MarkdownMessage({
                   type="button"
                   disabled={!ok}
                   onClick={() => onOpenCite(n)}
-                  aria-label={`근거 [${n}] 열기`}
+                  aria-label={t("openEvidence", { n })}
                   className="mx-px inline-flex items-center rounded bg-blue-50 px-1 align-baseline text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   {n}
@@ -122,6 +124,7 @@ function SourceCards({ sources, cited, onOpen }: { sources: ChatSource[]; cited:
 }
 
 function EvidenceItem({ s, onOpen }: { s: ChatSource; onOpen: (d: EvidenceDoc) => void }) {
+  const t = useTranslations("WikisSlugChatWikiChat");
   return (
     <li>
       <button
@@ -130,7 +133,7 @@ function EvidenceItem({ s, onOpen }: { s: ChatSource; onOpen: (d: EvidenceDoc) =
       >
         <span className="text-stone-400">[{s.n}]</span>{" "}
         <span className="font-medium text-stone-700">{s.title}</span>
-        {s.kind === "source" && <span className="ml-1 rounded bg-stone-100 px-1 text-[10px] text-stone-500">원문</span>}
+        {s.kind === "source" && <span className="ml-1 rounded bg-stone-100 px-1 text-[10px] text-stone-500">{t("sourceBadge")}</span>}
         {s.heading ? <span className="block pl-4 text-stone-400">{s.heading}</span> : null}
       </button>
     </li>
@@ -139,16 +142,17 @@ function EvidenceItem({ s, onOpen }: { s: ChatSource; onOpen: (d: EvidenceDoc) =
 
 // 데스크톱 우측 근거 패널: 답변에 실제 인용된 근거를 우선 표시, 미인용 검색 결과는 접어둔다. 클릭 시 모달.
 function EvidencePanel({ sources, cited, onOpen }: { sources: ChatSource[]; cited: Set<number>; onOpen: (d: EvidenceDoc) => void }) {
+  const t = useTranslations("WikisSlugChatWikiChat");
   const { cited: citedSources, rest } = splitByCited(sources, cited);
   return (
     <aside className="hidden lg:block w-72 shrink-0">
       <div className="rounded-lg border bg-white p-3">
-        <h2 className="mb-2 text-sm font-semibold text-stone-600">근거 자료</h2>
+        <h2 className="mb-2 text-sm font-semibold text-stone-600">{t("evidenceTitle")}</h2>
         {sources.length === 0 ? (
           <EmptyState
             asset="chat-ready"
-            title="근거 대기 중"
-            body="질문하면 답변의 근거 문서가 여기 표시됩니다."
+            title={t("evidenceEmptyTitle")}
+            body={t("evidenceEmptyBody")}
             compact
           />
         ) : (
@@ -161,7 +165,7 @@ function EvidencePanel({ sources, cited, onOpen }: { sources: ChatSource[]; cite
             {rest.length > 0 && (
               <details className="mt-2">
                 <summary className="cursor-pointer text-xs text-stone-400 hover:text-stone-600">
-                  함께 검색된 문서 {rest.length}건 (답변에 인용되지 않음)
+                  {t("otherDocs", { count: rest.length })}
                 </summary>
                 <ul className="mt-1.5 space-y-1.5">
                   {rest.map((s) => (
@@ -178,6 +182,7 @@ function EvidencePanel({ sources, cited, onOpen }: { sources: ChatSource[]; cite
 }
 
 export function WikiChat({ slug }: { slug: string }) {
+  const t = useTranslations("WikisSlugChatWikiChat");
   const { messages, sendMessage, status, stop, regenerate, error, clearError } = useChat<WikiUIMessage>({
     transport: new DefaultChatTransport({ api: `/api/wikis/${encodeURIComponent(slug)}/chat` }),
   });
@@ -209,8 +214,8 @@ export function WikiChat({ slug }: { slug: string }) {
           <div className="flex min-h-full items-center justify-center">
             <EmptyState
               asset="chat-ready"
-              title="이 위키에 대해 물어보세요"
-              body="저장된 내용을 근거로 답하고, 근거 문서는 답변과 함께 표시됩니다."
+              title={t("emptyTitle")}
+              body={t("emptyBody")}
             />
           </div>
         )}
@@ -239,7 +244,7 @@ export function WikiChat({ slug }: { slug: string }) {
                     }}
                   />
                 ) : busy ? (
-                  <span className="text-gray-400 text-sm">검색 중…</span>
+                  <span className="text-gray-400 text-sm">{t("searching")}</span>
                 ) : null}
 
                 {!isUser && <SourceCards sources={sources} cited={citedNumbers(text)} onOpen={setActiveDoc} />}
@@ -252,9 +257,9 @@ export function WikiChat({ slug }: { slug: string }) {
 
       {status === "error" && error && (
         <div role="alert" className="border-t bg-red-50 px-4 py-2 text-sm text-red-700 flex items-center gap-3">
-          <span className="flex-1">오류: {error.message}</span>
-          <button onClick={() => regenerate()} className="border rounded px-2 py-0.5 hover:bg-red-100">재시도</button>
-          <button onClick={() => clearError()} className="hover:underline">닫기</button>
+          <span className="flex-1">{t("error", { message: error.message })}</span>
+          <button onClick={() => regenerate()} className="border rounded px-2 py-0.5 hover:bg-red-100">{t("retry")}</button>
+          <button onClick={() => clearError()} className="hover:underline">{t("close")}</button>
         </div>
       )}
 
@@ -275,7 +280,7 @@ export function WikiChat({ slug }: { slug: string }) {
             }
           }}
           rows={1}
-          placeholder="위키에 질문…  (Enter 전송 · Shift+Enter 줄바꿈)"
+          placeholder={t("inputPlaceholder")}
           className="flex-1 resize-none border rounded-lg px-3 py-2 max-h-32"
         />
         {busy ? (
@@ -284,11 +289,11 @@ export function WikiChat({ slug }: { slug: string }) {
             onClick={() => stop()}
             className="bg-gray-700 text-white rounded-lg px-5 py-2 shrink-0"
           >
-            중지
+            {t("stop")}
           </button>
         ) : (
           <button type="submit" className="bg-stone-900 text-white rounded-lg px-5 py-2 shrink-0">
-            보내기
+            {t("send")}
           </button>
         )}
       </form>

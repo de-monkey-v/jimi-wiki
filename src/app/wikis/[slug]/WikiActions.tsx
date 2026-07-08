@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Modal } from "@/components/Modal";
 import { IngestPanel } from "./IngestPanel";
 import { NewPageForm, type CategoryOption } from "./new/NewPageForm";
@@ -28,6 +29,7 @@ export function WikiActionsProvider({
   canWrite: boolean;
   children: React.ReactNode;
 }) {
+  const t = useTranslations("WikisSlugWikiActions");
   const [ingestOpen, setIngestOpen] = useState(false);
   const [newPageOpen, setNewPageOpen] = useState(false);
   const [cats, setCats] = useState<CategoryOption[]>([]);
@@ -54,10 +56,10 @@ export function WikiActionsProvider({
       {children}
       {canWrite && (
         <>
-          <Modal open={ingestOpen} onClose={() => setIngestOpen(false)} title="소스 편입">
+          <Modal open={ingestOpen} onClose={() => setIngestOpen(false)} title={t("ingestTitle")}>
             <IngestPanel wikiSlug={slug} />
           </Modal>
-          <Modal open={newPageOpen} onClose={() => setNewPageOpen(false)} title="새 페이지">
+          <Modal open={newPageOpen} onClose={() => setNewPageOpen(false)} title={t("newPageTitle")}>
             <NewPageForm wikiSlug={slug} wikiKind={wikiKind} categories={cats} />
           </Modal>
         </>

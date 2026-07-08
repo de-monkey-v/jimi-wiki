@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { getPage, getBacklinks, getOutlinks, existingSlugSet, getWikiToc, getPrevNext, getPageProvenance, getPageSources } from "@/lib/wiki";
 import { renderMarkdown } from "@/lib/markdown";
 import type { TocEntry } from "@/lib/kinds";
@@ -43,10 +44,11 @@ export async function PublicWikiView({
   basePath: string;
   pageSlug?: string;
 }) {
+  const t = await getTranslations("PublicWikiView");
   const crumb = (
     <div className="mb-1 text-sm text-stone-400">
       <Link href={basePath} className="hover:underline">{title}</Link>
-      <span className="ml-2 rounded bg-stone-100 px-1.5 py-0.5 text-xs">읽기 전용</span>
+      <span className="ml-2 rounded bg-stone-100 px-1.5 py-0.5 text-xs">{t("readOnly")}</span>
     </div>
   );
 
@@ -80,7 +82,7 @@ export async function PublicWikiView({
         title={page.title}
         html={html}
         isEmpty={page.body.trim() === ""}
-        emptyText="빈 페이지입니다."
+        emptyText={t("emptyPage")}
         isNote={isNote}
         provenance={provenance}
         sources={sources}
@@ -103,8 +105,8 @@ export async function PublicWikiView({
         <div className="rounded-lg border border-stone-200 bg-white p-6">
           <EmptyState
             asset="read-only-share"
-            title="공개된 페이지가 없습니다"
-            body="읽기 전용 공유 위키에 페이지가 추가되면 이곳에서 열람할 수 있습니다."
+            title={t("emptyTitle")}
+            body={t("emptyBody")}
           />
         </div>
       ) : (

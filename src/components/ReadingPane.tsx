@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { PageNav } from "./PageNav";
 import { ProvenanceCard } from "./reading/ProvenanceCard";
@@ -46,6 +47,7 @@ export function ReadingPane({
   editHref?: string;
   localGraph?: ReactNode;
 }) {
+  const t = useTranslations("ReadingPane");
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       {crumb}
@@ -53,7 +55,7 @@ export function ReadingPane({
         <h1 className="text-2xl font-bold">{title}</h1>
         {editHref && (
           <Link href={editHref} className="rounded border px-3 py-1 text-sm hover:bg-stone-50">
-            편집
+            {t("edit")}
           </Link>
         )}
       </div>
@@ -77,8 +79,8 @@ export function ReadingPane({
       {/* note: 백링크만("이 소스에서 파생된 문서"). 파생 페이지: 아웃링크+백링크 관련 문서 패널 */}
       {isNote ? (
         <BacklinksPanel
-          heading="이 소스에서 파생된 문서"
-          emptyText="아직 이 소스에서 파생된 문서가 없습니다."
+          heading={t("derivedHeading")}
+          emptyText={t("derivedEmpty")}
           items={backlinks}
           hrefFor={hrefFor}
         />

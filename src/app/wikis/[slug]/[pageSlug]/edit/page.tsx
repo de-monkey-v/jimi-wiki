@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getPage } from "@/lib/wiki";
 import { savePageAction } from "../../../actions";
-import { MANUAL_KIND_OPTIONS, MANUAL_KINDS, KIND_LABEL } from "@/lib/kinds";
+import { MANUAL_KIND_OPTIONS, MANUAL_KINDS } from "@/lib/kinds";
 
 export default async function EditPage({
   params,
 }: {
   params: Promise<{ slug: string; pageSlug: string }>;
 }) {
+  const t = await getTranslations("WikisSlugPageSlugEditPage");
+  const tk = await getTranslations("Kinds");
   const { slug: rawSlug, pageSlug: rawPageSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
   const pageSlug = decodeURIComponent(rawPageSlug);
@@ -23,7 +26,7 @@ export default async function EditPage({
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-6 text-sm text-gray-400">
-        <Link href={`/wikis/${slug}/${pageSlug}`} className="hover:underline">← {page.title}로 돌아가기</Link>
+        <Link href={`/wikis/${slug}/${pageSlug}`} className="hover:underline">← {t("backTo", { title: page.title })}</Link>
       </div>
 
       <form action={savePageAction} className="space-y-4">
@@ -39,11 +42,11 @@ export default async function EditPage({
           />
           <select name="kind" defaultValue={page.kind} className="border rounded px-3 py-2">
             {MANUAL_KIND_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>{tk(`${o.value}Option`)}</option>
             ))}
             {/* 시스템 kind(note/meta)는 새로 지정할 수 없지만, 이미 그 kind인 페이지는 값을 보존한다 */}
             {!MANUAL_KINDS.includes(page.kind) && (
-              <option value={page.kind}>{KIND_LABEL[page.kind]}</option>
+              <option value={page.kind}>{tk(page.kind)}</option>
             )}
           </select>
         </div>
@@ -52,13 +55,13 @@ export default async function EditPage({
           name="body"
           defaultValue={page.body}
           rows={22}
-          placeholder="마크다운으로 작성. 위키링크는 [[페이지-슬러그]] 또는 [[슬러그|표시명]]"
+          placeholder={t("bodyPlaceholder")}
           className="w-full border rounded px-3 py-2 font-mono text-sm"
         />
 
         <div className="flex gap-2">
-          <button type="submit" className="bg-stone-900 text-white rounded px-4 py-2">저장</button>
-          <Link href={`/wikis/${slug}/${pageSlug}`} className="border rounded px-4 py-2 hover:bg-gray-50">취소</Link>
+          <button type="submit" className="bg-stone-900 text-white rounded px-4 py-2">{t("save")}</button>
+          <Link href={`/wikis/${slug}/${pageSlug}`} className="border rounded px-4 py-2 hover:bg-gray-50">{t("cancel")}</Link>
         </div>
       </form>
     </main>

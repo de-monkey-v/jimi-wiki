@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// 인자 없이 호출하면 src/i18n/request.ts 를 자동 탐지한다.
+const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
   // Prisma(및 런타임 유틸)를 서버 번들에서 external 처리 — node_modules에서 직접 로드
@@ -15,4 +19,4 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["oss-wsl", "*.oss-wsl", "localhost", "127.0.0.1"],
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

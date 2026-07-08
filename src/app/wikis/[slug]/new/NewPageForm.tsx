@@ -1,6 +1,7 @@
 "use client";
 import { useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { createPageAction } from "../../actions";
 import { MANUAL_KIND_OPTIONS } from "@/lib/kinds";
@@ -8,25 +9,23 @@ import { MANUAL_KIND_OPTIONS } from "@/lib/kinds";
 type WikiKind = "personal" | "project" | "channel";
 export type CategoryOption = { slug: string; label: string; itemCount: number };
 
-// 위키 종류별 폼 안내·빠른 카테고리. 프로젝트 위키의 문서 니즈는 kind가 아니라 category로 흡수한다.
-const KIND_GUIDE: Record<WikiKind, { hint: string; quickCats: string[] }> = {
-  personal: { hint: "개인 지식 위키 — 개념과 개체를 자유롭게 정리하세요.", quickCats: [] },
-  project: {
-    hint: "프로젝트 위키 — 회의록·결정·스펙은 카테고리로 묶으면 찾기 쉽습니다.",
-    quickCats: ["decisions", "meetings", "specs"],
-  },
-  channel: { hint: "공개 채널 — 다른 사람이 둘러봅니다. 제목과 분류를 명확히.", quickCats: [] },
+// 위키 종류별 빠른 카테고리. 프로젝트 위키의 문서 니즈는 kind가 아니라 category로 흡수한다.
+const KIND_QUICK_CATS: Record<WikiKind, string[]> = {
+  personal: [],
+  project: ["decisions", "meetings", "specs"],
+  channel: [],
 };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
+  const t = useTranslations("WikisSlugNewNewPageForm");
   return (
     <button
       type="submit"
       disabled={pending}
       className="rounded bg-stone-900 px-5 py-2 text-white hover:bg-stone-700 disabled:opacity-50"
     >
-      {pending ? "만드는 중…" : "만들기"}
+      {pending ? t("submitting") : t("create")}
     </button>
   );
 }
@@ -36,6 +35,7 @@ function SubmitButton() {
  * WAI-ARIA combobox: DOM 포커스는 input에 고정, 활성 옵션은 aria-activedescendant로 지시.
  */
 function CategoryPicker({ categories, quickCats }: { categories: CategoryOption[]; quickCats: string[] }) {
+  const t = useTranslations("WikisSlugNewNewPageForm");
   const [value, setValue] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -85,7 +85,7 @@ function CategoryPicker({ categories, quickCats }: { categories: CategoryOption[
   return (
     <div ref={boxRef} className="relative">
       <label htmlFor="new-category" className="mb-1 block text-sm font-medium text-stone-600">
-        카테고리 <span className="font-normal text-stone-400">(선택 · 사이드바 폴더)</span>
+        {t("categoryLabel")} <span className="font-normal text-stone-400">{t("categoryLabelHint")}</span>
       </label>
       {/* 서버 액션에 실제로 전달되는 값 */}
       <input type="hidden" name="category" value={value} />
@@ -109,7 +109,7 @@ function CategoryPicker({ categories, quickCats }: { categories: CategoryOption[
           if (!boxRef.current?.contains(e.relatedTarget as Node)) setOpen(false);
         }}
         onKeyDown={onKeyDown}
-        placeholder="비워두면 미분류 · 입력하면 기존 카테고리를 추천"
+        placeholder={t("categoryPlaceholder")}
         className="w-full rounded border px-3 py-2"
       />
       {quickCats.length > 0 && (
@@ -153,13 +153,13 @@ function CategoryPicker({ categories, quickCats }: { categories: CategoryOption[
                   {o.itemCount ? <span className="text-xs text-stone-400">{o.itemCount}</span> : null}
                 </>
               ) : (
-                <span className="text-blue-700">＋ 새 카테고리 만들기: {o.slug}</span>
+                <span className="text-blue-700">{t("createCategory", { slug: o.slug })}</span>
               )}
             </li>
           ))}
         </ul>
       )}
-      <p className="mt-1 text-xs text-stone-400">기존 카테고리 재사용을 권장합니다. 저장 시 표기가 자동 정규화됩니다.</p>
+      <p className="mt-1 text-xs text-stone-400">{t("reuseHint")}</p>
     </div>
   );
 }
@@ -174,58 +174,64 @@ export function NewPageForm({
   wikiKind: WikiKind;
   categories: CategoryOption[];
 }) {
-  const guide = KIND_GUIDE[wikiKind];
+  const t = useTranslations("WikisSlugNewNewPageForm");
+  const tk = useTranslations("Kinds");
+  const quickCats = KIND_QUICK_CATS[wikiKind];
   return (
     <form action={createPageAction} className="space-y-4">
       <input type="hidden" name="wikiSlug" value={wikiSlug} />
 
-      <p className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-500">{guide.hint}</p>
+      <p className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-500">
+        {t(`kindHint.${wikiKind}`)}
+      </p>
 
       <div>
         <label htmlFor="new-title" className="mb-1 block text-sm font-medium text-stone-600">
-          제목
+          {t("titleLabel")}
         </label>
         <input
           id="new-title"
           name="title"
           required
           autoFocus
-          placeholder="페이지 제목"
+          placeholder={t("titlePlaceholder")}
           className="w-full rounded border px-3 py-2"
         />
       </div>
 
       <div>
         <label htmlFor="new-kind" className="mb-1 block text-sm font-medium text-stone-600">
-          종류
+          {t("kindLabel")}
         </label>
         <select id="new-kind" name="kind" defaultValue="concept" className="w-full rounded border px-3 py-2">
           {MANUAL_KIND_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
-              {o.label}
+              {tk(`${o.value}Option`)}
             </option>
           ))}
         </select>
         <p className="mt-1 text-xs text-stone-400">
-          원문을 정리한 소스 노트는{" "}
-          <Link href={`/wikis/${wikiSlug}`} className="text-blue-600 hover:underline">
-            소스 편입(Ingest)
-          </Link>
-          으로, AI 답변 저장은 채팅의 &lsquo;위키에 저장&rsquo;으로 만들어집니다.
+          {t.rich("ingestHint", {
+            link: (chunks) => (
+              <Link href={`/wikis/${wikiSlug}`} className="text-blue-600 hover:underline">
+                {chunks}
+              </Link>
+            ),
+          })}
         </p>
       </div>
 
-      <CategoryPicker categories={categories} quickCats={guide.quickCats} />
+      <CategoryPicker categories={categories} quickCats={quickCats} />
 
       <div>
         <label htmlFor="new-body" className="mb-1 block text-sm font-medium text-stone-600">
-          내용 <span className="font-normal text-stone-400">(선택 · 나중에 편집 가능)</span>
+          {t("bodyLabel")} <span className="font-normal text-stone-400">{t("bodyLabelHint")}</span>
         </label>
         <textarea
           id="new-body"
           name="body"
           rows={16}
-          placeholder="마크다운으로 작성. 위키링크는 [[페이지-슬러그]] 또는 [[슬러그|표시명]]"
+          placeholder={t("bodyPlaceholder")}
           className="w-full rounded border px-3 py-2 font-mono text-sm"
         />
       </div>
@@ -233,7 +239,7 @@ export function NewPageForm({
       <div className="flex items-center gap-3 pt-2">
         <SubmitButton />
         <Link href={`/wikis/${wikiSlug}`} className="text-sm text-gray-500 hover:underline">
-          취소
+          {t("cancel")}
         </Link>
       </div>
     </form>

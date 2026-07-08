@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, us
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { WikiChat } from "./WikiChat";
 
 const ChatModalCtx = createContext<{ open: () => void } | null>(null);
@@ -36,6 +37,7 @@ export function ChatModalProvider({
   title: string;
   children: React.ReactNode;
 }) {
+  const t = useTranslations("WikisSlugChatChatModal");
   const [isOpen, setIsOpen] = useState(false);
   const [everOpened, setEverOpened] = useState(false); // 첫 오픈 후 계속 마운트 → useChat 대화 보존
   const panelRef = useRef<HTMLDivElement>(null);
@@ -117,8 +119,8 @@ export function ChatModalProvider({
             e.preventDefault();
             open();
           }}
-          aria-label="AI에게 질문"
-          title={`AI에게 질문 (${shortcut} · /)`}
+          aria-label={t("askAi")}
+          title={t("askAiWithShortcut", { shortcut })}
           className="fixed bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-stone-900 text-white shadow-lg transition-transform hover:scale-105 hover:bg-stone-700"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
@@ -136,14 +138,14 @@ export function ChatModalProvider({
               ref={panelRef}
               role="dialog"
               aria-modal="true"
-              aria-label={`${title} — AI에게 질문`}
+              aria-label={t("dialogLabel", { title })}
               className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-xl bg-stone-50 shadow-2xl"
             >
               <div className="flex items-center justify-between gap-3 rounded-t-xl border-b border-stone-200 bg-white px-5 py-3">
                 <div className="min-w-0">
-                  <h2 className="truncate text-base font-semibold">AI에게 질문</h2>
+                  <h2 className="truncate text-base font-semibold">{t("askAi")}</h2>
                   <p className="truncate text-xs text-stone-400">
-                    {title}의 지식(원문·개념·개체)을 근거로 답합니다
+                    {t("basisDescription", { title })}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
@@ -155,11 +157,11 @@ export function ChatModalProvider({
                     onClick={close}
                     className="text-xs text-blue-600 hover:underline"
                   >
-                    전체 화면으로 →
+                    {t("fullScreen")}
                   </Link>
                   <button
                     onClick={close}
-                    aria-label="닫기"
+                    aria-label={t("close")}
                     className="text-lg leading-none text-stone-400 hover:text-stone-700"
                   >
                     ✕

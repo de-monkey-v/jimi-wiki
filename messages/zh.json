@@ -1,0 +1,535 @@
+{
+  "AdminSettingsModelsForm": {
+    "envDefaultOption": "默认值 (env: {env})",
+    "providerDisabled": " (已禁用 — 无密钥/OAuth)",
+    "customOption": "手动输入…",
+    "customPlaceholder": "模型 id (例如 gpt-5.5)",
+    "testing": "测试中…",
+    "test": "测试",
+    "title": "模型选择",
+    "description": "留空（默认）则沿用 env 设置。保存后无需重启即可生效（其他进程数秒内）。聊天仅支持 Gemini 和 GPT（Claude 可用于 ingest、query、lint）。",
+    "chatLabel": "聊天 (CHAT_MODEL)",
+    "ingestHint": "原文编入与整理。对质量影响很大。",
+    "genLabel": "通用生成 (GEN_MODEL — query、lint)",
+    "save": "保存"
+  },
+  "AdminSettingsOAuthPanel": {
+    "cancelled": "已取消。",
+    "startFailed": "启动失败",
+    "openUrlPrompt": "请打开下方 URL 并输入代码。等待授权中…",
+    "loginComplete": "✓ 已登录",
+    "codeExpired": "代码已过期 — 请重试。",
+    "error": "错误：{message}",
+    "title": "连接 OpenAI（选择方式 + ChatGPT 登录）",
+    "connectionMethod": "连接方式",
+    "transport": {
+      "apikey": "API 密钥",
+      "oauth": "ChatGPT 订阅（OAuth）",
+      "proxy": "代理",
+      "oauthHint": "需要登录"
+    },
+    "optionUnavailable": "无 {hint}",
+    "unavailable": "（不可用）",
+    "currentDescription": "当前：<b>{transport}</b> — 以此方式调用 GPT 模型。即使已配置密钥，也只使用<b>所选方式</b>。",
+    "loggedIn": "已登录",
+    "account": "（账号 {id}…）",
+    "expiresAt": " · 过期 {date}",
+    "notLoggedIn": "未登录 — 若要用个人 ChatGPT 订阅使用 GPT 模型，请登录。",
+    "reLogin": "重新登录",
+    "loginWithChatGPT": "使用 ChatGPT 登录",
+    "cancel": "取消",
+    "logout": "退出登录",
+    "step1": "1)",
+    "openLink": "打开",
+    "step2": "2) 输入代码：",
+    "warning": "⚠️ 仅限个人 self-host — 供本人独自使用个人订阅。请勿作为服务向他人开放（ChatGPT 条款）。"
+  },
+  "AdminSettingsPage": {
+    "appTitle": "应用设置",
+    "usersLink": "用户管理",
+    "providersTitle": "要使用的 Provider（opt-in）",
+    "providersHint": "即使有密钥，<b>也只有在此处启用的 provider</b> 才能选择和使用模型（有密钥 ≠ 自动使用）。请启用你要用的 provider。",
+    "hasKey": "有密钥",
+    "noKey": "无密钥",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "deactivate": "禁用",
+    "activate": "启用",
+    "keyOrOAuthNeeded": "需要密钥/OAuth",
+    "embeddingTitle": "嵌入（只读）",
+    "embeddingWarning": "⚠️ 嵌入模型和维度与数据库 vector 列、HNSW 索引绑定，因此只能通过 env 修改。修改后需要重建全部索引。",
+    "refreshCatalog": "刷新模型列表（models.dev）"
+  },
+  "AdminUsersPage": {
+    "title": "用户管理",
+    "appSettings": "应用设置",
+    "noPassword": "未设置密码",
+    "revokeAdmin": "取消管理员",
+    "grantAdmin": "设为管理员",
+    "newPasswordPlaceholder": "新密码",
+    "reset": "重置",
+    "createUser": "创建用户",
+    "namePlaceholder": "姓名（可选）",
+    "tempPasswordPlaceholder": "临时密码（8位以上）",
+    "create": "创建",
+    "issueInvite": "生成邀请链接",
+    "targetEmailPlaceholder": "目标邮箱（可选）",
+    "ttlDaysLabel": "有效期（天）",
+    "issue": "生成",
+    "unusedInvites": "未使用的邀请",
+    "none": "无",
+    "revoke": "作废"
+  },
+  "Common": {
+    "appName": "jimi-wiki",
+    "noscriptWarning": "JavaScript 未运行 — 弹窗、聊天和文件夹展开将无法使用。请在 Brave Shields（地址栏中的狮子图标）中解除本站点的脚本拦截，或检查浏览器的 JavaScript 设置。"
+  },
+  "DocsPage": {
+    "metaTitle": "集成指南 — jimi-wiki",
+    "metaDescription": "如何在不使用应用内置 AI 的情况下，用外部工具（MCP、Skill、REST）维护此 wiki",
+    "backToWiki": "返回 wiki",
+    "backToMyWikis": "我的 wiki",
+    "title": "集成指南",
+    "intro": "如何<strong>不使用应用内置 AI</strong>、改用外部工具维护此 wiki — 外部智能体（Claude Code、Codex 等）的 MCP 与 Skill，以及 REST API。无论走哪条路径，都遵循相同的内容 API 和分类规则，因此 wiki 保持一致。",
+    "introSlugFilled": "下方示例中的 <code>{slug}</code> 已填入当前 wiki 的 slug。",
+    "introSlugPlaceholder": "请将示例中的 <code>{slug}</code> 替换为目标 wiki 的 slug。",
+    "section1Title": "1. 首先 — 签发 API 密钥",
+    "section2Title": "2. 方法 A — MCP 服务器（推荐）",
+    "section3Title": "3. 方法 B — 维护者 Skill（Claude Code、Codex 等）",
+    "section4Title": "4. 方法 C — 直接调用 REST",
+    "sectionAuthTitle": "认证边界 — 哪些可用 API 密钥完成，哪些不行",
+    "section1": {
+      "auth": "所有外部调用都通过 <code>{header}</code> 请求头进行认证。原始密钥仅在签发时显示一次，请妥善保管。",
+      "li1": "在 <link>API 密钥</link> 页面签发（写操作需 editor 及以上）。",
+      "li2": "可将密钥<strong>限定</strong>到特定 wiki，或设置<strong>上限角色（maxRole）</strong>和<strong>有效期</strong>。有效角色 = min(成员角色, maxRole)。",
+      "li3": "每个账户最多 20 个有效密钥。速率限制：每分钟 60 次／每小时 1000 次（超出时返回 <code>429</code> + Retry-After）。"
+    },
+    "section2": {
+      "intro": "将仓库中的 <code>mcp/server.mjs</code> 注册到 MCP 客户端后，内容 API 即以工具形式暴露。Claude Code 示例：",
+      "toolsLabel": "暴露的工具（共 11 种）："
+    },
+    "section3": {
+      "p1": "仓库中的 <code>skills/wiki-ingest/</code> Skill 包是面向外部维护者的工作流 — 不仅涵盖原文纳入（ingest），还包括分类整理（organize）、机器检查（lint）和查询（query）。它不绑定特定智能体，因此<strong>在支持 MCP 时以工具运行，否则用 REST 执行相同流程</strong>。它从正本复制与内部 ingest 智能体<strong>相同的分类规则</strong>（本体／类别），并在 CI 中强制 byte-parity，因此无论通过 Web UI 还是 Skill 录入，wiki 的分类都保持一致。",
+      "p2": "ingest 流程：① 用 <code>create_source</code> 不可变地保存原文 → ② 用 <code>search</code>／<code>list_pages</code> 检查重复 → ③ 用 <code>kind=note</code> 撰写来源笔记（禁止照搬原文，需摘要）→ ④ 更新受影响的 concept/entity（复用 <code>[[slug]]</code> 链接与 category）→ ⑤ 在最后一次调用中设 <code>embed:true</code> 进行语义索引。",
+      "bundleLabel": "包结构（整个文件夹复制后可放入任意 harness）：",
+      "li1": "<code>SKILL.md</code> — 工作流入口（与 harness 无关）。",
+      "li2": "<code>references/ontology-rules.md</code> — 分类规则正本副本（CI byte-parity 检查）。",
+      "li3": "<code>references/tools.md</code> — 能力 ↔ MCP 工具 ↔ REST 映射 + 认证边界。",
+      "li4": "<code>references/setup.md</code> — API 密钥、MCP 注册、各 harness 的放置（Claude Code、Codex 等）。"
+    },
+    "section4": {
+      "baseUrl": "基础 URL：<code>{url}</code>",
+      "fullRef": "完整参考（所有端点、响应、错误码）见仓库中的 <code>docs/rest-api.md</code>。"
+    },
+    "auth": {
+      "intro": "“认证边界 = 成本边界”。大量消耗内部 AI（Gemini）的路由<strong>仅限 Web UI 的 Cookie 会话</strong>，无法用 API 密钥调用。在外部路径上，请用 primitive 直接撰写。",
+      "card1Title": "可用 API 密钥（Bearer）完成",
+      "card1Body": "页面查询／创建／删除，原文保存／查询，混合检索，本体查询与类别匹配，机器检查 lint，作业状态轮询",
+      "card2Title": "仅限会话（不可用 API 密钥）",
+      "card2Body": "<code>POST /ingest</code>（内部 AI ingest）、<code>/query</code>、<code>/reindex</code>、<code>{lint}</code> — 仅 Web UI"
+    },
+    "footer": "参考文件 — Skill 包：<code>skills/wiki-ingest/</code>（SKILL.md + references/）· MCP：<code>mcp/server.mjs</code> · REST：<code>docs/rest-api.md</code>"
+  },
+  "GraphGraphCanvas": {
+    "searchPlaceholder": "搜索…",
+    "brokenLink": "失效链接",
+    "counts": "{nodes} 个节点 · {edges} 个链接",
+    "nonexistentPage": "尚未创建的页面"
+  },
+  "GraphGraphMount": {
+    "loading": "正在加载图谱…"
+  },
+  "InviteTokenInviteForm": {
+    "passwordPlaceholder": "密码（至少8位）",
+    "submitting": "注册中…",
+    "submit": "注册并开始"
+  },
+  "InviteTokenPage": {
+    "invalidTitle": "邀请无效或已过期",
+    "invalidDescription": "请向管理员申请新的邀请链接。",
+    "acceptTitle": "接受邀请 · 创建账户"
+  },
+  "KeysIssueKeyForm": {
+    "tokenIssued": "已生成新令牌 — 请立即复制。离开此页面后将无法再次查看。",
+    "hideToken": "隐藏令牌",
+    "close": "关闭",
+    "copied": "已复制 ✓",
+    "copy": "复制",
+    "namePlaceholder": "密钥名称（例如 ingest-bot）",
+    "scopeWiki": "作用域 wiki",
+    "allWikis": "全部 wiki",
+    "maxRole": "最高角色",
+    "noRoleLimit": "无权限限制",
+    "role": {
+      "viewer": "只读",
+      "editor": "编辑"
+    },
+    "expiry": "有效期",
+    "noExpiry": "永不过期",
+    "daysOption": "{days} 天",
+    "issuing": "生成中…",
+    "issue": "生成"
+  },
+  "KeysPage": {
+    "backToWikis": "我的维基",
+    "title": "API 密钥",
+    "description": "外部技能调用内容 API 时使用的 Bearer 令牌。",
+    "issuedKeys": "已签发的密钥",
+    "empty": "暂无。",
+    "wikiLabel": "维基：{title}",
+    "allWikis": "全部维基",
+    "noRoleLimit": "无权限限制",
+    "role": {
+      "viewer": "只读",
+      "editor": "编辑"
+    },
+    "expired": "已过期",
+    "expiresAt": "到期 {date}",
+    "noExpiry": "永久有效",
+    "lastUsed": "上次使用 {date}",
+    "neverUsed": "未使用"
+  },
+  "KeysRevokeButton": {
+    "revoke": "撤销"
+  },
+  "Kinds": {
+    "note": "来源笔记",
+    "concept": "概念",
+    "entity": "实体",
+    "meta": "元数据",
+    "conceptOption": "概念 — 想法、模式、理论、文档",
+    "entityOption": "实体 — 人物、组织、工具、产品"
+  },
+  "LoginLoginForm": {
+    "passwordPlaceholder": "密码",
+    "loggingIn": "登录中…",
+    "login": "登录"
+  },
+  "LoginPage": {
+    "title": "登录 jimi-wiki",
+    "subtitle": "使用邮箱和密码登录。"
+  },
+  "Modal": {
+    "close": "关闭"
+  },
+  "PageNav": {
+    "prev": "← 上一页",
+    "next": "下一页 →"
+  },
+  "PublicWikiView": {
+    "readOnly": "只读",
+    "emptyPage": "此页面为空。",
+    "emptyTitle": "暂无已发布的页面",
+    "emptyBody": "向此只读共享维基添加页面后，即可在此查看。"
+  },
+  "ReadingPane": {
+    "edit": "编辑",
+    "derivedHeading": "从此来源衍生的文档",
+    "derivedEmpty": "尚未从此来源衍生任何文档。"
+  },
+  "ReadingProvenanceCard": {
+    "sectionLabel": "原文 (Source)",
+    "viewStoredSource": "查看已保存的原文",
+    "originalSite": "原始站点"
+  },
+  "ReadingRelatedPanel": {
+    "title": "相关页面",
+    "empty": "没有与此页面关联的页面。",
+    "outlinks": "本页面引用",
+    "backlinks": "引用本页面"
+  },
+  "ReadingSourcesPanel": {
+    "heading": "来源 · 原文"
+  },
+  "SetupPage": {
+    "title": "初始管理员设置",
+    "subtitle": "为此实例创建第一个管理员账户。"
+  },
+  "SetupSetupForm": {
+    "namePlaceholder": "姓名（可选）",
+    "passwordPlaceholder": "密码（8位以上）",
+    "creating": "创建中…",
+    "createAdmin": "创建管理员"
+  },
+  "Sidebar": {
+    "role": {
+      "editor": "编辑",
+      "viewer": "查看者"
+    },
+    "chat": "聊天",
+    "lint": "健康检查",
+    "settings": "设置",
+    "myWikis": "我的维基",
+    "empty": "无",
+    "sharedWikis": "共享给我的维基",
+    "newWiki": "+ 新建维基",
+    "apiKeys": "API 密钥",
+    "logout": "退出登录"
+  },
+  "WikiToc": {
+    "toggleToc": "展开/收起目录",
+    "myWikis": "我的 Wiki",
+    "emptyTitle": "暂无页面",
+    "emptyBody": "添加页面后，目录将显示在此处。",
+    "askAi": "向 AI 提问",
+    "newPage": "新建页面",
+    "ingestSource": "导入来源",
+    "graph": "关系图",
+    "healthCheck": "健康检查",
+    "integrationGuide": "集成指南",
+    "settings": "设置",
+    "logout": "退出登录"
+  },
+  "WikisPage": {
+    "apiKeys": "API 密钥",
+    "integrationGuide": "集成指南",
+    "logout": "退出登录",
+    "myWikis": "我的维基",
+    "noOwnedWikis": "你还没有创建任何维基。在下方创建一个吧。",
+    "pageCount": "{count} 个页面",
+    "sharedWikis": "共享给我的",
+    "authoredBy": "by {name}",
+    "role": {
+      "owner": "所有者",
+      "editor": "编辑者",
+      "viewer": "查看者"
+    },
+    "emptyTitle": "还没有维基",
+    "emptyBody": "在下方创建你的第一个维基，你的文档及其链接关系将在此处汇聚。",
+    "createWiki": "创建新维基",
+    "titlePlaceholder": "维基标题",
+    "kindPersonal": "personal（个人）",
+    "kindProject": "project（项目）",
+    "create": "创建"
+  },
+  "WikisSlugCategoryPathPage": {
+    "myWikis": "我的维基",
+    "emptyCategory": "该分类下暂无页面。"
+  },
+  "WikisSlugChatChatModal": {
+    "askAi": "向 AI 提问",
+    "askAiWithShortcut": "向 AI 提问 ({shortcut} · /)",
+    "dialogLabel": "{title} — 向 AI 提问",
+    "basisDescription": "基于 {title} 的知识（原文、概念、实体）作答",
+    "fullScreen": "全屏显示 →",
+    "close": "关闭"
+  },
+  "WikisSlugChatDocModal": {
+    "back": "返回",
+    "kind": {
+      "source": "原文",
+      "page": "文档"
+    },
+    "fullPage": "打开完整页面",
+    "close": "关闭",
+    "loading": "加载中…",
+    "loadError": "无法加载该文档。",
+    "retry": "重试",
+    "emptyBody": "暂无内容。",
+    "relatedDocs": "相关文档"
+  },
+  "WikisSlugChatLoading": {
+    "callingJimi": "正在呼叫 Jimi…"
+  },
+  "WikisSlugChatPage": {
+    "myWikis": "我的维基",
+    "askAi": "向 AI 提问",
+    "subtitle": "基于{title}的知识（原文、概念、实体）作答。"
+  },
+  "WikisSlugChatWikiChat": {
+    "openEvidence": "打开依据 [{n}]",
+    "sourceBadge": "原文",
+    "evidenceTitle": "依据资料",
+    "evidenceEmptyTitle": "等待依据",
+    "evidenceEmptyBody": "提问后，回答所依据的文档将显示在这里。",
+    "otherDocs": "同时检索到 {count} 篇文档（未在回答中引用）",
+    "emptyTitle": "向这个 wiki 提问吧",
+    "emptyBody": "基于你保存的内容作答，并将依据文档与回答一同展示。",
+    "searching": "检索中…",
+    "error": "错误：{message}",
+    "retry": "重试",
+    "close": "关闭",
+    "inputPlaceholder": "向 wiki 提问…  （Enter 发送 · Shift+Enter 换行）",
+    "stop": "停止",
+    "send": "发送"
+  },
+  "WikisSlugGraphPage": {
+    "title": "图谱",
+    "emptyTitle": "暂无可生成图谱的页面",
+    "emptyBody": "添加页面后，文档之间的链接和概念关联将显示在这里。"
+  },
+  "WikisSlugHomeActions": {
+    "ingestTitle": "导入来源 (Ingest)",
+    "ingestDesc": "提供 URL 或文本，LLM 会读取并整理成笔记和概念页面。",
+    "ingestOpen": "打开导入",
+    "newPageTitle": "新建页面（手动）",
+    "newPageDesc": "设置标题、类型和分类，创建空白页面并立即编辑。",
+    "newPageCreate": "创建新页面 →"
+  },
+  "WikisSlugIngestPanel": {
+    "submitPending": "正在登记任务…",
+    "submit": "采集",
+    "emptyTitle": "编入原文 (Ingest)",
+    "emptyBody": "提供网页链接（仅提取正文）、YouTube（字幕）或文本，LLM 会读取并整理成笔记和概念页面。",
+    "urlPlaceholder": "https://…  (网页文章或 YouTube 链接)",
+    "textPlaceholder": "或直接粘贴文本／视频字幕",
+    "titlePlaceholder": "标题（可选）"
+  },
+  "WikisSlugJobsIndicator": {
+    "type": {
+      "ingest": "来源导入",
+      "query": "提问",
+      "lint": "健康检查"
+    },
+    "secondsElapsed": "{sec}秒",
+    "minutesElapsed": "{min}分{sec}秒",
+    "title": "智能体任务",
+    "close": "关闭",
+    "empty": "暂无最近任务。",
+    "running": "运行中",
+    "done": "完成",
+    "failed": "失败",
+    "pagesTouched": "{count}个页面",
+    "activeCount": "{count}个任务运行中",
+    "allDone": "任务完成"
+  },
+  "WikisSlugLintPage": {
+    "empty": "无",
+    "missingPage": "不存在的页面",
+    "editorOnly": "健康检查仅editor及以上可执行。",
+    "title": "健康检查（Lint）",
+    "pageCountLabel": "共 {count} 页",
+    "healthScore": "健康分",
+    "trendLabel": "趋势（最近 {count} 次 lint）",
+    "machineCheck": "机器检查",
+    "deepCheckButton": "+ LLM 深度检查",
+    "brokenLinks": "失效链接",
+    "orphanPages": "孤立页面（无入链）",
+    "noOutLinks": "无出链的页面",
+    "untreatedSources": "无笔记的原文",
+    "sourceDupTitle": "疑似与原文重复的页面",
+    "sourceDupDesc": "正文与原文几乎完全相同。相同内容会在搜索和 AI 回答中作为依据重复出现，请改写为摘要或考虑删除。",
+    "approxSource": "≈ 原文",
+    "junkNotesTitle": "垃圾笔记（无出处）",
+    "junkNotesDesc": "未关联到原文（Source）的笔记（无 provenance）。若为空/短的测试残留请删除；若有内容则考虑重新关联原文（重新 ingest）。",
+    "delete": "删除",
+    "linkSuggestTitle": "链接建议（孤立页面）",
+    "linkSuggestPrompt": "通过嵌入相似度为孤立的派生页面查找可链接的相关页面（产生费用）。",
+    "calculate": "计算",
+    "noIsolatedPages": "无孤立的派生页面",
+    "linkSuggestDesc": "无入链也无出链的派生页面。点击“应用”会按缺失的方向在“## 相关文档”中添加 `[[链接]]`（出链缺失→加在本页，入链缺失→加在候选页）。",
+    "noInbound": "无入链",
+    "noOutbound": "无出链",
+    "apply": "应用",
+    "categoryHealth": "分类健康度",
+    "nearDupTitle": "疑似重复配对",
+    "orphanCatsTitle": "孤立 category（无页面）",
+    "retire": "停用",
+    "uncategorizedTitle": "未分类的派生页面",
+    "assign": "指定",
+    "deepSparseTitle": "过深或过稀疏的 category",
+    "depthPages": "{depth} 层 · {count} 页",
+    "flatten": "扁平化",
+    "deepCheckTitle": "LLM 深度检查"
+  },
+  "WikisSlugNewNewPageForm": {
+    "submitting": "创建中…",
+    "create": "创建",
+    "categoryLabel": "分类",
+    "categoryLabelHint": "（可选 · 侧边栏文件夹）",
+    "categoryPlaceholder": "留空则为未分类 · 输入可匹配已有分类",
+    "createCategory": "＋ 新建分类：{slug}",
+    "reuseHint": "建议复用已有分类。保存时会自动规范化格式。",
+    "kindHint": {
+      "personal": "个人知识维基 — 自由整理概念与实体。",
+      "project": "项目维基 — 将会议记录、决策和规格归入分类，更易查找。",
+      "channel": "公开频道 — 他人会浏览。请让标题和分类清晰明确。"
+    },
+    "titleLabel": "标题",
+    "titlePlaceholder": "页面标题",
+    "kindLabel": "类型",
+    "ingestHint": "整理原文而成的来源笔记通过<link>来源编入（Ingest）</link>创建，AI 回答的保存则通过聊天中的“保存到维基”完成。",
+    "bodyLabel": "内容",
+    "bodyLabelHint": "（可选 · 之后可编辑）",
+    "bodyPlaceholder": "使用 Markdown 撰写。维基链接使用 [[页面-slug]] 或 [[slug|显示名]]",
+    "cancel": "取消"
+  },
+  "WikisSlugNewPage": {
+    "myWikis": "我的维基",
+    "newPage": "新建页面",
+    "description": "由你自己撰写的页面。"
+  },
+  "WikisSlugPage": {
+    "emptyTitle": "还没有页面",
+    "emptyBodyWrite": "在下方收集来源或新建页面，文档与概念的关联将在此汇总。",
+    "emptyBodyRead": "添加页面后，可阅读的文档与概念关联将显示在此处。",
+    "recentActivity": "最近活动"
+  },
+  "WikisSlugPageSlugEditPage": {
+    "backTo": "返回{title}",
+    "bodyPlaceholder": "使用 Markdown 编写。Wiki 链接：[[页面-slug]] 或 [[slug|显示名]]",
+    "save": "保存",
+    "cancel": "取消"
+  },
+  "WikisSlugPageSlugPage": {
+    "connectionGraph": "关系图谱",
+    "myWikis": "我的 wiki",
+    "emptyEditable": "此页面为空。点击“编辑”添加内容。",
+    "empty": "此页面为空。"
+  },
+  "WikisSlugReindexForm": {
+    "reindexing": "重新索引中…",
+    "reindex": "语义重新索引",
+    "hint": "手动保存的页面仅建立 FTS 索引。点击此按钮生成嵌入向量以启用语义搜索。"
+  },
+  "WikisSlugRunStatusBadge": {
+    "prefix": "来源接入:",
+    "inProgressHint": "— LLM 正在读取原文并整理成页面…",
+    "pagesTouched": "已创建·更新 {count} 个页面",
+    "status": {
+      "pending": "等待中",
+      "running": "处理中",
+      "done": "完成",
+      "error": "失败"
+    }
+  },
+  "WikisSlugSettingsPage": {
+    "ownerOnly": "只有所有者可以查看此 wiki 的设置。(当前角色: {role})",
+    "title": "Wiki 设置",
+    "generalHeading": "常规",
+    "titleLabel": "标题",
+    "descriptionLabel": "描述",
+    "visibilityLabel": "可见范围",
+    "visibilityPrivate": "私密（仅成员）",
+    "visibilityUnlisted": "不公开（链接共享）",
+    "save": "保存",
+    "membersHeading": "成员",
+    "changeRole": "更改",
+    "remove": "移除",
+    "invitePlaceholder": "要邀请的邮箱",
+    "invite": "邀请",
+    "shareLinksHeading": "共享链接（只读）",
+    "noShareLinks": "暂无。",
+    "revoke": "撤销",
+    "createShareLink": "+ 创建共享链接",
+    "dangerZone": "危险区域",
+    "deleteWiki": "删除此 wiki（不可撤销）"
+  },
+  "WikisSlugSourcesSourceSlugDeleteSourceButton": {
+    "confirmIrreversible": "删除该原文后将无法恢复。",
+    "confirmDeletedNotes": "· 将一并删除的笔记：{titles}",
+    "confirmOrphanedKnowledge": "· 保留但将失去该原文来源的已整理知识：{titles}",
+    "confirmContinue": "要继续吗？",
+    "none": "无",
+    "deleteButton": "删除原文"
+  },
+  "WikisSlugSourcesSourceSlugPage": {
+    "source": "原文",
+    "readOnlyBadge": "原文 · 只读",
+    "emptyBody": "该原文没有正文内容。"
+  },
+  "WikisSlugWikiActions": {
+    "ingestTitle": "导入来源",
+    "newPageTitle": "新建页面"
+  }
+}

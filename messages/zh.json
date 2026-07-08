@@ -231,6 +231,11 @@
     "prev": "← 上一页",
     "next": "下一页 →"
   },
+  "PageTranslate": {
+    "translate": "翻译",
+    "showOriginal": "显示原文",
+    "machineTranslated": "机器翻译"
+  },
   "PublicWikiView": {
     "readOnly": "只读",
     "emptyPage": "此页面为空。",

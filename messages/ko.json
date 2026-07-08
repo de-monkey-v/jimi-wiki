@@ -231,6 +231,11 @@
     "prev": "← 이전",
     "next": "다음 →"
   },
+  "PageTranslate": {
+    "translate": "번역",
+    "showOriginal": "원문 보기",
+    "machineTranslated": "기계 번역"
+  },
   "PublicWikiView": {
     "readOnly": "읽기 전용",
     "emptyPage": "빈 페이지입니다.",

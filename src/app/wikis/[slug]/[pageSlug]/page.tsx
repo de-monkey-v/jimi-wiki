@@ -4,17 +4,25 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getPage, getBacklinks, getOutlinks, existingSlugSet, getPrevNext, getPageProvenance, getPageSources, getPageNeighborhood } from "@/lib/wiki";
 import { renderMarkdown } from "@/lib/markdown";
+import { detectLang } from "@/lib/lang";
+import { getPageTranslation } from "@/lib/translate";
+import { checkDailyQuota } from "@/lib/usage";
+import { isLocale } from "@/i18n/locales";
 import { ReadingPane } from "@/components/ReadingPane";
+import TranslateMenu from "@/components/TranslateMenu";
 import { GraphMount } from "@/components/graph/GraphMount";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
 
 export default async function PageView({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; pageSlug: string }>;
+  searchParams: Promise<{ lang?: string }>;
 }) {
   const t = await getTranslations("WikisSlugPageSlugPage");
   const { slug: rawSlug, pageSlug: rawPageSlug } = await params;
+  const { lang } = await searchParams;
   const slug = decodeURIComponent(rawSlug);
   const pageSlug = decodeURIComponent(rawPageSlug);
   const userId = await getCurrentUserId();
@@ -24,8 +32,34 @@ export default async function PageView({
   const page = await getPage(wiki.id, pageSlug);
   if (!page) notFound();
 
+  // 온디맨드 기계 번역: ?lang=<locale> 이 원문 언어와 다를 때만 (캐시 우선) 번역본을 렌더.
+  const pageLang = detectLang(page.body || page.title).code;
+  const wantLocale = isLocale(lang) && lang !== pageLang ? lang : null;
+  let viewTitle = page.title;
+  let viewBody = page.body;
+  let translatedTo: typeof wantLocale = null; // 실제로 번역에 성공했을 때만 set → 배지 정확성
+  if (wantLocale && page.body.trim()) {
+    // 비용 경계: 번역도 생성형 LLM 소비 → 채팅과 동일하게 일일 쿼터를 적용(초과 시 원문 표시).
+    const quota = await checkDailyQuota(userId);
+    if (quota.ok) {
+      try {
+        const tr = await getPageTranslation(
+          { id: page.id, title: page.title, body: page.body },
+          wantLocale,
+          { wikiId: wiki.id, userId },
+        );
+        viewTitle = tr.title;
+        viewBody = tr.body;
+        translatedTo = wantLocale;
+      } catch (err) {
+        // LLM 미설정·안전거부·빈 번역 등 → 원문 표시(배지도 안 뜸). 로그만 남긴다.
+        console.error("page translation failed", { pageId: page.id, locale: wantLocale, err });
+      }
+    }
+  }
+
   const existing = await existingSlugSet(wiki.id);
-  const html = await renderMarkdown(page.body, {
+  const html = await renderMarkdown(viewBody, {
     hrefFor: (t) => `/wikis/${slug}/${t}`,
     exists: (t) => existing.has(t),
   });
@@ -71,9 +105,10 @@ export default async function PageView({
 
   return (
     <ReadingPane
-      title={page.title}
+      title={viewTitle}
       html={html}
       isEmpty={page.body.trim() === ""}
+      translateControl={page.body.trim() ? <TranslateMenu current={translatedTo} pageLang={pageLang} /> : undefined}
       emptyText={wiki.role !== "viewer" ? t("emptyEditable") : t("empty")}
       isNote={isNote}
       provenance={provenance}

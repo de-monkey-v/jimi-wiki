@@ -231,6 +231,11 @@
     "prev": "← Prev",
     "next": "Next →"
   },
+  "PageTranslate": {
+    "translate": "Translate",
+    "showOriginal": "Show original",
+    "machineTranslated": "Machine translation"
+  },
   "PublicWikiView": {
     "readOnly": "Read-only",
     "emptyPage": "This page is empty.",

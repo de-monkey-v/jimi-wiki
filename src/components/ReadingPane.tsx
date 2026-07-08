@@ -29,6 +29,7 @@ export function ReadingPane({
   crumb,
   editHref,
   localGraph,
+  translateControl,
 }: {
   title: string;
   html: string;
@@ -46,6 +47,7 @@ export function ReadingPane({
   crumb?: ReactNode;
   editHref?: string;
   localGraph?: ReactNode;
+  translateControl?: ReactNode;
 }) {
   const t = useTranslations("ReadingPane");
   return (
@@ -53,11 +55,14 @@ export function ReadingPane({
       {crumb}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">{title}</h1>
-        {editHref && (
-          <Link href={editHref} className="rounded border px-3 py-1 text-sm hover:bg-stone-50">
-            {t("edit")}
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {translateControl}
+          {editHref && (
+            <Link href={editHref} className="rounded border px-3 py-1 text-sm hover:bg-stone-50">
+              {t("edit")}
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* 소스 노트: 원문 provenance 카드(합성/관계는 본문에 없음) */}

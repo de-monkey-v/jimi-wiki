@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "src/generated/**",
     "scripts/server-only-shim.cjs",
+    // Claude Code 작업 디렉터리(세션 worktree 등) — 앱 소스가 아님. lint 대상에서 제외.
+    ".claude/**",
   ]),
 ]);
 

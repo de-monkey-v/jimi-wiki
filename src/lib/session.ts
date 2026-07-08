@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
@@ -19,7 +20,8 @@ async function getSingleOwner(): Promise<User | null> {
   return prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
 }
 
-export async function getCurrentUser(): Promise<User | null> {
+// React cache로 요청당 1회로 메모이즈 — layout·page·i18n/request.ts가 각각 호출해도 세션/DB 조회는 한 번.
+export const getCurrentUser = cache(async (): Promise<User | null> => {
   if (authMode() === "single") return getSingleOwner();
   const session = await auth();
   const uid = session?.user?.id;
@@ -27,7 +29,7 @@ export async function getCurrentUser(): Promise<User | null> {
   // 폴백: 콜백이 id를 못 실은 예외 경로에서도 email로 복구.
   const email = session?.user?.email;
   return email ? prisma.user.findUnique({ where: { email } }) : null;
-}
+});
 
 /** 로그인 필수 컨텍스트용. 미인증 시 리다이렉트. 시그니처 불변(호출부 무영향). */
 export async function getCurrentUserId(): Promise<string> {

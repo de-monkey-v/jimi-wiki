@@ -14,8 +14,11 @@ test("detectLang: 빈 문자열은 영어로 폴백", () => {
   assert.equal(detectLang("").code, "en");
 });
 
-test("detectLang: 한글이 섞이면 한국어 우선(한글 우선순위)", () => {
-  assert.equal(detectLang("What is 트랜스포머?").code, "ko");
+test("detectLang: 지배 스크립트로 판정 — 영어 본문에 섞인 소수 한글은 영어로", () => {
+  // first-match가 아니라 카운트: 라틴 문자가 압도적이면 한글 한 단어가 있어도 영어.
+  assert.equal(detectLang("What is 트랜스포머?").code, "en");
+  // 반대로 한글이 지배적이면 한국어.
+  assert.equal(detectLang("트랜스포머(transformer)는 어텐션 구조다").code, "ko");
 });
 
 test("detectLang: 한자+가나면 일본어(중국어보다 가나 우선)", () => {

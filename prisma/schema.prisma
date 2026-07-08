@@ -80,6 +80,7 @@ model User {
   emailVerified  DateTime?
   passwordHash   String? // argon2id 해시. null=비밀번호 미설정(oidc/single/미부트스트랩 기존 유저)
   isAdmin        Boolean      @default(false) // 인스턴스 관리자(유저·초대 관리 권한). 위키별 Role과 직교
+  locale         String? // 선호 UI 언어(ko/en/ja/zh). 기기 간 유지용 — 쿠키 부재 시 폴백
   createdAt      DateTime     @default(now())
   accounts       Account[] // 유지(JWT 전환 후 idle) — oidc 확장 시 재사용
   sessions       Session[] // 유지(JWT 전환 후 idle)
@@ -255,11 +256,27 @@ model Page {
   outLinks    PageLink[] @relation("PageOut")
   inLinks     PageLink[] @relation("PageIn")
   contributions PageContribution[] // 이 파생 페이지에 기여한 원본들(M:N provenance)
+  translations PageTranslation[] // 온디맨드 기계 번역 캐시(언어별)
 
   @@unique([wikiId, slug])
   @@index([wikiId, kind])
   @@index([wikiId, parentId, sortOrder])
   @@index([wikiId, category])
+}
+
+// 온디맨드 기계 번역 캐시. (page, locale)당 1행. 원문이 바뀌면 sourceHash 불일치로 재번역.
+model PageTranslation {
+  id         String   @id @default(cuid())
+  pageId     String
+  locale     String // 대상 언어(en/ja/zh/ko)
+  sourceHash String // 번역 시점 원문(title+body) 해시 — 불일치면 stale
+  title      String
+  body       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  page       Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, locale])
 }
 
 model PageLink {

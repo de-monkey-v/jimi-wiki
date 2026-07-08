@@ -231,6 +231,11 @@
     "prev": "← 前へ",
     "next": "次へ →"
   },
+  "PageTranslate": {
+    "translate": "翻訳",
+    "showOriginal": "原文を表示",
+    "machineTranslated": "機械翻訳"
+  },
   "PublicWikiView": {
     "readOnly": "読み取り専用",
     "emptyPage": "空のページです。",

@@ -16,6 +16,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
     "apikey:issue": "tsx scripts/issue-api-key.ts",
+    "backfill:sources": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/backfill-orphan-source-notes.ts",
+    "refetch:source": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/refetch-source-body.ts",
     "openai:login": "tsx scripts/openai-login.ts",
     "openai:smoke": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/openai-oauth-smoke.ts",
     "smoke": "tsx scripts/smoke.ts",

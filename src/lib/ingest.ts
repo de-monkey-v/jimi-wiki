@@ -262,7 +262,7 @@ const MIN_ARTICLE_CHARS = 200;
 
 // URL → 텍스트. SSRF 차단 + 리다이렉트 비허용. HTML은 Readability(본문 추출)로 광고·네비를 걷어내고
 // 실패하면 원시 태그 제거로 폴백한다. 추출한 기사 제목을 함께 반환(호출부 title 유도에 사용).
-async function fetchAsText(url: string): Promise<{ text: string; title?: string }> {
+export async function fetchAsText(url: string): Promise<{ text: string; title?: string }> {
   const target = await assertPublicUrl(url);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15_000);
@@ -327,6 +327,31 @@ export async function createSourceUnique(
       throw e;
     }
   }
+}
+
+/**
+ * 이 Source에 연결된 note가 하나도 없으면 스텁 note를 만들어 provenance를 보장한다.
+ * "원문/소스" 사이드바(getWikiToc)는 kind=note 페이지 기반이라, note 없는 Source는 목록에서 사라진다.
+ * → 모든 원문이 반드시 목록에 나타나게 하는 불변식(Source ⟺ note 1:1). 이미 note가 있으면 no-op(멱등).
+ */
+export async function ensureSourceNote(
+  wikiId: string,
+  sourceId: string,
+  sourceSlug: string,
+  url: string | undefined,
+  title: string,
+  content: string,
+  touched?: Set<string>,
+): Promise<void> {
+  const has = await prisma.page.count({ where: { wikiId, sourceId, kind: "note" } });
+  if (has > 0) return;
+  const res = await upsertPage(wikiId, {
+    title,
+    kind: "note",
+    sourceId, // 스텁 노트도 provenance 연결(출처 없는 정크 노트 방지)
+    body: `> 원문: ${url ?? "(직접 입력)"}\n> sources: ${sourceSlug}\n\n${content.slice(0, 2000)}`,
+  });
+  touched?.add(res.slug);
 }
 
 /** (1) pending 레코드만 즉시 생성 — 폴링이 곧바로 볼 수 있게. 비동기 라우트/액션이 이걸 먼저 부른다. */
@@ -427,13 +452,7 @@ export async function runIngestJob(run: {
     const ingestModelId = ingestModel();
 
     if (!llmEnabledForModel(ingestModelId)) {
-      const res = await upsertPage(wikiId, {
-        title,
-        kind: "note",
-        sourceId: source.id, // 스텁 노트도 provenance 연결(출처 없는 정크 노트 방지)
-        body: `> 원문: ${input.url ?? "(직접 입력)"}\n> sources: ${sourceSlug}\n\n${content.slice(0, 2000)}`,
-      });
-      touched.add(res.slug);
+      // 스텁 note는 아래 ensureSourceNote가 만든다(LLM 분기와 공용, 불변식 단일 지점).
       summary = "LLM provider 미설정(키/OAuth 없음) — 원문 스텁 노트만 생성(LLM 큐레이션 생략).";
     } else {
       // 신뢰 경계 구분자 위조 방지: 원문에서 종료 태그를 무력화하고 title의 특수문자 제거
@@ -485,6 +504,10 @@ export async function runIngestJob(run: {
         console.error(`[ingest] 온톨로지/코퍼스 동기화 실패: ${(e as Error).message}`);
       }
     }
+
+    // 불변식 보장: 이 원문에 연결된 note가 없으면 스텁 note 생성 → 모든 원문이 "원문/소스" 목록에 노출.
+    // LLM이 note를 만들었으면 no-op, 안 만들었으면(텍스트만 응답/파생만 작성/maxTurns 소진 등) 고아 Source 방지.
+    await ensureSourceNote(wikiId, source.id, sourceSlug, input.url, title, content, touched);
 
     // 선택적 AI: 소스+생성/수정 페이지의 새 청크를 위키 단위 1회 배치 임베딩(비치명적)
     if (geminiEnabled()) {

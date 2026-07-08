@@ -17,10 +17,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "jimi-wiki",
-  description: "LLM이 유지보수하는 위키 플랫폼",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("Common");
+  return {
+    title: t("appName"),
+    description: t("appDescription"),
+  };
+}
 
 export default async function RootLayout({
   children,

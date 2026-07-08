@@ -54,6 +54,16 @@ Common types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`.
 
 Branch off `dev`, open the PR against `dev`. `main` is the release branch.
 
+### Internationalization (i18n)
+
+UI chrome is localized with [next-intl](https://next-intl.dev) (cookie-based locale, no URL routing).
+- **Add a language**: add the code to `src/i18n/locales.ts` (`LOCALES` + `LOCALE_LABELS`), then create
+  `messages/<code>.json` mirroring the keys in `messages/ko.json` (the source of truth).
+- **Add/translate a string**: use `t("key")` (client: `useTranslations`, async server: `getTranslations`)
+  and add the key to **all** locale files. HTML in a message → render with `t.rich`.
+- `pnpm check:i18n` enforces that every locale has the same keys (runs in CI). Wiki content itself is not
+  translated — only the interface.
+
 ### Reporting bugs / requesting features
 
 Use the issue templates. For security issues, **do not** open a public issue — see
@@ -112,6 +122,15 @@ pnpm check:rules   # ontology 규칙 ↔ skill parity
 ### 브랜치
 
 `dev`에서 분기하고 PR도 `dev` 대상으로 올리세요. `main`은 릴리스 브랜치입니다.
+
+### 국제화(i18n)
+
+UI 크롬은 [next-intl](https://next-intl.dev)로 번역합니다(쿠키 기반 locale, URL 라우팅 없음).
+- **언어 추가**: `src/i18n/locales.ts`의 `LOCALES`·`LOCALE_LABELS`에 코드를 넣고, `messages/ko.json`(기준)의
+  키 구조를 그대로 복사해 `messages/<code>.json`을 만드세요.
+- **문자열 추가/번역**: `t("key")`로 렌더(클라이언트 `useTranslations`, async 서버 `getTranslations`)하고 **모든**
+  로케일 파일에 키를 추가하세요. 메시지에 HTML이 있으면 `t.rich`로 렌더합니다.
+- `pnpm check:i18n`이 로케일 간 키 정합성을 강제합니다(CI 포함). 위키 콘텐츠 자체는 번역하지 않고 인터페이스만 번역합니다.
 
 ### 버그 신고 / 기능 제안
 

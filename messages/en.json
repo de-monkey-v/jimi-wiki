@@ -82,7 +82,8 @@
   },
   "Common": {
     "appName": "jimi-wiki",
-    "noscriptWarning": "JavaScript is not running — modals, chat, and folder expansion won't work. Disable script blocking for this site in Brave Shields (the lion icon in the address bar), or check your browser's JavaScript settings."
+    "noscriptWarning": "JavaScript is not running — modals, chat, and folder expansion won't work. Disable script blocking for this site in Brave Shields (the lion icon in the address bar), or check your browser's JavaScript settings.",
+    "appDescription": "A wiki platform maintained by an LLM"
   },
   "DocsPage": {
     "metaTitle": "Integration Guide — jimi-wiki",
@@ -149,6 +150,9 @@
     "invalidDescription": "Ask your admin for a new invite link.",
     "acceptTitle": "Accept invite · Create account"
   },
+  "KeysActions": {
+    "invalidWikiSelection": "Invalid wiki selection."
+  },
   "KeysIssueKeyForm": {
     "tokenIssued": "New token issued — copy it now. You won't be able to see it again after leaving this screen.",
     "hideToken": "Hide token",
@@ -200,6 +204,17 @@
     "conceptOption": "Concept — ideas, patterns, theories, documents",
     "entityOption": "Entity — people, organizations, tools, products"
   },
+  "LoginActions": {
+    "emptyCredentials": "Enter your email and password",
+    "invalidCredentials": "Incorrect email or password",
+    "invalidOrExpiredInvite": "Invalid or expired invite",
+    "emailMismatch": "Doesn't match the invited email",
+    "invalidEmail": "Invalid email address",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "alreadyRegistered": "This email is already registered. Please log in.",
+    "inviteConsumed": "This invite has already been used",
+    "registeredLoginPrompt": "Account created. Please log in from the login page."
+  },
   "LoginLoginForm": {
     "passwordPlaceholder": "Password",
     "loggingIn": "Logging in…",
@@ -240,6 +255,12 @@
   },
   "ReadingSourcesPanel": {
     "heading": "Sources & Originals"
+  },
+  "SetupActions": {
+    "invalidEmail": "Invalid email address",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "alreadyInitialized": "Already initialized. Please log in.",
+    "adminCreatedLoginPrompt": "Admin created. Please log in from the login page."
   },
   "SetupPage": {
     "title": "Initial admin setup",

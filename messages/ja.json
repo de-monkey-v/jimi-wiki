@@ -82,7 +82,8 @@
   },
   "Common": {
     "appName": "jimi-wiki",
-    "noscriptWarning": "JavaScript が実行されていません — モーダル・チャット・フォルダ展開が動作しません。Brave Shields（アドレスバーのライオンアイコン）でこのサイトのスクリプトブロックを解除するか、ブラウザの JavaScript 設定を確認してください。"
+    "noscriptWarning": "JavaScript が実行されていません — モーダル・チャット・フォルダ展開が動作しません。Brave Shields（アドレスバーのライオンアイコン）でこのサイトのスクリプトブロックを解除するか、ブラウザの JavaScript 設定を確認してください。",
+    "appDescription": "LLMがメンテナンスするwikiプラットフォーム"
   },
   "DocsPage": {
     "metaTitle": "連携ガイド — jimi-wiki",
@@ -149,6 +150,9 @@
     "invalidDescription": "管理者に新しい招待リンクをリクエストしてください。",
     "acceptTitle": "招待を承認 · アカウント作成"
   },
+  "KeysActions": {
+    "invalidWikiSelection": "無効なwiki選択です。"
+  },
   "KeysIssueKeyForm": {
     "tokenIssued": "新しいトークンを発行しました — 今すぐコピーしてください。この画面を離れると再表示できません。",
     "hideToken": "トークンを隠す",
@@ -200,6 +204,17 @@
     "conceptOption": "概念 — アイデア・パターン・理論・ドキュメント",
     "entityOption": "エンティティ — 人物・組織・ツール・製品"
   },
+  "LoginActions": {
+    "emptyCredentials": "メールアドレスとパスワードを入力してください",
+    "invalidCredentials": "メールアドレスまたはパスワードが正しくありません",
+    "invalidOrExpiredInvite": "無効または期限切れの招待です",
+    "emailMismatch": "招待されたメールアドレスと一致しません",
+    "invalidEmail": "正しいメールアドレスではありません",
+    "passwordTooShort": "パスワードは8文字以上にしてください",
+    "alreadyRegistered": "すでに登録済みのメールアドレスです。ログインしてください。",
+    "inviteConsumed": "この招待はすでに使用されています",
+    "registeredLoginPrompt": "登録完了。ログインページからログインしてください。"
+  },
   "LoginLoginForm": {
     "passwordPlaceholder": "パスワード",
     "loggingIn": "ログイン中…",
@@ -240,6 +255,12 @@
   },
   "ReadingSourcesPanel": {
     "heading": "出典・原文"
+  },
+  "SetupActions": {
+    "invalidEmail": "有効なメールアドレスではありません",
+    "passwordTooShort": "パスワードは8文字以上で入力してください",
+    "alreadyInitialized": "すでに初期化されています。ログインしてください。",
+    "adminCreatedLoginPrompt": "管理者を作成しました。ログインページからログインしてください。"
   },
   "SetupPage": {
     "title": "初期管理者セットアップ",

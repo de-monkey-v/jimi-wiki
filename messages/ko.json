@@ -82,7 +82,8 @@
   },
   "Common": {
     "appName": "jimi-wiki",
-    "noscriptWarning": "JavaScript가 실행되지 않고 있습니다 — 모달·채팅·폴더 펼침이 동작하지 않습니다. Brave Shields(주소창의 사자 아이콘)에서 이 사이트의 스크립트 차단을 해제하거나, 브라우저의 JavaScript 설정을 확인하세요."
+    "noscriptWarning": "JavaScript가 실행되지 않고 있습니다 — 모달·채팅·폴더 펼침이 동작하지 않습니다. Brave Shields(주소창의 사자 아이콘)에서 이 사이트의 스크립트 차단을 해제하거나, 브라우저의 JavaScript 설정을 확인하세요.",
+    "appDescription": "LLM이 유지보수하는 위키 플랫폼"
   },
   "DocsPage": {
     "metaTitle": "연동 가이드 — jimi-wiki",
@@ -149,6 +150,9 @@
     "invalidDescription": "관리자에게 새 초대 링크를 요청하세요.",
     "acceptTitle": "초대 수락 · 계정 만들기"
   },
+  "KeysActions": {
+    "invalidWikiSelection": "잘못된 위키 선택입니다."
+  },
   "KeysIssueKeyForm": {
     "tokenIssued": "새 토큰이 발급되었습니다 — 지금 복사하세요. 이 화면을 벗어나면 다시 볼 수 없습니다.",
     "hideToken": "토큰 숨기기",
@@ -200,6 +204,17 @@
     "conceptOption": "개념 — 아이디어·패턴·이론·문서",
     "entityOption": "개체 — 인물·조직·도구·제품"
   },
+  "LoginActions": {
+    "emptyCredentials": "이메일과 비밀번호를 입력하세요",
+    "invalidCredentials": "이메일 또는 비밀번호가 올바르지 않습니다",
+    "invalidOrExpiredInvite": "유효하지 않거나 만료된 초대입니다",
+    "emailMismatch": "초대된 이메일과 일치하지 않습니다",
+    "invalidEmail": "올바른 이메일이 아닙니다",
+    "passwordTooShort": "비밀번호는 8자 이상이어야 합니다",
+    "alreadyRegistered": "이미 가입된 이메일입니다. 로그인하세요.",
+    "inviteConsumed": "이미 사용된 초대입니다",
+    "registeredLoginPrompt": "가입 완료. 로그인 페이지에서 로그인하세요."
+  },
   "LoginLoginForm": {
     "passwordPlaceholder": "비밀번호",
     "loggingIn": "로그인 중…",
@@ -240,6 +255,12 @@
   },
   "ReadingSourcesPanel": {
     "heading": "출처 · 원본"
+  },
+  "SetupActions": {
+    "invalidEmail": "올바른 이메일이 아닙니다",
+    "passwordTooShort": "비밀번호는 8자 이상이어야 합니다",
+    "alreadyInitialized": "이미 초기화되었습니다. 로그인하세요.",
+    "adminCreatedLoginPrompt": "관리자 생성됨. 로그인 페이지에서 로그인하세요."
   },
   "SetupPage": {
     "title": "최초 관리자 설정",

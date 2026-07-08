@@ -82,7 +82,8 @@
   },
   "Common": {
     "appName": "jimi-wiki",
-    "noscriptWarning": "JavaScript 未运行 — 弹窗、聊天和文件夹展开将无法使用。请在 Brave Shields（地址栏中的狮子图标）中解除本站点的脚本拦截，或检查浏览器的 JavaScript 设置。"
+    "noscriptWarning": "JavaScript 未运行 — 弹窗、聊天和文件夹展开将无法使用。请在 Brave Shields（地址栏中的狮子图标）中解除本站点的脚本拦截，或检查浏览器的 JavaScript 设置。",
+    "appDescription": "由 LLM 维护的维基平台"
   },
   "DocsPage": {
     "metaTitle": "集成指南 — jimi-wiki",
@@ -149,6 +150,9 @@
     "invalidDescription": "请向管理员申请新的邀请链接。",
     "acceptTitle": "接受邀请 · 创建账户"
   },
+  "KeysActions": {
+    "invalidWikiSelection": "无效的 wiki 选择。"
+  },
   "KeysIssueKeyForm": {
     "tokenIssued": "已生成新令牌 — 请立即复制。离开此页面后将无法再次查看。",
     "hideToken": "隐藏令牌",
@@ -200,6 +204,17 @@
     "conceptOption": "概念 — 想法、模式、理论、文档",
     "entityOption": "实体 — 人物、组织、工具、产品"
   },
+  "LoginActions": {
+    "emptyCredentials": "请输入邮箱和密码",
+    "invalidCredentials": "邮箱或密码不正确",
+    "invalidOrExpiredInvite": "无效或已过期的邀请",
+    "emailMismatch": "与受邀邮箱不一致",
+    "invalidEmail": "邮箱地址无效",
+    "passwordTooShort": "密码至少需要8个字符",
+    "alreadyRegistered": "该邮箱已注册。请登录。",
+    "inviteConsumed": "该邀请已被使用",
+    "registeredLoginPrompt": "注册完成。请从登录页面登录。"
+  },
   "LoginLoginForm": {
     "passwordPlaceholder": "密码",
     "loggingIn": "登录中…",
@@ -240,6 +255,12 @@
   },
   "ReadingSourcesPanel": {
     "heading": "来源 · 原文"
+  },
+  "SetupActions": {
+    "invalidEmail": "邮箱地址无效",
+    "passwordTooShort": "密码至少需要 8 个字符",
+    "alreadyInitialized": "已初始化，请登录。",
+    "adminCreatedLoginPrompt": "管理员已创建，请在登录页登录。"
   },
   "SetupPage": {
     "title": "初始管理员设置",

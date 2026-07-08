@@ -123,6 +123,17 @@ function remarkWikiLink(opts: {
 export function extractWikiTargets(body: string): string[] {
   const tree = unified().use(remarkParse).use(remarkGfm).parse(body) as Root;
   const targets = new Set<string>();
+  // [[x]](무공백gloss)는 CommonMark가 link 노드(text 자식 "[inner]")로 먼저 삼킨다 — 렌더 경로와 동일.
+  // 이 케이스도 타깃을 뽑아야 PageLink/그래프 엣지가 누락되지 않는다.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  visit(tree, "link", (node: any) => {
+    if (node.children?.length !== 1 || node.children[0].type !== "text") return;
+    const bm = LINK_COLLISION.exec(node.children[0].value);
+    if (!bm) return;
+    const { target } = parseTarget(bm[1]);
+    if (target) targets.add(target);
+  });
+  // 살아남은 text 노드의 [[..]] (bare·label·공백gloss·다중). text 노드만 방문하므로 코드 영역 제외.
   visit(tree, "text", (node: Text) => {
     let m: RegExpExecArray | null;
     WIKILINK.lastIndex = 0;

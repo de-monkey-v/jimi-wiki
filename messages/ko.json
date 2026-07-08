@@ -47,18 +47,13 @@
   "AdminSettingsPage": {
     "appTitle": "앱 설정",
     "usersLink": "유저 관리",
-    "providersTitle": "사용할 Provider (opt-in)",
-    "providersHint": "키가 있어도 <b>여기서 켠 provider 만</b> 모델 선택·사용이 가능합니다(키 존재 ≠ 자동 사용). 쓸 provider 를 켜세요.",
-    "hasKey": "키 있음",
-    "noKey": "키 없음",
-    "enabled": "활성",
-    "disabled": "비활성",
-    "deactivate": "비활성화",
-    "activate": "활성화",
-    "keyOrOAuthNeeded": "키/OAuth 필요",
+    "providersTitle": "사용 가능한 Provider",
+    "providersHint": "키/OAuth 자격증명이 있는 provider는 chat·query·lint·번역에서 자동으로 사용됩니다. 모델은 아래에서 고르세요.",
     "embeddingTitle": "임베딩 (읽기전용)",
     "embeddingWarning": "⚠️ 임베딩 모델·차원은 DB vector 컬럼·HNSW 인덱스와 결합되어 있어 env 로만 변경합니다. 바꾸면 전체 재색인이 필요합니다.",
-    "refreshCatalog": "모델 목록 새로고침 (models.dev)"
+    "refreshCatalog": "모델 목록 새로고침 (models.dev)",
+    "usable": "사용 가능",
+    "noCredential": "자격증명 없음"
   },
   "AdminUsersPage": {
     "title": "유저 관리",

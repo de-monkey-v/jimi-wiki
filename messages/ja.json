@@ -47,18 +47,13 @@
   "AdminSettingsPage": {
     "appTitle": "アプリ設定",
     "usersLink": "ユーザー管理",
-    "providersTitle": "使用するProvider（opt-in）",
-    "providersHint": "キーがあっても、<b>ここで有効にしたproviderのみ</b>モデルの選択・使用ができます（キーの存在 ≠ 自動使用）。使うproviderを有効にしてください。",
-    "hasKey": "キーあり",
-    "noKey": "キーなし",
-    "enabled": "有効",
-    "disabled": "無効",
-    "deactivate": "無効化",
-    "activate": "有効化",
-    "keyOrOAuthNeeded": "キー/OAuthが必要",
+    "providersTitle": "利用可能なProvider",
+    "providersHint": "キー/OAuth 資格情報がある provider は chat・query・lint・翻訳で自動的に使われます。モデルは下で選択してください。",
     "embeddingTitle": "埋め込み（読み取り専用）",
     "embeddingWarning": "⚠️ 埋め込みモデル・次元はDBのvectorカラム・HNSWインデックスと結合しているため、envでのみ変更します。変更すると全体の再インデックスが必要です。",
-    "refreshCatalog": "モデル一覧を更新（models.dev）"
+    "refreshCatalog": "モデル一覧を更新（models.dev）",
+    "usable": "利用可能",
+    "noCredential": "資格情報なし"
   },
   "AdminUsersPage": {
     "title": "ユーザー管理",

@@ -1,6 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { openaiProvider } from "@/lib/openai";
 import { chatModel, providerUsable } from "@/lib/model-config";
+import { DEFAULT_CHAT_MODEL } from "@/lib/model-defaults";
 import { isChatModel, providerOf } from "@/lib/provider";
 import {
   streamText,
@@ -103,10 +104,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         writer.write({ type: "data-sources", id: "sources", data: sources });
       }
       let chatModelId = chatModel();
-      // 스트리밍 미지원(claude/unknown)이거나 provider 가 비활성/자격증명 없음이면 안전 폴백(채팅이 통째로 깨지지 않게)
+      // 스트리밍 미지원(claude/unknown)이거나 자격증명 없는 provider면 기본 채팅 모델로 폴백(채팅이 통째로 깨지지 않게).
       if (!isChatModel(chatModelId) || !providerUsable(providerOf(chatModelId)!)) {
-        console.warn(`[chat] 사용 불가 채팅 모델(${chatModelId}) → gemini-2.5-flash 폴백`);
-        chatModelId = "gemini-2.5-flash";
+        console.warn(`[chat] 사용 불가 채팅 모델(${chatModelId}) → ${DEFAULT_CHAT_MODEL} 폴백`);
+        chatModelId = DEFAULT_CHAT_MODEL;
       }
       const result = streamText({
         model: providerOf(chatModelId) === "openai" ? openaiProvider(chatModelId) : google(chatModelId),

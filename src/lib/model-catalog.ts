@@ -6,7 +6,6 @@ import {
   openaiTransport,
   providerUsable,
   providerHasCredential,
-  isProviderEnabled,
 } from "@/lib/model-config";
 import { storeExists } from "@/lib/openai-oauth";
 import type { Provider } from "@/lib/provider";
@@ -79,12 +78,11 @@ function writeDiskCache(c: CacheShape): void {
 }
 
 /** 설정 페이지용 provider 상태: 자격증명 유무 + opt-in 활성 여부(별개 축). */
-export function getProviderStatuses(): { provider: Provider; label: string; hasCredential: boolean; enabled: boolean }[] {
+export function getProviderStatuses(): { provider: Provider; label: string; usable: boolean }[] {
   return SUPPORTED.map((p) => ({
     provider: p,
     label: LABEL[p],
-    hasCredential: providerHasCredential(p),
-    enabled: isProviderEnabled(p),
+    usable: providerHasCredential(p), // 자격증명 있으면 사용 가능(별도 opt-in 없음)
   }));
 }
 

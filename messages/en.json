@@ -47,18 +47,13 @@
   "AdminSettingsPage": {
     "appTitle": "App Settings",
     "usersLink": "Manage Users",
-    "providersTitle": "Providers to Use (opt-in)",
-    "providersHint": "Even if a key exists, <b>only providers enabled here</b> can be selected and used (having a key ≠ using it automatically). Turn on the providers you want to use.",
-    "hasKey": "Key set",
-    "noKey": "No key",
-    "enabled": "Active",
-    "disabled": "Inactive",
-    "deactivate": "Deactivate",
-    "activate": "Activate",
-    "keyOrOAuthNeeded": "Key/OAuth required",
+    "providersTitle": "Available Providers",
+    "providersHint": "Providers with a key/OAuth credential are used automatically for chat, query, lint, and translation. Choose models below.",
     "embeddingTitle": "Embeddings (read-only)",
     "embeddingWarning": "⚠️ Embedding model and dimensions are tied to the DB vector column and HNSW index, so they can only be changed via env. Changing them requires a full reindex.",
-    "refreshCatalog": "Refresh model list (models.dev)"
+    "refreshCatalog": "Refresh model list (models.dev)",
+    "usable": "Usable",
+    "noCredential": "No credential"
   },
   "AdminUsersPage": {
     "title": "User Management",

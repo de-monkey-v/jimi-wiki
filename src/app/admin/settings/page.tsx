@@ -12,7 +12,7 @@ import {
 import { readStoreStatus } from "@/lib/openai-oauth";
 import { ModelsForm } from "./ModelsForm";
 import { OAuthPanel } from "./OAuthPanel";
-import { refreshCatalogAction, setProviderEnabledAction } from "./actions";
+import { refreshCatalogAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -42,31 +42,15 @@ export default async function AdminSettings() {
       <section className="border rounded-lg p-4 space-y-3">
         <div>
           <h2 className="font-semibold">{t("providersTitle")}</h2>
-          <p className="text-xs text-gray-500">
-            {t.rich("providersHint", { b: (chunks) => <b>{chunks}</b> })}
-          </p>
+          <p className="text-xs text-gray-500">{t("providersHint")}</p>
         </div>
         <ul className="space-y-1">
           {providers.map((s) => (
             <li key={s.provider} className="flex flex-wrap items-center gap-2 border rounded px-3 py-2">
               <span className="min-w-32 flex-1 font-medium">{s.label}</span>
-              <span className={`text-xs ${s.hasCredential ? "text-emerald-600" : "text-gray-400"}`}>
-                {s.hasCredential ? t("hasKey") : t("noKey")}
+              <span className={`text-xs ${s.usable ? "text-emerald-600" : "text-gray-400"}`}>
+                {s.usable ? t("usable") : t("noCredential")}
               </span>
-              <span className={`text-xs ${s.enabled ? "text-emerald-600" : "text-gray-400"}`}>
-                {s.enabled ? t("enabled") : t("disabled")}
-              </span>
-              <form action={setProviderEnabledAction}>
-                <input type="hidden" name="provider" value={s.provider} />
-                <input type="hidden" name="enabled" value={String(!s.enabled)} />
-                <button
-                  disabled={!s.hasCredential && !s.enabled}
-                  className="text-xs underline disabled:cursor-not-allowed disabled:text-gray-300 disabled:no-underline"
-                >
-                  {s.enabled ? t("deactivate") : t("activate")}
-                </button>
-              </form>
-              {!s.hasCredential && !s.enabled && <span className="text-xs text-amber-600">{t("keyOrOAuthNeeded")}</span>}
             </li>
           ))}
         </ul>

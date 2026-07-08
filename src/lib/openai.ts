@@ -5,6 +5,7 @@ import { streamText, tool, jsonSchema, stepCountIs } from "ai";
 import type { ToolSpec, ToolLoopResult, LoopUsage } from "@/lib/gemini";
 import { CODEX_BASE_URL, getFreshAccess } from "@/lib/openai-oauth";
 import { effectiveOpenAITransport, providerHasCredential } from "@/lib/model-config";
+import { DEFAULT_OPENAI_MODEL } from "@/lib/model-defaults";
 
 // OpenAI 연결 방식(관리자가 /admin/settings 에서 선택, effectiveOpenAITransport 로 해소):
 //  1) apikey — 표준 api.openai.com (OPENAI_API_KEY)
@@ -97,7 +98,7 @@ export async function openaiGenerateWithTools(opts: {
   maxTurns?: number;
   model?: string;
 }): Promise<ToolLoopResult> {
-  const model = opts.model ?? "gpt-5.1";
+  const model = opts.model ?? DEFAULT_OPENAI_MODEL;
   const calls: string[] = [];
   const tools = Object.fromEntries(
     opts.tools.map((t) => [

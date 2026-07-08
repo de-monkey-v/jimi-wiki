@@ -47,18 +47,13 @@
   "AdminSettingsPage": {
     "appTitle": "应用设置",
     "usersLink": "用户管理",
-    "providersTitle": "要使用的 Provider（opt-in）",
-    "providersHint": "即使有密钥，<b>也只有在此处启用的 provider</b> 才能选择和使用模型（有密钥 ≠ 自动使用）。请启用你要用的 provider。",
-    "hasKey": "有密钥",
-    "noKey": "无密钥",
-    "enabled": "已启用",
-    "disabled": "已禁用",
-    "deactivate": "禁用",
-    "activate": "启用",
-    "keyOrOAuthNeeded": "需要密钥/OAuth",
+    "providersTitle": "可用的 Provider",
+    "providersHint": "拥有密钥/OAuth 凭据的 provider 会自动用于 chat、query、lint 和翻译。在下方选择模型。",
     "embeddingTitle": "嵌入（只读）",
     "embeddingWarning": "⚠️ 嵌入模型和维度与数据库 vector 列、HNSW 索引绑定，因此只能通过 env 修改。修改后需要重建全部索引。",
-    "refreshCatalog": "刷新模型列表（models.dev）"
+    "refreshCatalog": "刷新模型列表（models.dev）",
+    "usable": "可用",
+    "noCredential": "无凭据"
   },
   "AdminUsersPage": {
     "title": "用户管理",

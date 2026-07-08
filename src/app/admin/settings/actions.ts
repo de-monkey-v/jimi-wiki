@@ -1,12 +1,10 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin";
-import { setModelConfig, getRawConfigRow, providerUsable } from "@/lib/model-config";
+import { setModelConfig, providerUsable } from "@/lib/model-config";
 import { logout } from "@/lib/openai-oauth";
 import { invalidateCatalog } from "@/lib/model-catalog";
-import { providerOf, isChatModel, type Provider } from "@/lib/provider";
-
-const PROVIDERS: Provider[] = ["google", "openai", "anthropic"];
+import { providerOf, isChatModel } from "@/lib/provider";
 
 // 빈 문자열 = env 폴백(null 저장).
 function val(fd: FormData, k: string): string | null {
@@ -14,11 +12,11 @@ function val(fd: FormData, k: string): string | null {
   return v || null;
 }
 
-// 선택된 모델이 실제로 쓸 수 있는지(알 수 있는 provider + 자격증명 + opt-in 활성) 검증.
+// 선택된 모델이 실제로 쓸 수 있는지(알 수 있는 provider + 자격증명 존재) 검증.
 function requireUsable(model: string, label: string) {
   const p = providerOf(model);
   if (!p) throw new Error(`알 수 없는 모델 provider: ${model} (${label})`);
-  if (!providerUsable(p)) throw new Error(`비활성 provider 입니다: ${model} (${label}) — /admin/settings 에서 ${p} 를 먼저 활성화하세요`);
+  if (!providerUsable(p)) throw new Error(`자격증명이 없는 provider 입니다: ${model} (${label}) — ${p} 키/OAuth 를 먼저 설정하세요`);
 }
 
 /** 모델 선택(chat/gen/ingest) 저장. UI 필터에 의존하지 않고 서버에서 provider·활성 여부를 검증한다. */
@@ -34,20 +32,6 @@ export async function updateModelsAction(fd: FormData) {
   if (gen) requireUsable(gen, "일반 생성");
   if (ingest) requireUsable(ingest, "ingest");
   await setModelConfig({ chatModel: chat, genModel: gen, ingestModel: ingest });
-  revalidatePath("/admin/settings");
-}
-
-/** provider opt-in 토글 — 관리자가 명시적으로 켠 provider 만 사용 가능(키 존재 ≠ 자동 사용). */
-export async function setProviderEnabledAction(fd: FormData) {
-  await requireAdmin();
-  const provider = String(fd.get("provider") ?? "");
-  const enabled = fd.get("enabled") === "true";
-  if (!(PROVIDERS as string[]).includes(provider)) throw new Error("알 수 없는 provider");
-  const row = await getRawConfigRow();
-  const set = new Set(row?.enabledProviders ?? []);
-  if (enabled) set.add(provider);
-  else set.delete(provider);
-  await setModelConfig({ enabledProviders: [...set] });
   revalidatePath("/admin/settings");
 }
 

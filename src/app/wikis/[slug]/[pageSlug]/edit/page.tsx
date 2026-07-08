@@ -41,7 +41,7 @@ export default async function EditPage({
             {MANUAL_KIND_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
-            {/* 시스템 kind(note/answer/meta)는 새로 지정할 수 없지만, 이미 그 kind인 페이지는 값을 보존한다 */}
+            {/* 시스템 kind(note/meta)는 새로 지정할 수 없지만, 이미 그 kind인 페이지는 값을 보존한다 */}
             {!MANUAL_KINDS.includes(page.kind) && (
               <option value={page.kind}>{KIND_LABEL[page.kind]}</option>
             )}

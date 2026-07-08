@@ -8,7 +8,6 @@ import { hasRole } from "@/lib/api-gate";
 import { createIngestRun, reapStaleRuns } from "@/lib/ingest";
 import { getOntology } from "@/lib/ontology";
 import { reindexEmbeddings } from "@/lib/search";
-import { answerQuery } from "@/lib/query";
 import { normalizeCategoryForWrite } from "@/lib/governance";
 import { checkDailyQuota } from "@/lib/usage";
 import { prisma } from "@/lib/db";
@@ -72,7 +71,7 @@ export async function savePageAction(formData: FormData) {
   const title = String(formData.get("title") ?? "");
   const submittedKind = String(formData.get("kind") ?? "") as PageKind;
   const body = String(formData.get("body") ?? "");
-  // kind는 수동 kind(concept/entity)로만 변경 허용. 시스템 kind(note/answer/meta)면 기존 값을 유지한다.
+  // kind는 수동 kind(concept/entity)로만 변경 허용. 시스템 kind(note/meta)면 기존 값을 유지한다.
   const current = await getPage(wiki.id, pageSlug);
   const kind: PageKind = MANUAL_KINDS.includes(submittedKind) ? submittedKind : (current?.kind ?? "concept");
   await updatePage(wiki.id, pageSlug, { title, kind, body });
@@ -173,19 +172,4 @@ export async function searchAction(formData: FormData) {
   const wikiSlug = String(formData.get("wikiSlug"));
   const q = String(formData.get("q") ?? "").trim();
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}?q=${encodeURIComponent(q)}`);
-}
-
-/** 질문 → 검색+합성 답변을 answer 페이지로 저장 후 그 페이지로 이동(탐색 축적). editor 이상. */
-export async function queryAction(formData: FormData) {
-  const userId = await getCurrentUserId();
-  const wikiSlug = String(formData.get("wikiSlug"));
-  const wiki = await requireWriteAccess(userId, wikiSlug);
-  await requireQuota(userId);
-  const question = String(formData.get("question") ?? "").trim();
-  if (!question) redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
-  const res = await answerQuery(wiki.id, question, { save: true, userId });
-  if (res.savedSlug) {
-    redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(res.savedSlug)}`);
-  }
-  redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
 }

@@ -52,7 +52,7 @@ Ingest 절차:
 1. 주어진 원문을 전부 읽고 핵심(주장·중요 데이터·인용 대목)을 파악한다.
 2. searchWiki와 listPages로 기존 위키에 관련 페이지가 있는지 먼저 확인한다.
 3. writePage로 kind=note 소스 노트를 만든다: 핵심 주장·중요 데이터·인용할 대목을 **네 말로 요약·재구성**한다. **원문을 그대로(또는 거의 그대로) 복사해 넣는 것은 금지** — 원문은 Source로 이미 불변 보존되므로, 노트가 원문과 사실상 같으면 중복일 뿐이다. 원문이 아무리 짧아도 핵심을 압축해 다시 쓰고, 직접 인용은 꼭 필요한 대목만 인용 블록(>)으로 표시해 담아라. slug는 영문 kebab-case로 명시하라. **note에는 category를 붙이지 말고, 합성·상호참조·"관련 문서"를 본문에 쓰지 마라**(원문은 자동으로 provenance 연결되고, 파생 관계는 파생 페이지에서 다룬다).
-4. 영향받는 파생 페이지(kind=concept / kind=entity / kind=answer)를 갱신하거나 신설한다. 여기서 상호참조·비교·종합을 한다. 내부 링크 [[slug]] 를 아끼지 말라(대상 slug는 writePage slug와 일치). **파생 페이지에는 category를 부여하되, 새로 만들기 전에 matchCategory/getOntology로 기존 category를 먼저 확인하고 맞으면 재사용하라(재사용 우선).**
+4. 영향받는 파생 페이지(kind=concept / kind=entity)를 갱신하거나 신설한다. 여기서 상호참조·비교·종합을 한다. 내부 링크 [[slug]] 를 아끼지 말라(대상 slug는 writePage slug와 일치). **파생 페이지에는 category를 부여하되, 새로 만들기 전에 matchCategory/getOntology로 기존 category를 먼저 확인하고 맞으면 재사용하라(재사용 우선).**
 5. **모순 점검(필수)**: 원문의 핵심 주장마다 findRelated(query=그 주장)를 호출해 관련된 **기존** 페이지 본문을 받아, 원문과 상충하는 서술이 있는지 대조한다. 상충이 있으면 해당 파생 페이지에 "> [!warning] 상충" 콜아웃으로 양쪽 주장·출처를 병기한다(기존 내용은 삭제하지 않는다). 상충이 없으면 그대로 둔다.
 6. **파생 페이지** 하단에만 "## 관련 문서" 섹션을 유지한다(note에는 없음). 근거 없는 내용은 쓰지 말고, 추측이면 추측이라 명시한다.
 7. 작업을 appendLog(title, detail)로 기록한다.
@@ -117,11 +117,11 @@ function buildTools(wikiId: string, touched: Set<string>, sourceId: string): Too
           properties: {
             slug: { type: Type.STRING, description: "영문 kebab-case slug. 링크 대상과 일치시킬 것" },
             title: { type: Type.STRING },
-            kind: { type: Type.STRING, description: "note|concept|entity|answer|meta" },
+            kind: { type: Type.STRING, description: "note|concept|entity|meta" },
             body: { type: Type.STRING, description: "마크다운. 내부링크 [[slug]]" },
             category: {
               type: Type.STRING,
-              description: "파생 페이지(concept/entity/answer)의 폴더 경로(예: ai/architectures). note에는 지정 금지. 재사용 우선.",
+              description: "파생 페이지(concept/entity)의 폴더 경로(예: ai/architectures). note에는 지정 금지. 재사용 우선.",
             },
           },
           required: ["title", "kind", "body"],

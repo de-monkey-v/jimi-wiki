@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { EmptyState } from "@/components/EmptyState";
-import { saveAnswerAction } from "./actions";
 import { DocModal, type EvidenceDoc } from "./DocModal";
 import { remarkCitations } from "./remarkCitations";
 
@@ -178,40 +177,7 @@ function EvidencePanel({ sources, cited, onOpen }: { sources: ChatSource[]; cite
   );
 }
 
-function SaveButton({ slug, question, answer }: { slug: string; question: string; answer: string }) {
-  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
-  const [saved, setSaved] = useState<string | null>(null);
-  if (state === "saved" && saved) {
-    return (
-      <a
-        href={`/wikis/${encodeURIComponent(slug)}/${encodeURIComponent(saved)}`}
-        className="text-xs text-emerald-700 hover:underline"
-      >
-        위키에 저장됨 → 보기
-      </a>
-    );
-  }
-  return (
-    <button
-      disabled={state === "saving"}
-      onClick={async () => {
-        setState("saving");
-        try {
-          const r = await saveAnswerAction(slug, question, answer);
-          setSaved(r.slug);
-          setState("saved");
-        } catch {
-          setState("idle");
-        }
-      }}
-      className="text-xs text-gray-500 hover:text-gray-800 hover:underline"
-    >
-      {state === "saving" ? "저장 중…" : "위키에 저장"}
-    </button>
-  );
-}
-
-export function WikiChat({ slug, canWrite }: { slug: string; canWrite: boolean }) {
+export function WikiChat({ slug }: { slug: string }) {
   const { messages, sendMessage, status, stop, regenerate, error, clearError } = useChat<WikiUIMessage>({
     transport: new DefaultChatTransport({ api: `/api/wikis/${encodeURIComponent(slug)}/chat` }),
   });
@@ -248,11 +214,9 @@ export function WikiChat({ slug, canWrite }: { slug: string; canWrite: boolean }
             />
           </div>
         )}
-        {messages.map((m, i) => {
+        {messages.map((m) => {
           const text = textOf(m);
           const isUser = m.role === "user";
-          const prevUserMsg = isUser ? undefined : [...messages.slice(0, i)].reverse().find((x) => x.role === "user");
-          const prevUser = prevUserMsg ? textOf(prevUserMsg) : "";
           const sources = isUser ? [] : sourcesOf(m);
           return (
             <div key={m.id} className={isUser ? "flex justify-end" : "flex justify-start"}>
@@ -279,12 +243,6 @@ export function WikiChat({ slug, canWrite }: { slug: string; canWrite: boolean }
                 ) : null}
 
                 {!isUser && <SourceCards sources={sources} cited={citedNumbers(text)} onOpen={setActiveDoc} />}
-
-                {!isUser && canWrite && text.trim() && !busy && (
-                  <div className="mt-2 pt-2 border-t border-gray-200">
-                    <SaveButton slug={slug} question={prevUser} answer={text} />
-                  </div>
-                )}
               </div>
             </div>
           );

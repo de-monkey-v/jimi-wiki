@@ -2,8 +2,6 @@ import "server-only";
 import { hybridSearch } from "@/lib/search";
 import { generateText, llmEnabledForModel } from "@/lib/gemini";
 import { genModel } from "@/lib/model-config";
-import { upsertPage } from "@/lib/wiki";
-import { prisma } from "@/lib/db";
 
 export interface QuerySource {
   pageSlug?: string;
@@ -13,7 +11,6 @@ export interface QuerySource {
 export interface QueryResult {
   answer: string;
   sources: QuerySource[];
-  savedSlug?: string;
 }
 
 const SYSTEM = `너는 이 위키의 지식으로만 답하는 조수다. 아래 <검색결과> 안의 근거만 사용해 한국어로 답하라.
@@ -23,12 +20,12 @@ const SYSTEM = `너는 이 위키의 지식으로만 답하는 조수다. 아래
 
 /**
  * Query 워크플로우: 하이브리드 검색 → Gemini 종합 답변(인용).
- * save=true면 answer kind 페이지로 축적(탐색이 위키에 쌓인다). save는 editor 이상 권한 전제(호출부에서 검사).
+ * 답변은 저장하지 않는다(휘발성). 검색 코퍼스는 원문(note)+개념(concept)+개체(entity)만으로 유지된다.
  */
 export async function answerQuery(
   wikiId: string,
   question: string,
-  opts?: { save?: boolean; userId?: string | null; apiKeyId?: string | null },
+  opts?: { userId?: string | null; apiKeyId?: string | null },
 ): Promise<QueryResult> {
   const q = question.trim();
   if (!q) return { answer: "질문이 비어 있습니다.", sources: [] };
@@ -54,20 +51,5 @@ export async function answerQuery(
     heading: h.heading,
   }));
 
-  let savedSlug: string | undefined;
-  if (opts?.save) {
-    const refs = hits
-      .filter((h) => h.pageSlug)
-      .map((h) => `- [[${h.pageSlug}]]`)
-      .join("\n");
-    const res = await upsertPage(wikiId, {
-      title: q.slice(0, 80),
-      kind: "answer",
-      body: `# ${q}\n\n${answer}\n\n## 근거\n${refs || "(원문 청크)"}\n`,
-    });
-    savedSlug = res.slug;
-    await prisma.logEntry.create({ data: { wikiId, kind: "query", title: `query | ${q.slice(0, 60)}`, detail: savedSlug } });
-  }
-
-  return { answer, sources, savedSlug };
+  return { answer, sources };
 }

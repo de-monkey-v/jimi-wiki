@@ -315,7 +315,7 @@ function buildTools(wikiId: string, touched: Set<string>): ToolSpec[]
 | `searchWiki` | `{ query, k? }` | `hybridSearch(wikiId, query, k ?? 8)` → `{ hits: [{slug/refId, heading, snippet}] }` |
 | `appendLog` | `{ title, detail }` | `LogEntry.create(kind:ingest)` (append-only) → `{ ok:true }` |
 
-`kind` enum 검증: `note|concept|entity|answer|meta` 외 값은 handler에서 `note`로 강등. **`Source`는 도구로 노출하지 않는다(불변, 절대 수정 금지 규칙).**
+`kind` enum 검증: `note|concept|entity|meta` 외 값은 handler에서 `note`로 강등. **`Source`는 도구로 노출하지 않는다(불변, 절대 수정 금지 규칙).**
 
 writePage handler는 `Type.OBJECT` 스키마로 선언:
 ```ts

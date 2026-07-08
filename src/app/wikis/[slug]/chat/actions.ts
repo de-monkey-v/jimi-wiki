@@ -1,8 +1,7 @@
 "use server";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser, upsertPage, getPage, getSource, getBacklinks, getOutlinks, existingSlugSet } from "@/lib/wiki";
+import { getWikiForUser, getPage, getSource, getBacklinks, getOutlinks, existingSlugSet } from "@/lib/wiki";
 import { renderMarkdown } from "@/lib/markdown";
-import { hasRole } from "@/lib/api-gate";
 import { prisma } from "@/lib/db";
 
 /** 채팅 근거 문서(page 또는 원문)를 렌더된 HTML + 관련 문서(모달 내 이어보기용)로 반환. 세션 인증 + wiki 스코프. */
@@ -57,16 +56,4 @@ export async function fetchEvidenceDoc(
     empty,
     related,
   };
-}
-
-/** 채팅 답변을 answer 페이지로 저장(탐색 축적). editor 이상. */
-export async function saveAnswerAction(slug: string, question: string, answer: string): Promise<{ slug: string }> {
-  const userId = await getCurrentUserId();
-  const wiki = await getWikiForUser(userId, slug);
-  if (!wiki) throw new Error("접근 권한이 없습니다");
-  if (!hasRole(wiki.role, "editor")) throw new Error("쓰기 권한이 없습니다(editor 이상)");
-  const title = (question.trim() || "채팅 답변").slice(0, 80);
-  const res = await upsertPage(wiki.id, { title, kind: "answer", body: `# ${title}\n\n${answer.trim()}\n` });
-  await prisma.logEntry.create({ data: { wikiId: wiki.id, kind: "query", title: `chat | ${title}`, detail: res.slug } });
-  return { slug: res.slug };
 }

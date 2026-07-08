@@ -12,7 +12,6 @@ export default async function ChatPage({ params }: { params: Promise<{ slug: str
   const userId = await getCurrentUserId();
   const wiki = await getWikiForUser(userId, slug);
   if (!wiki) notFound();
-  const canWrite = wiki.role !== "viewer";
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -22,9 +21,9 @@ export default async function ChatPage({ params }: { params: Promise<{ slug: str
       </div>
       <h1 className="text-2xl font-bold mb-1">AI에게 질문</h1>
       <p className="text-sm text-gray-500 mb-4">
-        {wiki.title}의 지식으로 답합니다{canWrite ? " · 좋은 답변은 '위키에 저장'으로 축적하세요." : " · (읽기 전용 — 저장 불가)"}
+        {wiki.title}의 지식(원문·개념·개체)을 근거로 답합니다.
       </p>
-      <WikiChat slug={slug} canWrite={canWrite} />
+      <WikiChat slug={slug} />
     </main>
   );
 }

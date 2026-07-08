@@ -99,7 +99,7 @@ export async function lintWiki(
 
   const inbound = new Set(links.filter((l) => l.toPageId).map((l) => l.toPageId!));
   const outbound = new Set(links.map((l) => l.fromPageId));
-  // orphan/noOut는 파생 페이지(concept/entity/answer)만 대상. note는 설계상 그래프의 잎(원문 요약
+  // orphan/noOut는 파생 페이지(concept/entity)만 대상. note는 설계상 그래프의 잎(원문 요약
   // 전용, 상호참조 금지)이고 meta(ontology 등)는 system 페이지라 링크 검사에서 제외한다.
   const derived = pages.filter((p) => p.kind !== "note" && p.kind !== "meta");
   const orphanPages = derived.filter((p) => !inbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));

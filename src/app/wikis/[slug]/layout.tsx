@@ -23,7 +23,7 @@ export default async function WikiLayout({
   const { sections } = await getWikiToc(wiki.id);
 
   return (
-    <ChatModalProvider slug={slug} title={wiki.title} canWrite={wiki.role !== "viewer"}>
+    <ChatModalProvider slug={slug} title={wiki.title}>
       <WikiActionsProvider slug={slug} wikiKind={wiki.kind} canWrite={wiki.role !== "viewer"}>
         <div className="flex h-dvh overflow-hidden">
           <WikiToc slug={slug} title={wiki.title} email={user.email} role={wiki.role} sections={sections} />

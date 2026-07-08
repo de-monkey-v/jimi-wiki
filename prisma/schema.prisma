@@ -33,7 +33,6 @@ enum PageKind {
   note
   concept
   entity
-  answer
   meta
 }
 
@@ -294,7 +293,7 @@ model Source {
   @@unique([wikiId, slug])
 }
 
-// 파생 페이지(concept/entity/answer) ↔ 기여 원본(Source)의 M:N. note의 단일 Page.sourceId와 별개.
+// 파생 페이지(concept/entity) ↔ 기여 원본(Source)의 M:N. note의 단일 Page.sourceId와 별개.
 model PageContribution {
   id       String @id @default(cuid())
   wikiId   String

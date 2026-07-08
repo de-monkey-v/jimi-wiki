@@ -20,7 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
 /**
  * DELETE /api/wikis/:id/pages/:pageSlug — 페이지 삭제(editor).
- * 파생(concept/entity/answer/meta)은 허용. 소스노트(note)는 **원문에 연결된 경우에만**
+ * 파생(concept/entity/meta)은 허용. 소스노트(note)는 **원문에 연결된 경우에만**
  * 불변 계층으로 409. 출처(sourceId) 없는 정크 노트는 보호할 provenance가 없어 삭제 허용.
  * 예약 system 페이지(ontology 등)는 403. 상호참조 깨짐은 lint로 이연한다.
  */

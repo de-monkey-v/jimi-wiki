@@ -131,11 +131,11 @@ server.registerTool(
   "write_page",
   {
     description:
-      "페이지 생성/수정. kind: note(소스 노트)|concept|entity|answer|meta. note에는 category를 넣지 말 것. sourceSlug를 주면 note는 provenance로, 파생 페이지는 기여 기록으로 연결된다. 본문은 마크다운, 내부 링크는 [[slug]] 또는 [[slug|표시명]]. 작업의 마지막 write_page에는 embed=true를 포함해 시맨틱 검색 색인을 채워라(위키 단위 1회면 충분).",
+      "페이지 생성/수정. kind: note(소스 노트)|concept|entity|meta. note에는 category를 넣지 말 것. sourceSlug를 주면 note는 provenance로, 파생 페이지는 기여 기록으로 연결된다. 본문은 마크다운, 내부 링크는 [[slug]] 또는 [[slug|표시명]]. 작업의 마지막 write_page에는 embed=true를 포함해 시맨틱 검색 색인을 채워라(위키 단위 1회면 충분).",
     inputSchema: {
       slug: z.string().optional().describe("생략 시 title에서 생성. 기존 slug를 주면 수정"),
       title: z.string().describe("페이지 제목"),
-      kind: z.enum(["note", "concept", "entity", "answer", "meta"]).describe("페이지 유형"),
+      kind: z.enum(["note", "concept", "entity", "meta"]).describe("페이지 유형"),
       body: z.string().describe("마크다운 본문"),
       category: z.string().optional().describe("파생 페이지의 분류 경로(예: ai/concepts). 기존 카테고리 재사용 우선"),
       sourceSlug: z.string().optional().describe("근거 원문의 slug (create_source가 반환)"),
@@ -246,7 +246,7 @@ server.registerTool(
   "delete_page",
   {
     description:
-      "파생 페이지(concept/entity/answer/meta)를 삭제한다. 소스노트(note)와 원문(source)은 불변이라 삭제 불가. 상호참조가 깨질 수 있으니 이후 run_lint로 정리. editor 이상.",
+      "파생 페이지(concept/entity/meta)를 삭제한다. 소스노트(note)와 원문(source)은 불변이라 삭제 불가. 상호참조가 깨질 수 있으니 이후 run_lint로 정리. editor 이상.",
     inputSchema: { slug: z.string().describe("삭제할 페이지 slug") },
   },
   async ({ slug }) => {

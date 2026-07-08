@@ -5,14 +5,13 @@ export const KIND_LABEL: Record<PageKind, string> = {
   note: "소스 노트",
   concept: "개념",
   entity: "개체",
-  answer: "답변",
   meta: "메타",
 };
 
 // 모든 유효한 page kind(닫힌 집합). REST/ingest 경로의 kind 검증·강등에 사용.
-export const PAGE_KINDS: PageKind[] = ["note", "concept", "entity", "answer", "meta"];
+export const PAGE_KINDS: PageKind[] = ["note", "concept", "entity", "meta"];
 
-// 사람이 수동으로 만들거나 바꿀 수 있는 kind. note는 ingest, answer는 채팅 저장, meta는 온톨로지 전용이라 제외.
+// 사람이 수동으로 만들거나 바꿀 수 있는 kind. note는 ingest, meta는 온톨로지 전용이라 제외.
 export const MANUAL_KINDS: PageKind[] = ["concept", "entity"];
 
 // 수동 생성/편집 폼의 kind 선택지(설명 라벨 포함). 생성 폼과 편집 폼이 이 목록을 공유한다.
@@ -36,7 +35,7 @@ export interface TocGroup {
 }
 
 /** 사이드바/목록에 노출하는 kind 순서. */
-export const KIND_ORDER: PageKind[] = ["note", "concept", "entity", "answer", "meta"];
+export const KIND_ORDER: PageKind[] = ["note", "concept", "entity", "meta"];
 
 // ---------- P2: 탐색기(VSCode식) 폴더 트리 ----------
 export type TocLeaf = { type: "page"; slug: string; title: string; kind: PageKind };
@@ -72,7 +71,6 @@ export const KIND_COLOR: Record<PageKind, string> = {
   note: "#78716c", // stone-500 (원문 성격)
   concept: "#4f46e5", // indigo accent
   entity: "#0d9488", // teal
-  answer: "#059669", // emerald
   meta: "#a8a29e", // stone-400
 };
 export const BROKEN_COLOR = "#dc2626"; // red — 깨진 링크 노드

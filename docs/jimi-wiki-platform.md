@@ -33,7 +33,7 @@
 | **Wiki** | 지식 기반 하나(=워크스페이스). 유저는 여러 개 소유. `visibility`로 공개/비공개 결정 |
 | **Membership** | User↔Wiki 다대다 + 역할(owner/editor/viewer). "유저에 안 묶임"의 핵심 — 위키 접근은 단일 FK가 아니라 멤버십으로 |
 | **ShareLink** | 계정 없이 읽을 수 있는 공개 링크(토큰, 만료) |
-| **Page** | 위키 안의 마크다운 문서. `kind`(note/concept/entity/answer/meta), frontmatter, body |
+| **Page** | 위키 안의 마크다운 문서. `kind`(note/concept/entity/meta), frontmatter, body |
 | **PageLink** | 페이지 간 위키링크(파생) — 백링크·그래프용 |
 | **Source** | 원문(불변). ingest의 입력 |
 | **SearchChunk** | 페이지·원문을 청크로 쪼갠 검색 단위(tsvector + embedding) |
@@ -139,7 +139,7 @@ AgentRun(id, wikiId, userId, type['ingest'|'query'|'lint'], status, input[jsonb]
 3. 완료 후 변경된 페이지의 `SearchChunk` 재생성 + 임베딩(증분, hash 기준).
 4. `PageLink` 재계산.
 
-**Query**: 하이브리드 검색으로 후보 페이지 회수 → 에이전트가 종합·인용 → (가치 있으면) `answer` kind 페이지로 저장.
+**Query**: 하이브리드 검색으로 후보 페이지 회수 → 에이전트가 종합·인용. 답변은 저장하지 않는다(휘발성). 검색 코퍼스는 원문(note)+개념(concept)+개체(entity)로만 유지된다.
 **Lint**: 에이전트가 위키를 훑어 모순·고아·깨진 링크·누락 개념 보고(+자동 수정 옵션).
 
 > MVP는 ingest를 인라인 스트리밍으로 실행해도 됨. 부하가 커지면 잡 큐(예: pg 기반 큐)로 전환.

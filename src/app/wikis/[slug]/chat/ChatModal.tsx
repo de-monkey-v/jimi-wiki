@@ -30,12 +30,10 @@ export function useShortcutLabel() {
 export function ChatModalProvider({
   slug,
   title,
-  canWrite,
   children,
 }: {
   slug: string;
   title: string;
-  canWrite: boolean;
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -145,7 +143,7 @@ export function ChatModalProvider({
                 <div className="min-w-0">
                   <h2 className="truncate text-base font-semibold">AI에게 질문</h2>
                   <p className="truncate text-xs text-stone-400">
-                    {title}의 지식으로 답합니다{canWrite ? " · 좋은 답변은 '위키에 저장'으로 축적하세요" : " · 읽기 전용"}
+                    {title}의 지식(원문·개념·개체)을 근거로 답합니다
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
@@ -169,7 +167,7 @@ export function ChatModalProvider({
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                <WikiChat slug={slug} canWrite={canWrite} />
+                <WikiChat slug={slug} />
               </div>
             </div>
           </div>,

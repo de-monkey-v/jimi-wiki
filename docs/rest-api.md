@@ -60,7 +60,7 @@ Authorization: Bearer <API_KEY>
 #### `POST /pages` — 생성/수정 (editor)
 요청:
 ```json
-{ "slug": "옵션", "title": "필수", "kind": "note|concept|entity|answer|meta",
+{ "slug": "옵션", "title": "필수", "kind": "note|concept|entity|meta",
   "body": "마크다운 필수", "category": "옵션(파생만)", "sourceSlug": "옵션", "embed": false }
 ```
 - `slug` 생략 시 `title`에서 유도. 기존 slug면 수정.
@@ -73,7 +73,7 @@ Authorization: Bearer <API_KEY>
 오류: `400 invalid_json | title_and_body_required | invalid_kind | source_not_found`
 
 #### `DELETE /pages/{pageSlug}` — 삭제 (editor)
-파생 페이지(`concept`/`entity`/`answer`/`meta`)만 삭제. 관련 검색 청크도 정리된다. 상호참조 깨짐은 lint로 이연.
+파생 페이지(`concept`/`entity`/`meta`)만 삭제. 관련 검색 청크도 정리된다. 상호참조 깨짐은 lint로 이연.
 - 응답 `200`: `{ deleted: true, slug }`
 - `404 not_found` · `409 cannot_delete_source_note`(note는 불변) · `403 cannot_delete_system_page`(ontology 등 예약 슬러그)
 
@@ -128,7 +128,7 @@ Authorization: Bearer <API_KEY>
 |---|---|
 | `400` | 요청 오류(`invalid_json`, `*_required`, `invalid_kind`, `unknown_op` 등) |
 | `401` | 미인증 — 키 없음/만료/폐기, 또는 세션 전용 라우트에 Bearer. `WWW-Authenticate: Bearer` |
-| `403` | 인증됐으나 역할 부족(`forbidden`), `forbidden_save`, `forbidden_deep_requires_session`, `cannot_delete_system_page` |
+| `403` | 인증됐으나 역할 부족(`forbidden`), `forbidden_deep_requires_session`, `cannot_delete_system_page` |
 | `404` | 위키/리소스 없음, 또는 키 스코프 밖(존재 은폐) |
 | `409` | 상태 충돌 — `cannot_delete_source_note` |
 | `429` | 레이트리밋 — `Retry-After` 헤더 |

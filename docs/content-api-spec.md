@@ -156,7 +156,7 @@ let embedded = 0;
 if (embed) ({ embedded } = await reindexEmbeddings(wiki.id));         // 라우트 레벨에서만 임베딩
 return NextResponse.json({ ...res, embedded }, { status: res.created ? 201 : 200 });
 ```
-`kind`는 `PageKind` 화이트리스트(`note|concept|entity|answer|meta`) 검증(ingest.ts `coerceKind` 재사용 가능). `title`/`body` 누락 시 400. **코어는 항상 FTS-only, 임베딩은 라우트가 `reindexEmbeddings`로만** → 단일 규칙 유지.
+`kind`는 `PageKind` 화이트리스트(`note|concept|entity|meta`) 검증(ingest.ts `coerceKind` 재사용 가능). `title`/`body` 누락 시 400. **코어는 항상 FTS-only, 임베딩은 라우트가 `reindexEmbeddings`로만** → 단일 규칙 유지.
 
 **`POST /api/wikis/[id]/ingest`** (비동기, §4):
 ```ts

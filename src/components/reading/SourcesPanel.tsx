@@ -3,7 +3,7 @@ import Link from "next/link";
 type SourceRef = { slug: string; title: string; url?: string | null };
 
 /**
- * 파생 페이지(concept/entity/answer)의 "출처(원본)" 카드. 이 지식이 유래한 원본으로 가는 길.
+ * 파생 페이지(concept/entity)의 "출처(원본)" 카드. 이 지식이 유래한 원본으로 가는 길.
  * 비공개: 원문 뷰어로 링크(hrefFor). 공개: 내부 원문 라우트가 없어 외부 url만(또는 제목 텍스트).
  */
 export function SourcesPanel({ sources, hrefFor }: { sources: SourceRef[]; hrefFor?: (slug: string) => string }) {

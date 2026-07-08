@@ -26,12 +26,12 @@ export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
       <EmptyState
         asset="ingest-flow"
         title="소스 편입 (Ingest)"
-        body="URL이나 텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다."
+        body="웹 링크(본문만 추출)·유튜브(자막)·텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다."
         compact
       />
       <input type="hidden" name="wikiSlug" value={wikiSlug} />
-      <input name="url" placeholder="https://…" className="w-full rounded border px-3 py-2" />
-      <textarea name="text" rows={3} placeholder="또는 텍스트 직접 붙여넣기" className="w-full rounded border px-3 py-2 text-sm" />
+      <input name="url" placeholder="https://…  (웹 기사 또는 유튜브 링크)" className="w-full rounded border px-3 py-2" />
+      <textarea name="text" rows={3} placeholder="또는 텍스트/영상 대본 직접 붙여넣기" className="w-full rounded border px-3 py-2 text-sm" />
       <input name="title" placeholder="제목(선택)" className="w-full rounded border px-3 py-2" />
       <SubmitButton />
     </form>

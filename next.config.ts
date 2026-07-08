@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
     "@prisma/client",
     "@prisma/adapter-pg",
     "@prisma/client-runtime-utils",
+    // ingest 본문 추출/자막(ESM + linkedom/sanitize-html) — 서버 번들에 넣지 않고 node_modules에서 로드
+    "@extractus/article-extractor",
+    "youtube-caption-extractor",
   ],
   // dev 서버를 localhost가 아닌 호스트명으로 접속할 때 HMR/정적 리소스가 차단되지 않도록 허용.
   // (oss-wsl = 이 WSL 머신의 호스트명 — Windows 브라우저에서 이 이름으로 접속)

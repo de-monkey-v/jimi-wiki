@@ -1,9 +1,9 @@
 import "server-only";
 import { readFileSync } from "node:fs";
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { Type } from "@google/genai";
 import { prisma } from "@/lib/db";
+import { assertPublicUrl, MAX_SOURCE_CHARS } from "@/lib/safe-fetch";
+import { isYoutubeUrl, fetchYoutubeTranscript } from "@/lib/youtube";
 import { normalizeSlug } from "@/lib/markdown";
 import { getPage, listPages, upsertPage, addPageSource } from "@/lib/wiki";
 import { hybridSearch, reindexSource, reindexEmbeddings, indexCategory, matchCategorySemantic, deleteCategoryChunk } from "@/lib/search";
@@ -27,7 +27,6 @@ export interface IngestResult {
   pagesTouched: string[];
 }
 
-const MAX_SOURCE_CHARS = 200_000;
 const MAX_PROMPT_CHARS = 60_000;
 
 // 정본 분류 규칙(rules/ontology-rules.md)을 모듈 로드 시 읽는다. SKILL과 동일 파일 공유(parity).
@@ -243,45 +242,27 @@ function buildTools(wikiId: string, touched: Set<string>, sourceId: string): Too
   ];
 }
 
-// SSRF 방어: 사설/루프백/링크로컬(IMDS 169.254.169.254 포함) 주소 차단
-function isPrivateIPv4(ip: string): boolean {
-  const p = ip.split(".").map(Number);
-  if (p.length !== 4 || p.some((n) => Number.isNaN(n))) return true; // 파싱 실패 → 안전측 차단
-  const [a, b] = p;
-  if (a === 0 || a === 127 || a === 10) return true;
-  if (a === 169 && b === 254) return true; // link-local (클라우드 메타데이터)
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-  return false;
-}
-function isPrivateIP(ip: string): boolean {
-  if (ip.includes(":")) {
-    const l = ip.toLowerCase();
-    if (l === "::1" || l === "::") return true;
-    if (l.startsWith("fe80") || l.startsWith("fc") || l.startsWith("fd")) return true;
-    const m = l.match(/::ffff:(\d+\.\d+\.\d+\.\d+)/);
-    return m ? isPrivateIPv4(m[1]) : false;
-  }
-  return isPrivateIPv4(ip);
-}
-async function assertPublicUrl(raw: string): Promise<URL> {
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    throw new Error("잘못된 URL");
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("http/https URL만 허용");
-  const host = u.hostname.replace(/^\[|\]$/g, "");
-  const ips = isIP(host) ? [host] : (await lookup(host, { all: true })).map((r) => r.address);
-  if (ips.length === 0) throw new Error("호스트를 확인할 수 없습니다");
-  for (const ip of ips) if (isPrivateIP(ip)) throw new Error(`내부/사설 주소로의 요청 차단: ${ip}`);
-  return u;
+// HTML → 평문. script/style 제거 후 태그 제거 + 기본 엔티티 복원. 본문 추출 실패 시 fallback으로도 쓴다.
+function stripHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n\s*\n+/g, "\n\n")
+    .trim();
 }
 
-// URL → 텍스트 (MVP: 태그 제거). SSRF 차단 + 리다이렉트 비허용.
-async function fetchAsText(url: string): Promise<string> {
+// 본문 추출 성공으로 간주할 최소 길이. 이보다 짧으면(동의/페이월 스텁 등) 원시 strip으로 폴백.
+const MIN_ARTICLE_CHARS = 200;
+
+// URL → 텍스트. SSRF 차단 + 리다이렉트 비허용. HTML은 Readability(본문 추출)로 광고·네비를 걷어내고
+// 실패하면 원시 태그 제거로 폴백한다. 추출한 기사 제목을 함께 반환(호출부 title 유도에 사용).
+async function fetchAsText(url: string): Promise<{ text: string; title?: string }> {
   const target = await assertPublicUrl(url);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15_000);
@@ -300,20 +281,25 @@ async function fetchAsText(url: string): Promise<string> {
     const clen = Number(res.headers.get("content-length") ?? "0");
     if (clen && clen > 8_000_000) throw new Error("응답이 너무 큼(>8MB)");
     const raw = (await res.text()).slice(0, MAX_SOURCE_CHARS);
-    if (ct.includes("text/html")) {
-      return raw
-        .replace(/<script[\s\S]*?<\/script>/gi, " ")
-        .replace(/<style[\s\S]*?<\/style>/gi, " ")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/[ \t]+/g, " ")
-        .replace(/\n\s*\n\s*\n+/g, "\n\n")
-        .trim();
+    if (!ct.includes("text/html")) return { text: raw };
+
+    // 본문 추출: 이미 안전하게 받아온 HTML 문자열만 메모리에서 정제한다(extractFromHtml만 사용).
+    // extract(url)은 라이브러리가 직접 재fetch해 SSRF 가드를 우회하므로 절대 사용 금지.
+    let extractedTitle: string | undefined;
+    try {
+      const { extractFromHtml } = await import("@extractus/article-extractor");
+      const article = await extractFromHtml(raw, target.href);
+      extractedTitle = article?.title?.trim() || undefined; // 본문 폴백 시에도 제목은 살린다
+      if (article?.content) {
+        const body = stripHtml(article.content);
+        if (body.length >= MIN_ARTICLE_CHARS) {
+          return { text: body.slice(0, MAX_SOURCE_CHARS), title: extractedTitle };
+        }
+      }
+    } catch {
+      // 추출기 예외/비기사 페이지 → 아래 원시 strip 폴백(수집이 실패로 퇴행하지 않게)
     }
-    return raw;
+    return { text: stripHtml(raw), title: extractedTitle };
   } finally {
     clearTimeout(timer);
   }
@@ -398,9 +384,20 @@ export async function runIngestJob(run: {
     // running 전이도 try 안에서(실패 시 error로 기록되게)
     await prisma.agentRun.update({ where: { id }, data: { status: "running" } });
 
-    // 원문 수집
+    // 원문 수집. text 직접 입력이 최우선(네트워크 없음) → 유튜브는 자막 → 그 외 URL은 본문 추출.
     let content = input.text?.trim() ?? "";
-    if (!content && input.url) content = await fetchAsText(input.url);
+    let derivedTitle: string | undefined; // 추출기/유튜브가 알아낸 제목(hostname보다 우선한다)
+    if (!content && input.url) {
+      if (isYoutubeUrl(input.url)) {
+        const yt = await fetchYoutubeTranscript(input.url);
+        content = yt.content;
+        derivedTitle = yt.title;
+      } else {
+        const web = await fetchAsText(input.url);
+        content = web.text;
+        derivedTitle = web.title;
+      }
+    }
     if (!content) throw new Error("수집할 원문이 없습니다(URL 또는 텍스트 필요)");
 
     // 제목 유도(잘못된 url이어도 text가 있으면 실패하지 않게 가드)
@@ -414,6 +411,7 @@ export async function runIngestJob(run: {
     }
     const title =
       input.title?.trim() ||
+      derivedTitle?.trim() ||
       hostFromUrl ||
       content.split("\n").find((l) => l.trim())?.slice(0, 60) ||
       "제목 없는 소스";

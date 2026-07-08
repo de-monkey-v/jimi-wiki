@@ -1,0 +1,30 @@
+name: Feature request · 기능 제안
+description: Suggest an idea or improvement · 아이디어·개선 제안
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem · 해결하려는 문제
+      description: What are you trying to do, and what's in the way? · 무엇을 하려는데 무엇이 막나요?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution · 제안하는 해법
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered · 고려한 대안
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context · 추가 맥락
+      description: Screenshots, links, related issues · 스크린샷·링크·관련 이슈
+    validations:
+      required: false

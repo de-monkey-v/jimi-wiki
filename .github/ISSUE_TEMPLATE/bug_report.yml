@@ -1,0 +1,51 @@
+name: Bug report · 버그 신고
+description: Report something that isn't working · 동작하지 않는 문제 신고
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! For **security vulnerabilities**, do NOT use this form —
+        see [SECURITY.md](https://github.com/gyuhyeonLee/jimi-wiki-app/blob/main/SECURITY.md).
+        보안 취약점은 이 양식 대신 [SECURITY.md](https://github.com/gyuhyeonLee/jimi-wiki-app/blob/main/SECURITY.md)를 따라 주세요.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened? · 무슨 일이 있었나요?
+      description: Expected vs actual behavior · 기대한 동작과 실제 동작
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce · 재현 절차
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit · 버전 또는 커밋
+      description: Output of `git rev-parse --short HEAD` or the release tag
+    validations:
+      required: false
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment · 환경
+      description: OS, Node version, AUTH_MODE, models in use, Docker or local, browser
+      placeholder: |
+        OS: … / Node: … / AUTH_MODE: … / model: gemini-… / Docker or local: …
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs · 로그
+      description: Relevant server/worker/browser logs. **Redact secrets and API keys.** · 시크릿·API 키는 가려 주세요.
+      render: shell
+    validations:
+      required: false

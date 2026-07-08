@@ -1,6 +1,10 @@
 # jimi-wiki-app
 
+**한국어** | [English](README.en.md)
+
 LLM이 유지보수자 역할을 맡는 협업 위키 플랫폼. 소스를 편입(ingest)하면 앱 내부 AI가 소스 노트·개념/개체 페이지·상호참조를 만들고, 하이브리드 검색(BM25 + 임베딩)과 그래프로 지식을 탐색한다. 외부 에이전트(Claude Code 등)는 REST/MCP로 같은 위키를 직접 유지보수할 수 있다.
+
+![jimi-wiki 위키 목록 셸 화면](docs/assets/shell-wikis.png)
 
 ## 스택
 
@@ -129,8 +133,10 @@ Health check:
 
 > 내부 AI를 소비하는 라우트(`/ingest`, `/query`, `/reindex`, `/lint?deep`)는 **세션 전용**이다. API 키로는 `create_source` + `write_page` 같은 primitive로 위키를 직접 작성하고, 앱 내부 AI ingest는 웹 UI에서 실행한다. 자세한 정책은 `docs/rest-api.md` 참조.
 
+## 기여
+
+[CONTRIBUTING.md](CONTRIBUTING.md)를 참고한다. 보안 문제는 공개 이슈로 올리지 말고 [SECURITY.md](SECURITY.md)를 따른다.
+
 ## 라이선스
 
-**Functional Source License, Version 1.1, Apache 2.0 Future License (FSL-1.1-ALv2)** — 전문은 [`LICENSE.md`](LICENSE.md).
-
-내부 사용, 수정, 비상업적 교육·연구, 자체 배포는 자유롭게 허용된다. 다만 이 소프트웨어를 대체하거나 실질적으로 동일한 기능을 제공하는 **상업적 제품·서비스(예: 경쟁 SaaS 호스팅)로 제공하는 것은 금지**된다. 각 버전은 공개 후 **2년이 지나면 Apache License 2.0으로 자동 전환**된다.
+**MIT** — 전문은 [`LICENSE`](LICENSE). 사용·수정·재배포·상업적 이용 모두 자유롭게 허용된다. 저작권·라이선스 고지만 유지하면 된다.

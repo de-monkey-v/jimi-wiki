@@ -97,8 +97,10 @@ export type RunListItem = {
   id: string;
   type: string;
   status: string;
+  stage: string | null; // running 중 현재 단계(fetch|curate|embed|lint). 종료 시 null
   title: string;
-  createdAt: string;
+  createdAt: string; // 큐 진입 시각
+  startedAt: string | null; // 실제 실행 시작(running 전이) 시각. 대기 중이면 null
   finishedAt: string | null;
   error: string | null;
   pagesTouched: number;
@@ -129,8 +131,10 @@ export async function listRunsAction(wikiSlug: string): Promise<RunListItem[] | 
       id: r.id,
       type: r.type,
       status: r.status,
+      stage: r.stage,
       title: input.title?.trim() || input.url || input.text?.slice(0, 40) || r.type,
       createdAt: r.createdAt.toISOString(),
+      startedAt: r.startedAt?.toISOString() ?? null,
       finishedAt: r.finishedAt?.toISOString() ?? null,
       error: r.error,
       pagesTouched: Array.isArray(output.pagesTouched) ? output.pagesTouched.length : 0,

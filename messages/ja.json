@@ -412,7 +412,15 @@
     "failed": "失敗",
     "pagesTouched": "{count}ページ",
     "activeCount": "{count}件を実行中",
-    "allDone": "処理完了"
+    "allDone": "処理完了",
+    "noJobs": "作業なし",
+    "waiting": "待機中",
+    "stage": {
+      "fetch": "原文取得中",
+      "curate": "AI整理中",
+      "embed": "埋め込み中",
+      "lint": "点検中"
+    }
   },
   "WikisSlugLintPage": {
     "empty": "なし",

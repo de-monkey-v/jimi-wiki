@@ -412,7 +412,15 @@
     "failed": "Failed",
     "pagesTouched": "{count} pages",
     "activeCount": "{count} jobs running",
-    "allDone": "All done"
+    "allDone": "All done",
+    "noJobs": "No jobs",
+    "waiting": "Queued",
+    "stage": {
+      "fetch": "Fetching source",
+      "curate": "AI curating",
+      "embed": "Embedding",
+      "lint": "Health check"
+    }
   },
   "WikisSlugLintPage": {
     "empty": "None",

@@ -356,10 +356,12 @@ model AgentRun {
   userId     String?
   type       AgentType
   status     AgentStatus @default(pending)
+  stage      String? // running 중 현재 단계(fetch|curate|embed|lint). 단계 전이마다 갱신, 종료 시 null
   input      Json        @default("{}")
   output     Json?
   error      String?
-  createdAt  DateTime    @default(now())
+  createdAt  DateTime    @default(now()) // 큐 진입(pending) 시각
+  startedAt  DateTime? // running 전이 시각 — 대기 시간과 실제 실행 시간을 구분(경과시간·정직한 진행표시)
   finishedAt DateTime?
   wiki       Wiki        @relation(fields: [wikiId], references: [id], onDelete: Cascade)
 

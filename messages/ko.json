@@ -412,7 +412,15 @@
     "failed": "실패",
     "pagesTouched": "페이지 {count}개",
     "activeCount": "작업 {count}개 실행 중",
-    "allDone": "작업 완료"
+    "allDone": "작업 완료",
+    "noJobs": "작업 없음",
+    "waiting": "대기 중",
+    "stage": {
+      "fetch": "원문 수집 중",
+      "curate": "LLM 큐레이션 중",
+      "embed": "임베딩 중",
+      "lint": "정리 점검 중"
+    }
   },
   "WikisSlugLintPage": {
     "empty": "없음",

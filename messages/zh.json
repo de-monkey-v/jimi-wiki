@@ -412,7 +412,15 @@
     "failed": "失败",
     "pagesTouched": "{count}个页面",
     "activeCount": "{count}个任务运行中",
-    "allDone": "任务完成"
+    "allDone": "任务完成",
+    "noJobs": "无任务",
+    "waiting": "排队中",
+    "stage": {
+      "fetch": "抓取原文中",
+      "curate": "AI整理中",
+      "embed": "生成向量中",
+      "lint": "健康检查中"
+    }
   },
   "WikisSlugLintPage": {
     "empty": "无",

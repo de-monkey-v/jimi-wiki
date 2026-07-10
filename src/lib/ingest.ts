@@ -374,7 +374,7 @@ export async function reapStaleRuns(wikiId?: string, thresholdMs = 60 * 60 * 100
   const cutoff = new Date(Date.now() - thresholdMs);
   await prisma.agentRun.updateMany({
     where: { ...(wikiId ? { wikiId } : {}), status: "running", createdAt: { lt: cutoff } },
-    data: { status: "error", error: "시간 초과 또는 워커 중단으로 회수됨", finishedAt: new Date() },
+    data: { status: "error", stage: null, error: "시간 초과 또는 워커 중단으로 회수됨", finishedAt: new Date() },
   });
 }
 
@@ -405,9 +405,16 @@ export async function runIngestJob(run: {
 }): Promise<void> {
   const { id, wikiId, input, userId } = run;
 
+  // 진행 단계 갱신(비치명적) — 우하단 잡 인디케이터가 "지금 무슨 단계인지" 실시간 표시.
+  const setStage = (stage: string) =>
+    prisma.agentRun.update({ where: { id }, data: { stage } }).catch(() => {});
+
   try {
-    // running 전이도 try 안에서(실패 시 error로 기록되게)
-    await prisma.agentRun.update({ where: { id }, data: { status: "running" } });
+    // running 전이도 try 안에서(실패 시 error로 기록되게). startedAt으로 대기≠실행 구분, stage=fetch로 시작.
+    await prisma.agentRun.update({
+      where: { id },
+      data: { status: "running", startedAt: new Date(), stage: "fetch" },
+    });
 
     // 원문 수집. text 직접 입력이 최우선(네트워크 없음) → 유튜브는 자막 → 그 외 URL은 본문 추출.
     let content = input.text?.trim() ?? "";
@@ -455,6 +462,7 @@ export async function runIngestJob(run: {
       // 스텁 note는 아래 ensureSourceNote가 만든다(LLM 분기와 공용, 불변식 단일 지점).
       summary = "LLM provider 미설정(키/OAuth 없음) — 원문 스텁 노트만 생성(LLM 큐레이션 생략).";
     } else {
+      await setStage("curate");
       // 신뢰 경계 구분자 위조 방지: 원문에서 종료 태그를 무력화하고 title의 특수문자 제거
       const safeContent = content.slice(0, MAX_PROMPT_CHARS).replaceAll("</원문>", "〈/원문〉").replaceAll("<원문", "〈원문");
       const safeTitle = title.replace(/["<>]/g, " ").slice(0, 200);
@@ -511,6 +519,7 @@ export async function runIngestJob(run: {
 
     // 선택적 AI: 소스+생성/수정 페이지의 새 청크를 위키 단위 1회 배치 임베딩(비치명적)
     if (geminiEnabled()) {
+      await setStage("embed");
       await reindexEmbeddings(wikiId).catch((e) =>
         console.error(`[ingest] 임베딩 backfill 실패(다음 /reindex에서 복구): ${(e as Error).message}`),
       );
@@ -518,6 +527,7 @@ export async function runIngestJob(run: {
 
     // 편입 직후 기계 lint를 돌려 건강 점수를 트렌드(AgentRun)로 남긴다(비치명적). 부채를 사후 청소가
     // 아니라 편입 시점에 측정 — write-path 품질 원칙. deep 아님(LLM 비용 0).
+    await setStage("lint");
     await lintWiki(wikiId, { persist: true, userId }).catch((e) =>
       console.error(`[ingest] auto-lint 실패(비치명적): ${(e as Error).message}`),
     );
@@ -529,6 +539,7 @@ export async function runIngestJob(run: {
       where: { id },
       data: {
         status: "done",
+        stage: null, // 종료 — 진행 단계 해제
         output: {
           summary,
           sourceSlug,
@@ -541,7 +552,7 @@ export async function runIngestJob(run: {
   } catch (e) {
     await prisma.agentRun.update({
       where: { id },
-      data: { status: "error", error: (e as Error).message, finishedAt: new Date() },
+      data: { status: "error", stage: null, error: (e as Error).message, finishedAt: new Date() },
     });
   }
 }

@@ -2,6 +2,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { claimNextIngestRun, runClaimedIngestJob, reapStaleRuns } from "../src/lib/ingest";
 import { refreshConfig } from "../src/lib/model-config";
+import { notifyIngestComplete } from "../src/lib/telegram-notify";
 
 const pollMs = Number(process.env.WORKER_POLL_MS ?? 3000);
 let stopping = false;
@@ -32,6 +33,8 @@ async function main() {
       }
       console.log(`[worker] ingest ${run.id} wiki=${run.wikiId}`);
       await runClaimedIngestJob(run);
+      // 이 시점에 run 은 반드시 done/error(runIngestJob 이 예외를 삼키고 터미널 상태로 확정). 봇 알림 훅.
+      await notifyIngestComplete(run.id, run.input?.notifyChatId);
     } catch (e) {
       console.error("[worker] 루프 오류(재시도):", (e as Error)?.message);
       await sleep(pollMs);

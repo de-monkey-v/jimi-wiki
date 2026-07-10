@@ -232,6 +232,11 @@ export interface ToolLoopResult {
   calls: string[];
   usage?: LoopUsage;
 }
+// 멀티턴 대화 히스토리(provider 중립). role은 Gemini 규약("user"|"model")에 맞춘다.
+export interface LoopMessage {
+  role: "user" | "model";
+  text: string;
+}
 
 /**
  * 수동 function-calling 루프. functionCalls 없을 때까지 반복(최대 maxTurns). model로 GEN_MODEL 오버라이드 가능.
@@ -243,6 +248,7 @@ export async function generateWithTools(opts: {
   tools: ToolSpec[];
   maxTurns?: number;
   model?: string;
+  history?: LoopMessage[]; // 이전 대화 턴(선택). 없으면 단발 — 기존 동작 그대로.
 }): Promise<ToolLoopResult> {
   const model = opts.model ?? genModel();
   const provider = providerOf(model);
@@ -256,7 +262,10 @@ export async function generateWithTools(opts: {
   }
   if (provider !== "google") throw new Error(`알 수 없는 모델 provider: ${model}`);
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
-  const contents: Content[] = [{ role: "user", parts: [{ text: opts.userPrompt }] }];
+  const contents: Content[] = [
+    ...(opts.history ?? []).map((h): Content => ({ role: h.role, parts: [{ text: h.text }] })),
+    { role: "user", parts: [{ text: opts.userPrompt }] },
+  ];
   const called: string[] = [];
   const usage: LoopUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const addUsage = (m?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number }) => {

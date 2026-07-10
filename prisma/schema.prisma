@@ -217,6 +217,7 @@ model Wiki {
   pagePins    PagePin[]
   folderPins  FolderPin[]
   savedLinks  SavedLink[]
+  telegramBindings TelegramBinding[]
 }
 
 model Membership {
@@ -455,3 +456,25 @@ model SavedLink {
   @@index([userId, wikiId, createdAt])
 }
 
+// ---------- 텔레그램 봇 ----------
+// 채팅(그룹/DM) → 위키 바인딩. chatId=텔레그램 chat.id(그룹은 음수·64비트 가능 → String). 채팅당 위키 1개.
+model TelegramBinding {
+  chatId      String   @id // 텔레그램 chat.id (문자열 보존)
+  wikiId      String
+  createdById String? // 바인딩을 건 텔레그램 유저 id(감사용, 소프트 참조)
+  createdAt   DateTime @default(now())
+  wiki        Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@index([wikiId])
+}
+
+// 봇 대화 기억(멀티턴). chatId별 최근 N턴을 로드해 툴 루프 history로 넣는다. 스칼라 위주(관계 미연결).
+model TelegramTurn {
+  id        String   @id @default(cuid())
+  chatId    String
+  role      String // "user" | "model"
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([chatId, createdAt])
+}

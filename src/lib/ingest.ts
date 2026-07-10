@@ -26,6 +26,8 @@ export interface IngestInput {
   filename?: string;
   mimeType?: string;
   size?: number;
+  // 텔레그램 봇 편입: 완료 시 이 chat 으로 알림을 보낸다(워커 완료 훅이 소비). 봇 경로에서만 채워진다.
+  notifyChatId?: string;
 }
 export interface IngestResult {
   agentRunId: string;
@@ -174,7 +176,9 @@ function parseRelationTuples(raw: string, candidates: Set<string>): RelationTupl
   return out;
 }
 
-function buildTools(wikiId: string, touched: Set<string>, sourceId: string): ToolSpec[] {
+// 읽기 툴(위키 조회·검색·온톨로지) — ingest 에이전트와 텔레그램 봇 에이전트가 공유한다.
+// touched: 이번 실행에서 방금 쓴 slug 집합(findRelated가 "기존 지식"만 보도록 제외). 봇은 쓰기가 없으므로 빈 Set.
+export function buildReadTools(wikiId: string, touched: Set<string> = new Set<string>()): ToolSpec[] {
   return [
     {
       decl: { name: "listPages", description: "위키의 모든 페이지 목록(slug, title, kind)", parameters: { type: Type.OBJECT, properties: {} } },
@@ -196,49 +200,6 @@ function buildTools(wikiId: string, touched: Set<string>, sourceId: string): Too
         // AI 제외 kind(personal)는 에이전트가 읽을 수 없다(본문 유출 차단) — 없는 것처럼 취급.
         if (!p || isAiExcludedKind(p.kind)) return { found: false };
         return { found: true, title: p.title, kind: p.kind, body: p.body };
-      },
-    },
-    {
-      decl: {
-        name: "writePage",
-        description: "위키 페이지 생성/수정(존재하면 수정). 링크·검색 인덱스는 자동 재계산됨.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            slug: { type: Type.STRING, description: "영문 kebab-case slug. 링크 대상과 일치시킬 것" },
-            title: { type: Type.STRING },
-            kind: { type: Type.STRING, description: "note|concept|entity|meta" },
-            body: { type: Type.STRING, description: "마크다운. 내부링크 [[slug]]" },
-            category: {
-              type: Type.STRING,
-              description: "파생 페이지(concept/entity)의 폴더 경로(예: ai/architectures). note에는 지정 금지. 재사용 우선.",
-            },
-          },
-          required: ["title", "kind", "body"],
-        },
-      },
-      handler: async (args) => {
-        const kind = coerceKind(args.kind);
-        const slug = args.slug ? String(args.slug) : undefined;
-        if (slug && isReservedSlug(normalizeSlug(slug))) return { error: "예약된 system slug입니다" };
-        const isNote = kind === "note";
-        try {
-          const res = await upsertPage(wikiId, {
-            slug,
-            title: String(args.title ?? "제목 없음"),
-            kind,
-            body: String(args.body ?? ""),
-            // 순수성: note는 category 없음 + provenance(sourceId) 연결. 파생은 sanitize된 category(저장값=온톨로지 slug).
-            category: isNote ? null : args.category ? (sanitizeCategorySlug(String(args.category)) ?? undefined) : undefined,
-            sourceId: isNote ? sourceId : undefined,
-          });
-          touched.add(res.slug);
-          // 파생 페이지: 현재 원본을 기여 원본으로 기록(M:N, 멱등). note는 위 sourceId로 이미 연결.
-          if (!isNote) await addPageSource(wikiId, res.slug, sourceId).catch(() => {});
-          return { slug: res.slug, created: res.created };
-        } catch (e) {
-          return { error: (e as Error).message };
-        }
       },
     },
     {
@@ -311,6 +272,100 @@ function buildTools(wikiId: string, touched: Set<string>, sourceId: string): Too
         }
         const candidates = [...bySlug.values()].sort((a, b) => b.score - a.score).slice(0, 6);
         return { candidates };
+      },
+    },
+  ];
+}
+
+// 편입 액션 툴(넣기) — 텔레그램 봇 에이전트 전용. 비동기 ingest 잡을 큐잉만 한다(워커가 provenance 갖춘
+// 페이지를 생성). notifyChatId 를 잡 input 에 실어 완료 시 워커가 그 chat 으로 알림을 보낸다.
+export function buildIngestActionTools(wikiId: string, chatId: string, userId?: string | null): ToolSpec[] {
+  async function enqueue(input: IngestInput): Promise<Record<string, unknown>> {
+    // 생성형 쿼터 방어(봇도 세션 ingest와 동일 상한을 받는다).
+    if (userId) {
+      const q = await checkDailyQuota(userId);
+      if (!q.ok) return { error: "일일 생성 한도를 초과했어요. 잠시 후 다시 시도해 주세요." };
+    }
+    const run = await createIngestRun(wikiId, { ...input, notifyChatId: chatId }, userId ?? undefined);
+    return { queued: true, runId: run.id };
+  }
+  return [
+    {
+      decl: {
+        name: "ingestUrl",
+        description: "URL(웹 문서·유튜브 등)을 이 위키에 편입한다. 비동기로 처리되며 완료되면 사용자에게 자동 알림이 간다. 사용자가 링크를 주거나 '저장/편입해줘'라고 하면 사용하라.",
+        parameters: { type: Type.OBJECT, properties: { url: { type: Type.STRING } }, required: ["url"] },
+      },
+      handler: async (args) => {
+        const url = String(args.url ?? "").trim();
+        if (!url) return { error: "url이 필요합니다" };
+        return enqueue({ url });
+      },
+    },
+    {
+      decl: {
+        name: "ingestText",
+        description: "사용자가 붙여넣은 텍스트를 이 위키에 편입한다. 비동기 처리되며 완료 시 자동 알림. title 은 선택(없으면 자동).",
+        parameters: {
+          type: Type.OBJECT,
+          properties: { text: { type: Type.STRING }, title: { type: Type.STRING } },
+          required: ["text"],
+        },
+      },
+      handler: async (args) => {
+        const text = String(args.text ?? "").trim();
+        if (!text) return { error: "text가 필요합니다" };
+        const title = args.title ? String(args.title) : undefined;
+        return enqueue({ text, title });
+      },
+    },
+  ];
+}
+
+function buildTools(wikiId: string, touched: Set<string>, sourceId: string): ToolSpec[] {
+  return [
+    ...buildReadTools(wikiId, touched),
+    {
+      decl: {
+        name: "writePage",
+        description: "위키 페이지 생성/수정(존재하면 수정). 링크·검색 인덱스는 자동 재계산됨.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            slug: { type: Type.STRING, description: "영문 kebab-case slug. 링크 대상과 일치시킬 것" },
+            title: { type: Type.STRING },
+            kind: { type: Type.STRING, description: "note|concept|entity|meta" },
+            body: { type: Type.STRING, description: "마크다운. 내부링크 [[slug]]" },
+            category: {
+              type: Type.STRING,
+              description: "파생 페이지(concept/entity)의 폴더 경로(예: ai/architectures). note에는 지정 금지. 재사용 우선.",
+            },
+          },
+          required: ["title", "kind", "body"],
+        },
+      },
+      handler: async (args) => {
+        const kind = coerceKind(args.kind);
+        const slug = args.slug ? String(args.slug) : undefined;
+        if (slug && isReservedSlug(normalizeSlug(slug))) return { error: "예약된 system slug입니다" };
+        const isNote = kind === "note";
+        try {
+          const res = await upsertPage(wikiId, {
+            slug,
+            title: String(args.title ?? "제목 없음"),
+            kind,
+            body: String(args.body ?? ""),
+            // 순수성: note는 category 없음 + provenance(sourceId) 연결. 파생은 sanitize된 category(저장값=온톨로지 slug).
+            category: isNote ? null : args.category ? (sanitizeCategorySlug(String(args.category)) ?? undefined) : undefined,
+            sourceId: isNote ? sourceId : undefined,
+          });
+          touched.add(res.slug);
+          // 파생 페이지: 현재 원본을 기여 원본으로 기록(M:N, 멱등). note는 위 sourceId로 이미 연결.
+          if (!isNote) await addPageSource(wikiId, res.slug, sourceId).catch(() => {});
+          return { slug: res.slug, created: res.created };
+        } catch (e) {
+          return { error: (e as Error).message };
+        }
       },
     },
     {

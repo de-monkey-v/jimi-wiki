@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, tool, jsonSchema, stepCountIs } from "ai";
-import type { ToolSpec, ToolLoopResult, LoopUsage } from "@/lib/gemini";
+import type { ToolSpec, ToolLoopResult, LoopUsage, LoopMessage } from "@/lib/gemini";
 import { CODEX_BASE_URL, getFreshAccess } from "@/lib/openai-oauth";
 import { effectiveOpenAITransport, providerHasCredential } from "@/lib/model-config";
 import { DEFAULT_OPENAI_MODEL } from "@/lib/model-defaults";
@@ -97,6 +97,7 @@ export async function openaiGenerateWithTools(opts: {
   tools: ToolSpec[];
   maxTurns?: number;
   model?: string;
+  history?: LoopMessage[];
 }): Promise<ToolLoopResult> {
   const model = opts.model ?? DEFAULT_OPENAI_MODEL;
   const calls: string[] = [];
@@ -116,10 +117,17 @@ export async function openaiGenerateWithTools(opts: {
 
   // streamText 사용: ChatGPT(Codex) 백엔드는 stream:true 만 허용한다. 표준 OpenAI API 에도 동일하게 동작하므로
   // 두 경로를 통합한다. 스트림을 끝까지 소비한 뒤 집계된 text/usage/steps 를 읽는다.
+  // 대화 히스토리가 있으면 prompt 대신 messages 로 전달(멀티턴). role: model→assistant 매핑.
+  const messages = opts.history?.length
+    ? [
+        ...opts.history.map((h) => ({ role: h.role === "model" ? ("assistant" as const) : ("user" as const), content: h.text })),
+        { role: "user" as const, content: opts.userPrompt },
+      ]
+    : undefined;
   const res = streamText({
     model: resolveModel(model),
     system: opts.system,
-    prompt: opts.userPrompt,
+    ...(messages ? { messages } : { prompt: opts.userPrompt }),
     tools,
     stopWhen: stepCountIs(opts.maxTurns ?? 12),
   });

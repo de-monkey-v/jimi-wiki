@@ -2,6 +2,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { PageNav } from "./PageNav";
+import { WikiArticle } from "./WikiArticle";
 import { ProvenanceCard } from "./reading/ProvenanceCard";
 import { BacklinksPanel } from "./reading/BacklinksPanel";
 import { RelatedPanel } from "./reading/RelatedPanel";
@@ -30,6 +31,8 @@ export function ReadingPane({
   editHref,
   localGraph,
   translateControl,
+  pinControl,
+  create,
 }: {
   title: string;
   html: string;
@@ -48,6 +51,8 @@ export function ReadingPane({
   editHref?: string;
   localGraph?: ReactNode;
   translateControl?: ReactNode;
+  pinControl?: ReactNode; // 개인 즐겨찾기 별 토글(비공개 뷰만)
+  create?: { wikiSlug: string; category: string | null }; // 있으면 미해결 [[link]] 클릭 → 생성(비공개 쓰기 뷰만)
 }) {
   const t = useTranslations("ReadingPane");
   return (
@@ -56,6 +61,7 @@ export function ReadingPane({
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">{title}</h1>
         <div className="flex items-center gap-2">
+          {pinControl}
           {translateControl}
           {editHref && (
             <Link href={editHref} className="rounded border px-3 py-1 text-sm hover:bg-stone-50">
@@ -73,6 +79,8 @@ export function ReadingPane({
 
       {isEmpty ? (
         <p className="text-stone-400">{emptyText}</p>
+      ) : create ? (
+        <WikiArticle html={html} create={create} />
       ) : (
         <article className="wiki-content" dangerouslySetInnerHTML={{ __html: html }} />
       )}

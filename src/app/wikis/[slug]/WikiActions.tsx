@@ -6,7 +6,8 @@ import { IngestPanel } from "./IngestPanel";
 import { NewPageForm, type CategoryOption } from "./new/NewPageForm";
 import { getWikiCategoriesAction } from "../actions";
 
-type Ctx = { openIngest: () => void; openNewPage: () => void };
+type NewPagePreset = { category?: string; kind?: string };
+type Ctx = { openIngest: () => void; openNewPage: (preset?: NewPagePreset) => void };
 const WikiActionsCtx = createContext<Ctx | null>(null);
 
 /** 위키 레이아웃 안 어디서든 ingest·새페이지 모달을 여는 훅. Provider 밖(또는 viewer)에서는 null. */
@@ -32,11 +33,13 @@ export function WikiActionsProvider({
   const t = useTranslations("WikisSlugWikiActions");
   const [ingestOpen, setIngestOpen] = useState(false);
   const [newPageOpen, setNewPageOpen] = useState(false);
+  const [preset, setPreset] = useState<NewPagePreset>({});
   const [cats, setCats] = useState<CategoryOption[]>([]);
   const loadedCats = useRef(false);
 
   const openIngest = useCallback(() => setIngestOpen(true), []);
-  const openNewPage = useCallback(() => {
+  const openNewPage = useCallback((p?: NewPagePreset) => {
+    setPreset(p ?? {});
     setNewPageOpen(true);
     if (!loadedCats.current) {
       loadedCats.current = true;
@@ -60,7 +63,15 @@ export function WikiActionsProvider({
             <IngestPanel wikiSlug={slug} />
           </Modal>
           <Modal open={newPageOpen} onClose={() => setNewPageOpen(false)} title={t("newPageTitle")}>
-            <NewPageForm wikiSlug={slug} wikiKind={wikiKind} categories={cats} />
+            {/* key로 프리셋 바뀔 때 폼 리마운트 → presetCategory/presetKind가 defaultValue로 반영 */}
+            <NewPageForm
+              key={`${preset.category ?? ""}:${preset.kind ?? ""}`}
+              wikiSlug={slug}
+              wikiKind={wikiKind}
+              categories={cats}
+              presetCategory={preset.category}
+              presetKind={preset.kind}
+            />
           </Modal>
         </>
       )}

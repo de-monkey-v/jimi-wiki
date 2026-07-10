@@ -1,6 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import type { ToolSpec, ToolLoopResult, LoopUsage } from "@/lib/gemini";
+import type { ToolSpec, ToolLoopResult, LoopUsage, LoopMessage } from "@/lib/gemini";
 
 let _client: Anthropic | null = null;
 function client(): Anthropic {
@@ -64,6 +64,7 @@ export async function claudeGenerateWithTools(opts: {
   tools: ToolSpec[];
   maxTurns?: number;
   model: string;
+  history?: LoopMessage[];
 }): Promise<ToolLoopResult> {
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
   const tools: Anthropic.Tool[] = opts.tools.map((t) => ({
@@ -75,7 +76,12 @@ export async function claudeGenerateWithTools(opts: {
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: opts.system, cache_control: { type: "ephemeral" } },
   ];
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: [{ type: "text", text: opts.userPrompt }] }];
+  const messages: Anthropic.MessageParam[] = [
+    ...(opts.history ?? []).map(
+      (h): Anthropic.MessageParam => ({ role: h.role === "model" ? "assistant" : "user", content: [{ type: "text", text: h.text }] }),
+    ),
+    { role: "user", content: [{ type: "text", text: opts.userPrompt }] },
+  ];
   const called: string[] = [];
   const usage: LoopUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const maxTurns = opts.maxTurns ?? 12;

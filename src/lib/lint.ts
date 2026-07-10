@@ -6,6 +6,7 @@ import { genModel } from "@/lib/model-config";
 import { hybridSearch } from "@/lib/search";
 import { recordUsage } from "@/lib/usage";
 import { listPages, getPage } from "@/lib/wiki";
+import { isAiExcludedKind } from "@/lib/kinds";
 import { detectCategoryIssues, recountItemCounts, type CategoryIssues } from "@/lib/governance";
 
 export interface LintReport {
@@ -58,7 +59,8 @@ function readTools(wikiId: string): ToolSpec[] {
   return [
     {
       decl: { name: "listPages", description: "위키 페이지 목록(slug,title,kind)", parameters: { type: Type.OBJECT, properties: {} } },
-      handler: async () => ({ pages: (await listPages(wikiId)).map((p) => ({ slug: p.slug, title: p.title, kind: p.kind })) }),
+      // AI 제외 kind(personal)는 lint LLM에게 노출하지 않는다.
+      handler: async () => ({ pages: (await listPages(wikiId)).filter((p) => !isAiExcludedKind(p.kind)).map((p) => ({ slug: p.slug, title: p.title, kind: p.kind })) }),
     },
     {
       decl: {
@@ -68,7 +70,8 @@ function readTools(wikiId: string): ToolSpec[] {
       },
       handler: async (args) => {
         const p = await getPage(wikiId, String(args.slug ?? ""));
-        return p ? { found: true, title: p.title, body: p.body } : { found: false };
+        if (!p || isAiExcludedKind(p.kind)) return { found: false }; // 개인 노트 본문은 lint LLM이 못 읽는다
+        return { found: true, title: p.title, body: p.body };
       },
     },
   ];
@@ -242,7 +245,8 @@ export async function suggestIsolatedLinks(
   const inbound = new Set(links.filter((l) => l.toPageId).map((l) => l.toPageId!));
   const outbound = new Set(links.map((l) => l.fromPageId));
   const bySlug = new Map(pages.map((p) => [p.slug, p]));
-  const isolated = pages.filter((p) => p.kind !== "note" && p.kind !== "meta" && (!inbound.has(p.id) || !outbound.has(p.id))).slice(0, 8);
+  // AI 제외 kind(personal)는 제외 — 아래 hybridSearch에 title+body를 넣으면 외부 임베딩 API로 개인 노트가 전송된다.
+  const isolated = pages.filter((p) => p.kind !== "note" && p.kind !== "meta" && !isAiExcludedKind(p.kind) && (!inbound.has(p.id) || !outbound.has(p.id))).slice(0, 8);
 
   const out: Awaited<ReturnType<typeof suggestIsolatedLinks>> = [];
   for (const p of isolated) {

@@ -34,9 +34,9 @@ function SubmitButton() {
  * 카테고리 콤보박스. 전체 카테고리 목록을 클라이언트에서 부분일치 필터링(서버 왕복 없음 → 레이스·스테일 없음).
  * WAI-ARIA combobox: DOM 포커스는 input에 고정, 활성 옵션은 aria-activedescendant로 지시.
  */
-function CategoryPicker({ categories, quickCats }: { categories: CategoryOption[]; quickCats: string[] }) {
+function CategoryPicker({ categories, quickCats, initialValue }: { categories: CategoryOption[]; quickCats: string[]; initialValue?: string }) {
   const t = useTranslations("WikisSlugNewNewPageForm");
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialValue ?? "");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -169,14 +169,19 @@ export function NewPageForm({
   wikiSlug,
   wikiKind,
   categories,
+  presetCategory,
+  presetKind,
 }: {
   wikiSlug: string;
   wikiKind: WikiKind;
   categories: CategoryOption[];
+  presetCategory?: string; // 폴더 "+"에서 열면 그 폴더 경로로 카테고리 프리필
+  presetKind?: string; // 개인 노트 생성 등 기본 kind 지정
 }) {
   const t = useTranslations("WikisSlugNewNewPageForm");
   const tk = useTranslations("Kinds");
   const quickCats = KIND_QUICK_CATS[wikiKind];
+  const [kind, setKind] = useState(presetKind ?? "concept"); // controlled — personal 선택 시 보안 경고 노출
   return (
     <form action={createPageAction} className="space-y-4">
       <input type="hidden" name="wikiSlug" value={wikiSlug} />
@@ -203,13 +208,16 @@ export function NewPageForm({
         <label htmlFor="new-kind" className="mb-1 block text-sm font-medium text-stone-600">
           {t("kindLabel")}
         </label>
-        <select id="new-kind" name="kind" defaultValue="concept" className="w-full rounded border px-3 py-2">
+        <select id="new-kind" name="kind" value={kind} onChange={(e) => setKind(e.target.value)} className="w-full rounded border px-3 py-2">
           {MANUAL_KIND_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               {tk(`${o.value}Option`)}
             </option>
           ))}
         </select>
+        {kind === "personal" && (
+          <p className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">⚠ {tk("personalWarning")}</p>
+        )}
         <p className="mt-1 text-xs text-stone-400">
           {t.rich("ingestHint", {
             link: (chunks) => (
@@ -221,7 +229,7 @@ export function NewPageForm({
         </p>
       </div>
 
-      <CategoryPicker categories={categories} quickCats={quickCats} />
+      <CategoryPicker categories={categories} quickCats={quickCats} initialValue={presetCategory} />
 
       <div>
         <label htmlFor="new-body" className="mb-1 block text-sm font-medium text-stone-600">

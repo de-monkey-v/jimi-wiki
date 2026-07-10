@@ -2,6 +2,7 @@ import "server-only";
 import {
   GoogleGenAI,
   FunctionCallingConfigMode,
+  createPartFromUri,
   type FunctionDeclaration,
   type Content,
   type Part,
@@ -163,6 +164,57 @@ export async function generateText(system: string, prompt: string, meta?: UsageM
   return res.text ?? "";
 }
 
+// ---------- 비전 OCR(이미지 · 스캔 PDF) ----------
+// 텍스트 레이어가 없는 이미지/스캔 PDF에서 텍스트를 전사한다. Gemini는 PDF를 페이지 단위로 자체
+// 렌더링하므로 스캔 PDF도 래스터화 없이 원본 바이트를 그대로 넣는다. 키 없으면 throw(호출부에서 geminiEnabled 분기).
+const VISION_MODEL = process.env.VISION_MODEL || "gemini-2.5-flash";
+const VISION_INLINE_MAX = 15 * 1024 * 1024; // 이보다 크면 Files API 경유(inline base64 페이로드 한계 회피)
+const VISION_PROMPT =
+  "이 파일에 담긴 모든 텍스트를 그대로(verbatim) 전사하라. 요약·설명·해설·묘사를 덧붙이지 말고, 표는 마크다운 표로, 사람이 읽는 순서대로 텍스트만 출력하라. 추출할 텍스트가 전혀 없으면 아무것도 출력하지 마라.";
+
+/** 이미지/PDF 바이트 → 전사 텍스트. meta 주면 사용량 계측(성공 경로). 실패/빈 텍스트면 ""를 반환할 수 있다. */
+export async function extractTextFromMedia(bytes: Buffer, mimeType: string, meta?: UsageMeta): Promise<string> {
+  const ai = client();
+  let part: Part;
+  let uploadedName: string | undefined;
+  try {
+    if (bytes.length <= VISION_INLINE_MAX) {
+      part = { inlineData: { mimeType, data: bytes.toString("base64") } };
+    } else {
+      // Files API: 업로드 후 ACTIVE 될 때까지 폴링(대용량 PDF는 PROCESSING 경유)
+      const uploaded = await withRetry(
+        () => ai.files.upload({ file: new Blob([new Uint8Array(bytes)], { type: mimeType }), config: { mimeType } }),
+        "files.upload",
+      );
+      uploadedName = uploaded.name;
+      let f = uploaded;
+      for (let i = 0; i < 30 && f.state === "PROCESSING"; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        f = await ai.files.get({ name: uploadedName! });
+      }
+      if (f.state === "FAILED" || !f.uri || !f.mimeType) throw new Error("파일 업로드 처리 실패(Files API)");
+      part = createPartFromUri(f.uri, f.mimeType);
+    }
+    const res = await withRetry(
+      () =>
+        client().models.generateContent({
+          model: VISION_MODEL,
+          contents: [{ role: "user", parts: [part, { text: VISION_PROMPT }] }],
+          config: { temperature: 0 },
+        }),
+      "extractTextFromMedia",
+    );
+    if (meta) {
+      const m = res.usageMetadata;
+      recordUsage({ ...meta, kind: "llm", model: VISION_MODEL, inputTokens: m?.promptTokenCount ?? null, outputTokens: m?.candidatesTokenCount ?? null });
+    }
+    return (res.text ?? "").trim();
+  } finally {
+    // 업로드본은 최대 48h 잔존(쿼터·민감정보 노출) → 반드시 정리
+    if (uploadedName) await ai.files.delete({ name: uploadedName }).catch(() => {});
+  }
+}
+
 // ---------- tool 루프 ----------
 export interface ToolSpec {
   decl: FunctionDeclaration;
@@ -180,6 +232,11 @@ export interface ToolLoopResult {
   calls: string[];
   usage?: LoopUsage;
 }
+// 멀티턴 대화 히스토리(provider 중립). role은 Gemini 규약("user"|"model")에 맞춘다.
+export interface LoopMessage {
+  role: "user" | "model";
+  text: string;
+}
 
 /**
  * 수동 function-calling 루프. functionCalls 없을 때까지 반복(최대 maxTurns). model로 GEN_MODEL 오버라이드 가능.
@@ -191,6 +248,7 @@ export async function generateWithTools(opts: {
   tools: ToolSpec[];
   maxTurns?: number;
   model?: string;
+  history?: LoopMessage[]; // 이전 대화 턴(선택). 없으면 단발 — 기존 동작 그대로.
 }): Promise<ToolLoopResult> {
   const model = opts.model ?? genModel();
   const provider = providerOf(model);
@@ -204,7 +262,10 @@ export async function generateWithTools(opts: {
   }
   if (provider !== "google") throw new Error(`알 수 없는 모델 provider: ${model}`);
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
-  const contents: Content[] = [{ role: "user", parts: [{ text: opts.userPrompt }] }];
+  const contents: Content[] = [
+    ...(opts.history ?? []).map((h): Content => ({ role: h.role, parts: [{ text: h.text }] })),
+    { role: "user", parts: [{ text: opts.userPrompt }] },
+  ];
   const called: string[] = [];
   const usage: LoopUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const addUsage = (m?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number }) => {

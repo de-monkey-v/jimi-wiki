@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 // search.ts는 server-only + @/lib/db 를 임포트하지만 DB는 지연 연결이라 순수 함수 chunkText는
 // 연결/쿼리 없이 돈다. server-only 는 test 실행 shim(-r server-only-shim.cjs)이 처리.
-import { chunkText, MAX_CHUNK, MIN_CHUNK } from "./search";
+import { chunkText, MAX_CHUNK, MIN_CHUNK, plannedDepth, isRelationalQuery, type KgConfig } from "./search";
 
 test("chunkText: 단일 짧은 본문 → 라벨 컨텍스트가 붙은 청크 1개", () => {
   const chunks = chunkText("문서", "안녕하세요");
@@ -41,5 +41,65 @@ test("chunkText: MAX_CHUNK 초과 섹션은 문단 경계로 분할", () => {
   for (const c of chunks) {
     // 컨텍스트 프리픽스를 제외한 실제 본문이 MAX_CHUNK 이하
     assert.ok(c.text.length <= MAX_CHUNK + `[문서]\n`.length + 10);
+  }
+});
+
+// ---------- KG 확장: 순수 정책 함수 ----------
+const CFG: KgConfig = { maxHop: 2, simCutoff: 0.55, hubCap: 25, nodeBudget: 12 };
+
+test("plannedDepth: seed 없으면 0", () => {
+  assert.equal(plannedDepth({ seedCount: 0, topSimilarity: 0.1, isRelational: true }, CFG), 0);
+});
+
+test("plannedDepth: 강한 직접매치 + 비관계 질의 → 0 (no-op, 오늘과 동일)", () => {
+  assert.equal(plannedDepth({ seedCount: 5, topSimilarity: 0.9, isRelational: false }, CFG), 0);
+});
+
+test("plannedDepth: 약한 유사도만 → 1", () => {
+  assert.equal(plannedDepth({ seedCount: 5, topSimilarity: 0.4, isRelational: false }, CFG), 1);
+});
+
+test("plannedDepth: 관계형 질의만(유사도 강함) → 1", () => {
+  assert.equal(plannedDepth({ seedCount: 5, topSimilarity: 0.9, isRelational: true }, CFG), 1);
+});
+
+test("plannedDepth: 약함 AND 관계형 → 2 (maxHop clamp)", () => {
+  assert.equal(plannedDepth({ seedCount: 5, topSimilarity: 0.4, isRelational: true }, CFG), 2);
+});
+
+test("plannedDepth: undefined 유사도(FTS-only)는 weak로 치지 않음 — 비관계면 0", () => {
+  assert.equal(plannedDepth({ seedCount: 5, topSimilarity: undefined, isRelational: false }, CFG), 0);
+  // 관계형이면 undefined 여도 isRelational 만으로 1
+  assert.equal(plannedDepth({ seedCount: 5, topSimilarity: undefined, isRelational: true }, CFG), 1);
+});
+
+test("plannedDepth: maxHop=1 clamp", () => {
+  assert.equal(plannedDepth({ seedCount: 1, topSimilarity: 0.4, isRelational: true }, { ...CFG, maxHop: 1 }), 1);
+});
+
+test("plannedDepth: maxHop=0 → 항상 0 (킬스위치)", () => {
+  assert.equal(plannedDepth({ seedCount: 5, topSimilarity: 0.1, isRelational: true }, { ...CFG, maxHop: 0 }), 0);
+});
+
+test("isRelationalQuery: 관계·비교·인과 cue → true", () => {
+  for (const q of ["A와 B의 관계는?", "트랜스포머와 RNN 비교", "이것의 원인은?", "X가 Y에 미치는 영향", "compare A and B", "difference between X and Y", "how are they related to each other"]) {
+    assert.equal(isRelationalQuery(q), true, `관계 질의여야 함: ${q}`);
+  }
+});
+
+test("isRelationalQuery: 단순 사실 조회 → false (왜/어떻게는 cue 아님)", () => {
+  for (const q of ["트랜스포머란 무엇인가", "LayerNorm 정의", "이 API 사용법", "왜 하늘은 파란가", "how do I install it"]) {
+    assert.equal(isRelationalQuery(q), false, `사실 조회여야 함: ${q}`);
+  }
+});
+
+test("isRelationalQuery: ASCII cue의 부분문자열 오탐 방지(단어경계)", () => {
+  // 'cause'∈because, 'depend'∈independent, 'vs'∈TVs, 'differ'∈(없음) 등에 오발동하면 안 됨
+  for (const q of ["it failed because of memory", "what is an independent variable", "I bought two TVs", "the universe is vast"]) {
+    assert.equal(isRelationalQuery(q), false, `오탐이면 안 됨: ${q}`);
+  }
+  // 진짜 단어 경계에서는 여전히 true
+  for (const q of ["A vs B", "does X depend on Y", "what causes Z"]) {
+    assert.equal(isRelationalQuery(q), true, `관계 질의여야 함: ${q}`);
   }
 });

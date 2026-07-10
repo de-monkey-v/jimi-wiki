@@ -25,7 +25,7 @@ function SubmitButton() {
 export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
   const t = useTranslations("WikisSlugIngestPanel");
   return (
-    <form action={ingestAction} className="space-y-3 rounded-lg border p-4">
+    <form action={ingestAction} encType="multipart/form-data" className="space-y-3 rounded-lg border p-4">
       <EmptyState
         asset="ingest-flow"
         title={t("emptyTitle")}
@@ -36,6 +36,17 @@ export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
       <input name="url" placeholder={t("urlPlaceholder")} className="w-full rounded border px-3 py-2" />
       <textarea name="text" rows={3} placeholder={t("textPlaceholder")} className="w-full rounded border px-3 py-2 text-sm" />
       <input name="title" placeholder={t("titlePlaceholder")} className="w-full rounded border px-3 py-2" />
+      <div className="space-y-1">
+        <label className="block text-sm font-medium text-stone-700">{t("fileLabel")}</label>
+        <input
+          type="file"
+          name="file"
+          multiple
+          accept=".pdf,.docx,.pptx,.xlsx,.odt,.odp,.ods,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,.zip"
+          className="w-full rounded border px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-stone-200 file:px-3 file:py-1 file:text-stone-700"
+        />
+        <p className="text-xs text-stone-500">{t("fileHint")}</p>
+      </div>
       <SubmitButton />
     </form>
   );

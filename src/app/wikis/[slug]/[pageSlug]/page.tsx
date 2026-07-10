@@ -2,11 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser, getPage, getBacklinks, getOutlinks, existingSlugSet, getPrevNext, getPageProvenance, getPageSources, getPageNeighborhood } from "@/lib/wiki";
+import { getWikiForUser, getPage, getBacklinks, getOutlinks, existingSlugSet, getPrevNext, getPageProvenance, getPageSources, getPageNeighborhood, isPagePinned } from "@/lib/wiki";
+import { PinButton } from "./PinButton";
+import { RecordVisit } from "../RecordVisit";
 import { renderMarkdown } from "@/lib/markdown";
 import { detectLang } from "@/lib/lang";
 import { getPageTranslation } from "@/lib/translate";
 import { checkDailyQuota } from "@/lib/usage";
+import { isAiExcludedKind } from "@/lib/kinds";
 import { isLocale } from "@/i18n/locales";
 import { ReadingPane } from "@/components/ReadingPane";
 import TranslateMenu from "@/components/TranslateMenu";
@@ -38,7 +41,8 @@ export default async function PageView({
   let viewTitle = page.title;
   let viewBody = page.body;
   let translatedTo: typeof wantLocale = null; // 실제로 번역에 성공했을 때만 set → 배지 정확성
-  if (wantLocale && page.body.trim()) {
+  // 개인 노트(AI 제외)는 번역하지 않는다 — 본문이 외부 LLM(Gemini/OpenAI)으로 전송되기 때문. 원문 그대로 표시.
+  if (wantLocale && page.body.trim() && !isAiExcludedKind(page.kind)) {
     // 비용 경계: 번역도 생성형 LLM 소비 → 채팅과 동일하게 일일 쿼터를 적용(초과 시 원문 표시).
     const quota = await checkDailyQuota(userId);
     if (quota.ok) {
@@ -103,25 +107,33 @@ export default async function PageView({
     </>
   );
 
+  const canWrite = wiki.role !== "viewer";
+  const pinned = await isPagePinned(userId, page.id);
+
   return (
-    <ReadingPane
-      title={viewTitle}
-      html={html}
-      isEmpty={page.body.trim() === ""}
-      translateControl={page.body.trim() ? <TranslateMenu current={translatedTo} pageLang={pageLang} /> : undefined}
-      emptyText={wiki.role !== "viewer" ? t("emptyEditable") : t("empty")}
-      isNote={isNote}
-      provenance={provenance}
-      sources={sources}
-      sourceHrefFor={(s) => `/wikis/${slug}/sources/${s}`}
-      backlinks={backlinks}
-      outlinks={outlinks}
-      prev={prev}
-      next={next}
-      hrefFor={(s) => `/wikis/${slug}/${s}`}
-      crumb={crumb}
-      editHref={wiki.role !== "viewer" ? `/wikis/${slug}/${pageSlug}/edit` : undefined}
-      localGraph={localGraph}
-    />
+    <>
+      <RecordVisit wikiSlug={slug} pageSlug={pageSlug} title={page.title} />
+      <ReadingPane
+        title={viewTitle}
+        html={html}
+        isEmpty={page.body.trim() === ""}
+        translateControl={page.body.trim() ? <TranslateMenu current={translatedTo} pageLang={pageLang} /> : undefined}
+        pinControl={<PinButton wikiSlug={slug} pageSlug={pageSlug} pinned={pinned} />}
+        create={canWrite ? { wikiSlug: slug, category: isNote ? null : page.category } : undefined}
+        emptyText={canWrite ? t("emptyEditable") : t("empty")}
+        isNote={isNote}
+        provenance={provenance}
+        sources={sources}
+        sourceHrefFor={(s) => `/wikis/${slug}/sources/${s}`}
+        backlinks={backlinks}
+        outlinks={outlinks}
+        prev={prev}
+        next={next}
+        hrefFor={(s) => `/wikis/${slug}/${s}`}
+        crumb={crumb}
+        editHref={canWrite ? `/wikis/${slug}/${pageSlug}/edit` : undefined}
+        localGraph={localGraph}
+      />
+    </>
   );
 }

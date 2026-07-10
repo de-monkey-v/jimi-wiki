@@ -41,6 +41,9 @@ yarn-error.log*
 # models.dev 카탈로그 디스크 캐시(런타임 생성)
 .model-catalog.cache.json*
 
+# 업로드 원본 파일(blob) 로컬 저장소(런타임 생성). BLOB_DIR 미설정 시 기본 경로.
+/.blobs/
+
 # vercel
 .vercel
 

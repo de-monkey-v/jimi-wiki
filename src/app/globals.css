@@ -85,6 +85,16 @@ a.accent, .accent { color: var(--accent); }
 .wiki-content a.wikilink-missing:hover {
   text-decoration-color: #dc2626;
 }
+/* create 모드(비공개 쓰기 뷰): 미해결 링크는 "클릭하면 생성" 액션 — 커서·호버로 신호를 준다.
+   호버 시 빨강 점선(없음)에서 인디고 실선(생성 가능)으로 전환. 공개 뷰(--create 없음)는 위 빨강 유지. */
+.wiki-content--create a.wikilink-missing {
+  cursor: pointer;
+}
+.wiki-content--create a.wikilink-missing:hover {
+  color: #4f46e5;
+  text-decoration-style: solid;
+  text-decoration-color: #4f46e5;
+}
 
 /* 렌더된 페이지 본문 기본 타이포 */
 .wiki-content {

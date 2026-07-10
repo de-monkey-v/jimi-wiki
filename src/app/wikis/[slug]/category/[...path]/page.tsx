@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser } from "@/lib/wiki";
+import { getWikiForUser, isFolderPinned } from "@/lib/wiki";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
+import { FolderPinButton } from "./FolderPinButton";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   if (!wiki) notFound();
   const t = await getTranslations("WikisSlugCategoryPathPage");
   const tk = await getTranslations("Kinds");
+  const folderPinned = await isFolderPinned(userId, wiki.id, prefix);
 
   // 정확 일치(prefix) + 하위(prefix/*). Prisma startsWith는 LIKE 메타문자(_ %)를 이스케이프하지 않으므로 직접 이스케이프(과매칭 방지: gpt_4가 gpt-4를 매칭하는 문제).
   const likePrefix = prefix.replace(/[\\%_]/g, (c) => "\\" + c) + "/";
@@ -34,7 +36,10 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
         <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link>
       </div>
       <CategoryBreadcrumb wikiSlug={slug} category={prefix} />
-      <h1 className="mb-6 text-2xl font-bold">{segLast(prefix)}</h1>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{segLast(prefix)}</h1>
+        <FolderPinButton wikiSlug={slug} category={prefix} pinned={folderPinned} />
+      </div>
       {pages.length === 0 ? (
         <p className="text-stone-400">{t("emptyCategory")}</p>
       ) : (

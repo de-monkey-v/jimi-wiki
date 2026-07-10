@@ -3,7 +3,7 @@ import { apiWikiGate } from "@/lib/api-gate";
 import { listPages, upsertPage, getSource, addPageSource } from "@/lib/wiki";
 import { reindexEmbeddings } from "@/lib/search";
 import { normalizeCategoryForWrite } from "@/lib/governance";
-import { PAGE_KINDS } from "@/lib/kinds";
+import { PAGE_KINDS, isAiExcludedKind } from "@/lib/kinds";
 import type { PageKind } from "@/generated/prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +50,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // MCP write_page의 kind enum과 정합. 잘못된 kind는 거부.
   if (!PAGE_KINDS.includes(body.kind as PageKind)) {
     return NextResponse.json({ error: "invalid_kind" }, { status: 400 });
+  }
+  // 개인 노트(personal)는 AI 제외 kind — 프로그램적(REST/MCP) 생성 불가, 사람이 UI로만 만든다.
+  if (isAiExcludedKind(body.kind as PageKind)) {
+    return NextResponse.json({ error: "personal_kind_ui_only" }, { status: 400 });
   }
   const kind = body.kind as PageKind;
   // S3: raw REST 경로도 거버넌스 우회 못 하게 서버측 정규화. note는 순수성 위해 category 없음.

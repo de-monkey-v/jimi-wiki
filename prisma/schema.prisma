@@ -34,6 +34,7 @@ enum PageKind {
   concept
   entity
   meta
+  personal // 개인 수동 메모. 폴더 트리에 참여하되 AI(임베딩·검색·ingest·query·chat·lint·번역)에서 완전 제외
 }
 
 enum LogKind {
@@ -88,6 +89,9 @@ model User {
   createdWikis   Wiki[]       @relation("WikiCreatedBy")
   apiKeys        ApiKey[]
   createdInvites Invite[]     @relation("InviteCreatedBy")
+  pagePins       PagePin[]
+  folderPins     FolderPin[]
+  savedLinks     SavedLink[]
 }
 
 // ---------- 인스턴스 계정 초대 (가입 게이트) ----------
@@ -204,11 +208,16 @@ model Wiki {
   pageLinks   PageLink[]
   sources     Source[]
   chunks      SearchChunk[]
+  conceptRelations ConceptRelation[]
   logs        LogEntry[]
   shareLinks  ShareLink[]
   agentRuns   AgentRun[]
   apiKeys     ApiKey[]
   invites     Invite[]
+  pagePins    PagePin[]
+  folderPins  FolderPin[]
+  savedLinks  SavedLink[]
+  telegramBindings TelegramBinding[]
 }
 
 model Membership {
@@ -256,6 +265,9 @@ model Page {
   outLinks    PageLink[] @relation("PageOut")
   inLinks     PageLink[] @relation("PageIn")
   contributions PageContribution[] // 이 파생 페이지에 기여한 원본들(M:N provenance)
+  relationsFrom ConceptRelation[] @relation("ConceptRelFrom") // 이 개념에서 나가는 타입드 관계
+  relationsTo   ConceptRelation[] @relation("ConceptRelTo")   // 이 개념으로 들어오는 타입드 관계
+  pins         PagePin[] // 이 페이지를 고정한 유저들(개인 즐겨찾기)
   translations PageTranslation[] // 온디맨드 기계 번역 캐시(언어별)
 
   @@unique([wikiId, slug])
@@ -306,6 +318,7 @@ model Source {
   wiki       Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
   pages      Page[]   @relation("PageSource")
   contributions PageContribution[] @relation("SourceContribs") // 이 원본이 기여한 파생 페이지들
+  relations  ConceptRelation[]  @relation("SourceRelations")  // 이 원본이 근거로 만든 개념 관계(접지)
 
   @@unique([wikiId, slug])
 }
@@ -321,6 +334,37 @@ model PageContribution {
 
   @@unique([pageId, sourceId])
   @@index([sourceId])
+}
+
+// 개념 간 타입드 관계(knowledge graph 엣지). 무타입 위키링크(PageLink)와 별개 레이어.
+enum RelationType {
+  relatedTo // 대칭(무향) 기본. coerceRelType의 fallback
+  partOf
+  causes
+  contrasts
+  dependsOn
+}
+
+// 근거(Source)에 접지된 타입드 개념 엣지. PageContribution의 M:N provenance/cascade 규약을 따른다.
+// 정체성 키에 sourceId 포함 → 같은 논리 엣지라도 원문마다 1행. 원문 삭제/재수집이 그 원문의 엣지만 정확히 지운다.
+// 논리 dedup(무향 병합)은 순회(expandViaGraph) 시에만 한다. sourceId NOT NULL = 근거 없는 엣지는 존재하지 않는다(트러스트 모델).
+model ConceptRelation {
+  id         String       @id @default(cuid())
+  wikiId     String
+  fromPageId String
+  toPageId   String
+  type       RelationType @default(relatedTo)
+  sourceId   String // 접지(grounding). 이 엣지를 만든 run의 원문. onDelete Cascade → 원문이 사라지면 엣지도 소멸
+  createdAt  DateTime     @default(now())
+  wiki       Wiki         @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  from       Page         @relation("ConceptRelFrom", fields: [fromPageId], references: [id], onDelete: Cascade)
+  to         Page         @relation("ConceptRelTo", fields: [toPageId], references: [id], onDelete: Cascade)
+  source     Source       @relation("SourceRelations", fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([wikiId, fromPageId, toPageId, type, sourceId]) // 원문당 1엣지(멱등 set-replace / createMany skipDuplicates 키)
+  @@index([wikiId, fromPageId]) // 정방향 확장
+  @@index([wikiId, toPageId]) // 역방향 확장(무향 순회)
+  @@index([sourceId]) // deleteSource cascade / provenance 조회
 }
 
 model SearchChunk {
@@ -366,4 +410,73 @@ model AgentRun {
   wiki       Wiki        @relation(fields: [wikiId], references: [id], onDelete: Cascade)
 
   @@index([wikiId, createdAt])
+}
+
+// 유저별 페이지 고정(개인 즐겨찾기). 위키 공유가 아니라 유저 스코프 — Page.pinned 컬럼이 아니라 별도 행.
+model PagePin {
+  id        String   @id @default(cuid())
+  userId    String
+  wikiId    String // 조회 스코프(denormalized, 해소된 위키에서 설정)
+  pageId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wiki      Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pageId]) // 토글 멱등
+  @@index([userId, wikiId])
+}
+
+// 유저별 폴더(category 경로) 고정. PagePin은 pageId 전용이라 폴더는 별도 모델. 자주 여는 폴더 빠른 접근.
+model FolderPin {
+  id        String   @id @default(cuid())
+  userId    String
+  wikiId    String
+  category  String // 폴더 경로(예: "ai/models"). category 라우트로 이동
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wiki      Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, wikiId, category]) // 토글 멱등
+  @@index([userId, wikiId])
+}
+
+// 유저별 "읽을거리"(read-later) 링크. 개인·임시 트리아지 — 괜찮으면 정식 편입(ingest), 아니면 삭제.
+// AI 코퍼스와 무관(SavedLink는 페이지가 아님). title/description은 저장 시 OG/메타태그로 자동 라벨(LLM 없음).
+model SavedLink {
+  id          String   @id @default(cuid())
+  userId      String
+  wikiId      String
+  url         String
+  title       String
+  description String?
+  promotedAt  DateTime? // 정식 편입(ingest) 시각. null=미편입. 편입해도 삭제하지 않고 이 값으로 "편입됨" 표시
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wiki        Wiki      @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@index([userId, wikiId, createdAt])
+}
+
+// ---------- 텔레그램 봇 ----------
+// 채팅(그룹/DM) → 위키 바인딩. chatId=텔레그램 chat.id(그룹은 음수·64비트 가능 → String). 채팅당 위키 1개.
+model TelegramBinding {
+  chatId      String   @id // 텔레그램 chat.id (문자열 보존)
+  wikiId      String
+  createdById String? // 바인딩을 건 텔레그램 유저 id(감사용, 소프트 참조)
+  createdAt   DateTime @default(now())
+  wiki        Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@index([wikiId])
+}
+
+// 봇 대화 기억(멀티턴). chatId별 최근 N턴을 로드해 툴 루프 history로 넣는다. 스칼라 위주(관계 미연결).
+model TelegramTurn {
+  id        String   @id @default(cuid())
+  chatId    String
+  role      String // "user" | "model"
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([chatId, createdAt])
 }

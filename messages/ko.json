@@ -197,7 +197,10 @@
     "entity": "개체",
     "meta": "메타",
     "conceptOption": "개념 — 아이디어·패턴·이론·문서",
-    "entityOption": "개체 — 인물·조직·도구·제품"
+    "entityOption": "개체 — 인물·조직·도구·제품",
+    "personal": "개인 노트",
+    "personalOption": "개인 노트 — 나만 보는 메모(AI 제외)",
+    "personalWarning": "개인 노트는 AI에서 제외되지만 암호화되지는 않습니다 — 진짜 비밀번호는 저장하지 마세요."
   },
   "LoginActions": {
     "emptyCredentials": "이메일과 비밀번호를 입력하세요",
@@ -299,7 +302,18 @@
     "healthCheck": "건강검진",
     "integrationGuide": "연동 가이드",
     "settings": "설정",
-    "logout": "로그아웃"
+    "logout": "로그아웃",
+    "pinnedHeading": "고정됨",
+    "recentHeading": "최근 본 문서",
+    "newNoteAtRoot": "새 노트",
+    "quickSwitch": "빠른 이동",
+    "quickCapture": "빠른 메모",
+    "section": {
+      "personal": "내 노트",
+      "sources": "원문 / 소스",
+      "knowledge": "정리된 지식"
+    },
+    "readingList": "읽을거리"
   },
   "WikisPage": {
     "apiKeys": "API 키",
@@ -391,10 +405,12 @@
     "submitPending": "잡 등록 중…",
     "submit": "수집",
     "emptyTitle": "소스 편입 (Ingest)",
-    "emptyBody": "웹 링크(본문만 추출)·유튜브(자막)·텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다.",
+    "emptyBody": "웹 링크(본문 추출)·유튜브(자막)·텍스트·파일(PDF·Word·이미지 등)을 주면 LLM이 읽고 노트·개념 페이지로 정리합니다.",
     "urlPlaceholder": "https://…  (웹 기사 또는 유튜브 링크)",
     "textPlaceholder": "또는 텍스트/영상 대본 직접 붙여넣기",
-    "titlePlaceholder": "제목(선택)"
+    "titlePlaceholder": "제목(선택)",
+    "fileLabel": "파일 업로드",
+    "fileHint": "PDF·Word(docx)·PowerPoint(pptx)·Excel(xlsx)·ODF·텍스트·마크다운·이미지·ZIP (여러 개 가능, 파일당 최대 25MB). 이미지·스캔 PDF는 Gemini로 글자를 읽어냅니다."
   },
   "WikisSlugJobsIndicator": {
     "type": {
@@ -560,5 +576,44 @@
   "WikisSlugWikiActions": {
     "ingestTitle": "소스 편입",
     "newPageTitle": "새 페이지"
+  },
+  "WikiQuickNav": {
+    "switcherTitle": "빠른 이동",
+    "switcherPlaceholder": "문서 제목으로 이동…",
+    "switcherEmpty": "일치하는 문서가 없습니다",
+    "switcherHint": "↑↓ 이동 · Enter 열기 · Esc 닫기",
+    "captureTitle": "빠른 메모",
+    "capturePlaceholder": "지금 떠오른 것을 적어두세요…",
+    "captureHint": "첫 줄이 제목 · 나중에 폴더로 정리",
+    "captureSave": "저장",
+    "moveTitle": "폴더로 이동",
+    "moveLabel": "폴더(카테고리) 경로",
+    "movePlaceholder": "예: 생활/메모 (비우면 받은정리함)",
+    "moveToInboxHint": "비우면 받은정리함(Inbox)으로",
+    "moveSubmit": "이동"
+  },
+  "PinButton": {
+    "pin": "고정",
+    "unpin": "고정 해제"
+  },
+  "WikiArticle": {
+    "createHint": "클릭하면 ‘{slug}’ 문서를 새로 만듭니다"
+  },
+  "WikisSlugReadingPage": {
+    "title": "읽을거리",
+    "subtitle": "나중에 볼 링크를 담아두고, 괜찮으면 정식 편입하세요.",
+    "addPlaceholder": "링크 붙여넣기 (https://…)",
+    "addButton": "담기",
+    "adding": "담는 중…",
+    "empty": "담아둔 링크가 없습니다. 위에 URL을 붙여넣거나 ⌘⇧N으로 담으세요.",
+    "open": "열기",
+    "promote": "정식 편입",
+    "promoteHint": "이 링크를 AI가 읽어 지식으로 정리합니다",
+    "delete": "삭제",
+    "promoted": "편입됨"
+  },
+  "FolderPinButton": {
+    "pin": "폴더 고정",
+    "pinned": "고정됨"
   }
 }

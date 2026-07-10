@@ -132,7 +132,7 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div

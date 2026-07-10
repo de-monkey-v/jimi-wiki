@@ -15,7 +15,7 @@ type PinnedItem =
   | { type: "page"; slug: string; title: string }
   | { type: "folder"; category: string };
 
-const RESERVED = new Set(["chat", "lint", "settings", "sources", "graph", "new", "reading", "category"]);
+const RESERVED = new Set(["chat", "lint", "settings", "sources", "graph", "new", "ingest", "reading", "docs", "category"]);
 
 function linkCls(active: boolean) {
   return `block truncate rounded-md py-1 pr-2 text-sm ${
@@ -309,16 +309,16 @@ export function WikiToc({
           )}
           {role !== "viewer" && (
             <li>
-              {/* 소스 편입 모달. 폴백은 위키 홈(인라인 진입점 없이도 이동 가능하게). */}
+              {/* 소스 편입 모달. hydration 전에는 전용 전체 페이지로 이동한다. */}
               <Link
-                href={`/wikis/${slug}`}
+                href={`/wikis/${slug}/ingest`}
                 onClick={(e) => {
                   if (actions) {
                     e.preventDefault();
                     actions.openIngest();
                   }
                 }}
-                className={`px-2 ${linkCls(false)}`}
+                className={`px-2 ${linkCls(sub === "ingest")}`}
               >
                 + {t("ingestSource")}
               </Link>
@@ -336,8 +336,7 @@ export function WikiToc({
             </li>
           )}
           <li>
-            {/* 전역 /docs 라우트로 나가는 링크 — 위키 셸 밖이라 sub 하이라이트 대상 아님 */}
-            <Link href={`/docs?wiki=${encodeURIComponent(slug)}`} className={`px-2 ${linkCls(false)}`}>{t("integrationGuide")}</Link>
+            <Link href={`/wikis/${encodeURIComponent(slug)}/docs`} className={`px-2 ${linkCls(sub === "docs")}`}>{t("integrationGuide")}</Link>
           </li>
           {role === "owner" && (
             <li>

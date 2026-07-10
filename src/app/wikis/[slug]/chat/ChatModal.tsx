@@ -131,7 +131,7 @@ export function ChatModalProvider({
       {everOpened &&
         createPortal(
           <div
-            className={isOpen ? "fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" : "hidden"}
+            className={isOpen ? "fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" : "hidden"}
             onMouseDown={(e) => e.target === e.currentTarget && close()}
           >
             <div

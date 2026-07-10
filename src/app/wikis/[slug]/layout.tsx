@@ -10,9 +10,11 @@ import { JobsIndicator } from "./JobsIndicator";
 // 위키 안에서는 좌측 사이드바가 그 위키의 책 목차(TOC)로 전환된다.
 export default async function WikiLayout({
   children,
+  modal,
   params,
 }: {
   children: React.ReactNode;
+  modal: React.ReactNode;
   params: Promise<{ slug: string }>;
 }) {
   const { slug: rawSlug } = await params;
@@ -34,7 +36,7 @@ export default async function WikiLayout({
 
   return (
     <ChatModalProvider slug={slug} title={wiki.title}>
-      <WikiActionsProvider slug={slug} wikiKind={wiki.kind} canWrite={canWrite}>
+      <WikiActionsProvider slug={slug} canWrite={canWrite}>
         <QuickNavProvider slug={slug} canWrite={canWrite}>
           <div className="flex h-dvh overflow-hidden">
             <WikiToc slug={slug} title={wiki.title} email={user.email} role={wiki.role} sections={sections} pinned={pinned} />
@@ -43,6 +45,7 @@ export default async function WikiLayout({
                 pt-12 md:pt-0: 모바일 상단 토글 버튼(fixed) 공간 확보. */}
             <div className="flex-1 min-w-0 overflow-y-auto pt-12 md:pt-0">{children}</div>
           </div>
+          {modal}
           <JobsIndicator slug={slug} />
         </QuickNavProvider>
       </WikiActionsProvider>

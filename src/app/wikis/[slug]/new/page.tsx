@@ -4,12 +4,20 @@ import { getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser } from "@/lib/wiki";
 import { getOntology } from "@/lib/ontology";
+import { MANUAL_KIND_OPTIONS } from "@/lib/kinds";
 import { NewPageForm } from "./NewPageForm";
 
 /** 새 페이지 수동 생성 전용 화면. 제목·종류·카테고리·본문을 한 화면에서 받아 저장하고 페이지 뷰로 이동한다. */
-export default async function NewPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function NewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ category?: string; kind?: string }>;
+}) {
   const t = await getTranslations("WikisSlugNewPage");
   const { slug: rawSlug } = await params;
+  const { category, kind } = await searchParams;
   const slug = decodeURIComponent(rawSlug);
   const userId = await getCurrentUserId();
   const wiki = await getWikiForUser(userId, slug);
@@ -21,6 +29,8 @@ export default async function NewPage({ params }: { params: Promise<{ slug: stri
   const categories = onto.categories
     .slice(0, 200)
     .map((c) => ({ slug: c.slug, label: c.label, itemCount: c.itemCount ?? 0 }));
+  const presetKind = MANUAL_KIND_OPTIONS.find((option) => option.value === kind)?.value;
+  const presetCategory = category?.slice(0, 200);
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
@@ -36,7 +46,13 @@ export default async function NewPage({ params }: { params: Promise<{ slug: stri
       <h1 className="mb-1 text-2xl font-bold">{t("newPage")}</h1>
       <p className="mb-6 text-sm text-gray-500">{t("description")}</p>
 
-      <NewPageForm wikiSlug={slug} wikiKind={wiki.kind} categories={categories} />
+      <NewPageForm
+        wikiSlug={slug}
+        wikiKind={wiki.kind}
+        categories={categories}
+        presetCategory={presetCategory}
+        presetKind={presetKind}
+      />
     </main>
   );
 }

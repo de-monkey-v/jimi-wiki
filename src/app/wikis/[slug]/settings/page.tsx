@@ -37,7 +37,7 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
   const links = await listShareLinks(wiki.id);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10 space-y-10">
+    <main className="mx-auto max-w-3xl space-y-10 px-4 py-10 sm:px-6">
       <div>
         <Link href={`/wikis/${slug}`} className="text-sm text-gray-400 hover:underline">← {wiki.title}</Link>
         <h1 className="text-2xl font-bold mt-1">{t("title")}</h1>
@@ -72,18 +72,18 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
         <h2 className="font-semibold">{t("membersHeading")}</h2>
         <ul className="space-y-2">
           {members.map((m) => (
-            <li key={m.userId} className="flex items-center justify-between gap-2 text-sm">
-              <span>{m.user.name ?? m.user.email}</span>
-              <div className="flex items-center gap-1">
-                <form action={updateMemberRoleAction} className="flex items-center gap-1">
+            <li key={m.userId} className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <span className="min-w-0 break-words sm:truncate">{m.user.name ?? m.user.email}</span>
+              <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
+                <form action={updateMemberRoleAction} className="flex min-w-0 flex-1 items-center gap-1 sm:flex-none">
                   <input type="hidden" name="wikiSlug" value={slug} />
                   <input type="hidden" name="userId" value={m.userId} />
-                  <select name="role" defaultValue={m.role} className="border rounded px-2 py-1">
+                  <select name="role" defaultValue={m.role} className="min-w-0 flex-1 rounded border px-2 py-1 sm:flex-none">
                     {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
-                  <button className="border rounded px-2 py-1 hover:bg-gray-50">{t("changeRole")}</button>
+                  <button className="shrink-0 rounded border px-2 py-1 hover:bg-gray-50">{t("changeRole")}</button>
                 </form>
-                <form action={removeMemberAction}>
+                <form action={removeMemberAction} className="shrink-0">
                   <input type="hidden" name="wikiSlug" value={slug} />
                   <input type="hidden" name="userId" value={m.userId} />
                   <button className="border rounded px-2 py-1 text-red-600 hover:bg-red-50">{t("remove")}</button>
@@ -92,13 +92,13 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
             </li>
           ))}
         </ul>
-        <form action={inviteMemberAction} className="flex gap-2 pt-2 border-t">
+        <form action={inviteMemberAction} className="grid gap-2 border-t pt-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
           <input type="hidden" name="wikiSlug" value={slug} />
-          <input name="email" type="email" required placeholder={t("invitePlaceholder")} className="flex-1 border rounded px-3 py-2 text-sm" />
-          <select name="role" defaultValue="viewer" className="border rounded px-2 py-2 text-sm">
+          <input name="email" type="email" required placeholder={t("invitePlaceholder")} className="min-w-0 rounded border px-3 py-2 text-sm" />
+          <select name="role" defaultValue="viewer" className="w-full rounded border px-2 py-2 text-sm sm:w-auto">
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
-          <button className="bg-stone-900 text-white rounded px-3 py-2 text-sm">{t("invite")}</button>
+          <button className="w-full rounded bg-stone-900 px-3 py-2 text-sm text-white sm:w-auto">{t("invite")}</button>
         </form>
       </section>
 
@@ -109,7 +109,7 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
           {links.length === 0 && <li className="text-sm text-gray-400">{t("noShareLinks")}</li>}
           {links.map((l) => (
             <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
-              <code className="text-xs bg-gray-100 px-2 py-1 rounded truncate">/s/{l.token}</code>
+              <code className="min-w-0 flex-1 truncate rounded bg-gray-100 px-2 py-1 text-xs">/s/{l.token}</code>
               <form action={revokeShareLinkAction}>
                 <input type="hidden" name="wikiSlug" value={slug} />
                 <input type="hidden" name="linkId" value={l.id} />

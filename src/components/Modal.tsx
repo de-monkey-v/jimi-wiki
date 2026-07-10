@@ -52,7 +52,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center"
+      className="fixed inset-0 z-[70] flex items-start justify-center overscroll-contain overflow-y-auto bg-black/40 p-4 sm:items-center"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -64,16 +64,18 @@ export function Modal({
       >
         <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-5 py-3">
           <h2 className="truncate text-base font-semibold">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("close")}
-            className="text-lg leading-none text-stone-400 hover:text-stone-700"
-          >
-            ✕
-          </button>
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("close")}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-xl leading-none text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+              ×
+            </button>
+          </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-5">{children}</div>
       </div>
     </div>,
     document.body,

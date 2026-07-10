@@ -223,7 +223,8 @@
     "subtitle": "使用邮箱和密码登录。"
   },
   "Modal": {
-    "close": "关闭"
+    "close": "关闭",
+    "fullPage": "完整页面"
   },
   "PageNav": {
     "prev": "← 上一页",

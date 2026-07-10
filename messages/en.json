@@ -223,7 +223,8 @@
     "subtitle": "Sign in with your email and password."
   },
   "Modal": {
-    "close": "Close"
+    "close": "Close",
+    "fullPage": "Full page"
   },
   "PageNav": {
     "prev": "← Prev",

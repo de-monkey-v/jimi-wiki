@@ -197,7 +197,10 @@
     "entity": "实体",
     "meta": "元数据",
     "conceptOption": "概念 — 想法、模式、理论、文档",
-    "entityOption": "实体 — 人物、组织、工具、产品"
+    "entityOption": "实体 — 人物、组织、工具、产品",
+    "personal": "个人笔记",
+    "personalOption": "个人笔记 — 仅自己可见（不参与 AI）",
+    "personalWarning": "个人笔记不参与 AI，但不会加密 — 请勿保存真实密码。"
   },
   "LoginActions": {
     "emptyCredentials": "请输入邮箱和密码",
@@ -299,7 +302,18 @@
     "healthCheck": "健康检查",
     "integrationGuide": "集成指南",
     "settings": "设置",
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "pinnedHeading": "已固定",
+    "recentHeading": "最近查看",
+    "newNoteAtRoot": "新建笔记",
+    "quickSwitch": "快速跳转",
+    "quickCapture": "快速记录",
+    "section": {
+      "personal": "我的笔记",
+      "sources": "原文 / 来源",
+      "knowledge": "已整理知识"
+    },
+    "readingList": "稍后阅读"
   },
   "WikisPage": {
     "apiKeys": "API 密钥",
@@ -554,5 +568,44 @@
   "WikisSlugWikiActions": {
     "ingestTitle": "导入来源",
     "newPageTitle": "新建页面"
+  },
+  "WikiQuickNav": {
+    "switcherTitle": "快速跳转",
+    "switcherPlaceholder": "按标题跳转到文档…",
+    "switcherEmpty": "没有匹配的文档",
+    "switcherHint": "↑↓ 移动 · Enter 打开 · Esc 关闭",
+    "captureTitle": "快速记录",
+    "capturePlaceholder": "随手记点什么…",
+    "captureHint": "首行作为标题 · 稍后归入文件夹",
+    "captureSave": "保存",
+    "moveTitle": "移动到文件夹",
+    "moveLabel": "文件夹（分类）路径",
+    "movePlaceholder": "例如 生活/笔记（留空=收件箱）",
+    "moveToInboxHint": "留空则移入收件箱",
+    "moveSubmit": "移动"
+  },
+  "PinButton": {
+    "pin": "固定",
+    "unpin": "取消固定"
+  },
+  "WikiArticle": {
+    "createHint": "点击创建“{slug}”文档"
+  },
+  "WikisSlugReadingPage": {
+    "title": "稍后阅读",
+    "subtitle": "保存稍后要看的链接，好的可正式收录。",
+    "addPlaceholder": "粘贴链接 (https://…)",
+    "addButton": "保存",
+    "adding": "保存中…",
+    "empty": "还没有保存的链接。在上方粘贴 URL，或用 ⌘⇧N。",
+    "open": "打开",
+    "promote": "正式收录",
+    "promoteHint": "让 AI 阅读此链接并归入知识库",
+    "delete": "删除",
+    "promoted": "已收录"
+  },
+  "FolderPinButton": {
+    "pin": "固定文件夹",
+    "pinned": "已固定"
   }
 }

@@ -197,7 +197,10 @@
     "entity": "Entity",
     "meta": "Meta",
     "conceptOption": "Concept — ideas, patterns, theories, documents",
-    "entityOption": "Entity — people, organizations, tools, products"
+    "entityOption": "Entity — people, organizations, tools, products",
+    "personal": "Personal note",
+    "personalOption": "Personal — private notes (excluded from AI)",
+    "personalWarning": "Personal notes are excluded from AI but not encrypted — don’t store real passwords."
   },
   "LoginActions": {
     "emptyCredentials": "Enter your email and password",
@@ -299,7 +302,18 @@
     "healthCheck": "Health check",
     "integrationGuide": "Integration guide",
     "settings": "Settings",
-    "logout": "Log out"
+    "logout": "Log out",
+    "pinnedHeading": "Pinned",
+    "recentHeading": "Recent",
+    "newNoteAtRoot": "New note",
+    "quickSwitch": "Quick switch",
+    "quickCapture": "Quick capture",
+    "section": {
+      "personal": "My notes",
+      "sources": "Sources",
+      "knowledge": "Knowledge"
+    },
+    "readingList": "Reading list"
   },
   "WikisPage": {
     "apiKeys": "API keys",
@@ -554,5 +568,44 @@
   "WikisSlugWikiActions": {
     "ingestTitle": "Ingest source",
     "newPageTitle": "New page"
+  },
+  "WikiQuickNav": {
+    "switcherTitle": "Quick switch",
+    "switcherPlaceholder": "Jump to a page by title…",
+    "switcherEmpty": "No matching pages",
+    "switcherHint": "↑↓ move · Enter open · Esc close",
+    "captureTitle": "Quick capture",
+    "capturePlaceholder": "Jot something down…",
+    "captureHint": "First line becomes the title · file it later",
+    "captureSave": "Save",
+    "moveTitle": "Move to folder",
+    "moveLabel": "Folder (category) path",
+    "movePlaceholder": "e.g. life/notes (empty = Inbox)",
+    "moveToInboxHint": "Leave empty to move to Inbox",
+    "moveSubmit": "Move"
+  },
+  "PinButton": {
+    "pin": "Pin",
+    "unpin": "Unpin"
+  },
+  "WikiArticle": {
+    "createHint": "Click to create the ‘{slug}’ page"
+  },
+  "WikisSlugReadingPage": {
+    "title": "Reading list",
+    "subtitle": "Stash links to read later; promote the good ones into your knowledge base.",
+    "addPlaceholder": "Paste a link (https://…)",
+    "addButton": "Save",
+    "adding": "Saving…",
+    "empty": "No saved links yet. Paste a URL above, or use ⌘⇧N.",
+    "open": "Open",
+    "promote": "Promote",
+    "promoteHint": "Let AI read this link and file it into knowledge",
+    "delete": "Delete",
+    "promoted": "In knowledge"
+  },
+  "FolderPinButton": {
+    "pin": "Pin folder",
+    "pinned": "Pinned"
   }
 }

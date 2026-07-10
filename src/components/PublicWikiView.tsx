@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getPage, getBacklinks, getOutlinks, existingSlugSet, getWikiToc, getPrevNext, getPageProvenance, getPageSources } from "@/lib/wiki";
 import { renderMarkdown } from "@/lib/markdown";
-import type { TocEntry } from "@/lib/kinds";
+import { isAiExcludedKind, type TocEntry } from "@/lib/kinds";
 import { EmptyState } from "@/components/EmptyState";
 import { ReadingPane } from "@/components/ReadingPane";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
@@ -45,6 +45,7 @@ export async function PublicWikiView({
   pageSlug?: string;
 }) {
   const t = await getTranslations("PublicWikiView");
+  const tw = await getTranslations("WikiToc"); // 사이드바 섹션 라벨 공유(WikiToc와 동일 키)
   const crumb = (
     <div className="mb-1 text-sm text-stone-400">
       <Link href={basePath} className="hover:underline">{title}</Link>
@@ -55,6 +56,8 @@ export async function PublicWikiView({
   if (pageSlug) {
     const page = await getPage(wikiId, pageSlug);
     if (!page) notFound();
+    // 개인 노트(AI 제외)는 공개 뷰에 절대 노출하지 않는다 — 익명 독자가 slug로 직접 접근해도 숨김.
+    if (isAiExcludedKind(page.kind)) notFound();
     const existing = await existingSlugSet(wikiId);
     const html = await renderMarkdown(page.body, {
       hrefFor: (t) => `${basePath}/p/${encodeURIComponent(t)}`,
@@ -63,7 +66,7 @@ export async function PublicWikiView({
     const [backlinks, outlinks, { prev, next }] = await Promise.all([
       getBacklinks(wikiId, page.id),
       getOutlinks(wikiId, page.id),
-      getPrevNext(wikiId, pageSlug),
+      getPrevNext(wikiId, pageSlug, { includePersonal: false }), // 공개 prev/next에 개인 노트 미포함
     ]);
     const isNote = page.kind === "note";
     const prov = isNote ? await getPageProvenance(wikiId, page.sourceId) : null;
@@ -96,7 +99,7 @@ export async function PublicWikiView({
     );
   }
 
-  const { sections } = await getWikiToc(wikiId);
+  const { sections } = await getWikiToc(wikiId, { includePersonal: false }); // 공개 사이드바에 개인 노트 미노출
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       {crumb}
@@ -113,7 +116,7 @@ export async function PublicWikiView({
         <div className="space-y-6">
           {sections.map((s) => (
             <section key={s.key}>
-              <h2 className="mb-2 text-sm font-semibold text-stone-500">{s.label}</h2>
+              <h2 className="mb-2 text-sm font-semibold text-stone-500">{tw(`section.${s.key}`)}</h2>
               <EntryList entries={s.entries} basePath={basePath} />
             </section>
           ))}

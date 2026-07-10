@@ -5,7 +5,7 @@ import { reindexPage } from "@/lib/search";
 import { KIND_LABEL } from "@/lib/kinds";
 import type { TocSection, TocEntry, TocFolder, TocLeaf, WikiGraph, GraphNode, GraphEdge } from "@/lib/kinds";
 import { isReservedSlug, ONTOLOGY_SLUG } from "@/lib/ontology";
-import type { Prisma, PageKind, WikiKind, Visibility } from "@/generated/prisma/client";
+import type { Prisma, PageKind, WikiKind, Visibility, RelationType } from "@/generated/prisma/client";
 
 // 페이지 생성/수정 공통 입력. category/sourceId는 undefined=미변경, null=해제, 값=설정.
 type PageWrite = { title: string; kind: PageKind; body: string; category?: string | null; sourceId?: string | null };
@@ -108,19 +108,8 @@ export type { TocSection, TocEntry };
  * 탐색기(VSCode식) 목차: 2섹션 — 원문/소스(note) vs 정리된 지식(파생, category 경로 폴더 트리).
  * flat은 섹션 순 전위순회(이전/다음용). getPrevNext는 이 flat만 쓰므로 시그니처 불변.
  */
-export async function getWikiToc(wikiId: string): Promise<{ sections: TocSection[]; flat: { slug: string; title: string }[] }> {
-  const pages = await prisma.page.findMany({
-    where: { wikiId, slug: { not: ONTOLOGY_SLUG } }, // O1: system 온톨로지 페이지 숨김
-    orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
-    select: { slug: true, title: true, kind: true, category: true },
-  });
-
-  // 원문/소스 = note(평평, category 없음)
-  const sourceEntries: TocEntry[] = pages
-    .filter((p) => p.kind === "note")
-    .map((p) => ({ type: "page", slug: p.slug, title: p.title, kind: p.kind }));
-
-  // 정리된 지식 = 파생 pages를 category 경로("ai/architectures")로 폴더 트리에 배치
+/** category 경로("ai/architectures")로 페이지들을 폴더 트리(TocEntry[])로 배치. 미분류는 루트 leaf(=Inbox). */
+function buildCategoryTree(pages: { slug: string; title: string; kind: PageKind; category: string | null }[]): TocEntry[] {
   const rootChildren: TocEntry[] = [];
   const folderByPath = new Map<string, TocFolder>();
   const ensureFolder = (path: string): TocFolder => {
@@ -135,17 +124,43 @@ export async function getWikiToc(wikiId: string): Promise<{ sections: TocSection
     return folder;
   };
   for (const p of pages) {
-    if (p.kind === "note") continue;
     const leaf: TocLeaf = { type: "page", slug: p.slug, title: p.title, kind: p.kind };
     // 빈 세그먼트 정규화("ai/models/"·"ai//models" → "ai/models")로 빈 폴더/분열 방지
     const cat = p.category?.split("/").map((s) => s.trim()).filter(Boolean).join("/");
     if (cat) ensureFolder(cat).children.push(leaf);
-    else rootChildren.push(leaf); // 미분류 파생은 섹션 루트에
+    else rootChildren.push(leaf); // 미분류는 섹션 루트에(Inbox)
   }
+  return rootChildren;
+}
+
+/**
+ * 3섹션 목차: 내 노트(personal, 전용 폴더 트리 — AI 지식과 분리) · 원문/소스(note, 평평) · 정리된 지식(파생, category 폴더 트리).
+ * opts.includePersonal=false면 personal 섹션 제외(공개 뷰). personal은 AI 코퍼스엔 없지만 사이드바 탐색엔 노출된다(제목/트리).
+ */
+export async function getWikiToc(
+  wikiId: string,
+  opts?: { includePersonal?: boolean },
+): Promise<{ sections: TocSection[]; flat: { slug: string; title: string }[] }> {
+  const includePersonal = opts?.includePersonal ?? true;
+  const pages = await prisma.page.findMany({
+    where: { wikiId, slug: { not: ONTOLOGY_SLUG } }, // O1: system 온톨로지 페이지 숨김
+    orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
+    select: { slug: true, title: true, kind: true, category: true },
+  });
+
+  const personalPages = includePersonal ? pages.filter((p) => p.kind === "personal") : [];
+  const sourceEntries: TocEntry[] = pages
+    .filter((p) => p.kind === "note")
+    .map((p) => ({ type: "page", slug: p.slug, title: p.title, kind: p.kind }));
+  const derivedPages = pages.filter((p) => p.kind !== "note" && p.kind !== "personal"); // concept/entity/meta
+
+  const personalEntries = buildCategoryTree(personalPages);
+  const knowledgeEntries = buildCategoryTree(derivedPages);
 
   const sections: TocSection[] = [];
-  if (sourceEntries.length) sections.push({ key: "sources", label: "원문 / 소스", entries: sourceEntries });
-  if (rootChildren.length) sections.push({ key: "knowledge", label: "정리된 지식", entries: rootChildren });
+  if (personalEntries.length) sections.push({ key: "personal", entries: personalEntries });
+  if (sourceEntries.length) sections.push({ key: "sources", entries: sourceEntries });
+  if (knowledgeEntries.length) sections.push({ key: "knowledge", entries: knowledgeEntries });
 
   const flat: { slug: string; title: string }[] = [];
   const walk = (entries: TocEntry[]) => {
@@ -163,8 +178,9 @@ export async function getWikiToc(wikiId: string): Promise<{ sections: TocSection
 export async function getPrevNext(
   wikiId: string,
   slug: string,
+  opts?: { includePersonal?: boolean },
 ): Promise<{ prev: { slug: string; title: string } | null; next: { slug: string; title: string } | null }> {
-  const { flat } = await getWikiToc(wikiId);
+  const { flat } = await getWikiToc(wikiId, opts);
   const i = flat.findIndex((f) => f.slug === slug);
   if (i === -1) return { prev: null, next: null };
   return { prev: i > 0 ? flat[i - 1] : null, next: i < flat.length - 1 ? flat[i + 1] : null };
@@ -200,8 +216,10 @@ export async function deleteWiki(wikiId: string) {
 }
 
 // ---------- 페이지 생성/수정 ----------
-export async function createPage(wikiId: string, input: { title: string; kind: PageKind; body?: string; category?: string | null; sourceId?: string | null }) {
-  const root = normalizeSlug(input.title) || "page";
+export async function createPage(wikiId: string, input: { title: string; kind: PageKind; body?: string; category?: string | null; sourceId?: string | null; slug?: string }) {
+  // 명시 slug(예: 미해결 [[link]]에서 생성 — slug===target 불변): 충돌 시 접미 증가 대신 기존 페이지 반환.
+  const explicit = !!input.slug;
+  const root = normalizeSlug(input.slug || input.title) || "page";
   const sortOrder = await nextSortOrder(wikiId, null);
   let page;
   for (let i = 0; ; i++) {
@@ -221,13 +239,57 @@ export async function createPage(wikiId: string, input: { title: string; kind: P
       });
       break;
     } catch (e) {
-      if (isP2002(e) && i < 50) continue;
+      if (isP2002(e)) {
+        if (explicit) {
+          const existing = await prisma.page.findUnique({ where: { wikiId_slug: { wikiId, slug: root } } });
+          if (existing) return existing; // slug===target 유지, 기존 페이지로 이동
+        }
+        if (i < 50) continue;
+      }
       throw e;
     }
   }
   await recomputeLinks(wikiId, page.id, page.slug, page.body);
   await reindexPage(wikiId, page);
   return page;
+}
+
+// ---------- 개인 노트 이동(refile) + 핀 ----------
+/** 페이지 category만 변경(move/refile). 빈/null이면 미분류(Inbox). 링크·색인 재계산 없이 가벼운 업데이트. */
+export async function setPageCategory(wikiId: string, slug: string, category: string | null): Promise<void> {
+  await prisma.page.update({ where: { wikiId_slug: { wikiId, slug } }, data: { category: category || null } });
+}
+
+/** 유저가 이 위키에서 고정한 페이지들(개인 핀). 최신 고정 순. */
+export async function listPins(wikiId: string, userId: string): Promise<{ slug: string; title: string; kind: PageKind }[]> {
+  const rows = await prisma.pagePin.findMany({
+    where: { wikiId, userId },
+    orderBy: { createdAt: "desc" },
+    select: { page: { select: { slug: true, title: true, kind: true } } },
+  });
+  return rows.map((r) => r.page);
+}
+
+export async function isPagePinned(userId: string, pageId: string): Promise<boolean> {
+  const pin = await prisma.pagePin.findUnique({ where: { userId_pageId: { userId, pageId } }, select: { id: true } });
+  return !!pin;
+}
+
+/** 유저가 이 위키에서 고정한 폴더(category 경로)들. 최신 고정 순. */
+export async function listFolderPins(wikiId: string, userId: string): Promise<{ category: string }[]> {
+  return prisma.folderPin.findMany({
+    where: { wikiId, userId },
+    orderBy: { createdAt: "desc" },
+    select: { category: true },
+  });
+}
+
+export async function isFolderPinned(userId: string, wikiId: string, category: string): Promise<boolean> {
+  const pin = await prisma.folderPin.findUnique({
+    where: { userId_wikiId_category: { userId, wikiId, category } },
+    select: { id: true },
+  });
+  return !!pin;
 }
 
 export async function updatePage(wikiId: string, slug: string, input: PageWrite) {
@@ -454,6 +516,50 @@ export async function addPageSource(wikiId: string, pageSlug: string, sourceId: 
     create: { wikiId, pageId: page.id, sourceId },
     update: {},
   });
+}
+
+// ---------- 개념 간 타입드 관계(KG 엣지) ----------
+export interface RelationTuple {
+  fromSlug: string;
+  toSlug: string;
+  type: RelationType;
+}
+
+/**
+ * 이 원문(Source)이 근거하는 개념 관계를 통째로 교체(set-replace, 멱등). ingest 추출 패스가 원문당 1회 호출한다.
+ * fromSlug/toSlug 는 이 위키의 기존 페이지여야 한다(테넌트 격리 + 존재하지 않는 endpoint·자기루프 거부).
+ * 원문당 정확히 그 원문의 엣지만 지우고 다시 넣으므로 재수집이 멱등 — 여러 원문이 같은 논리 엣지를 주장하면
+ * 물리적으로 N행(순회 시 dedup). 반환: 실제로 기록한 엣지 수.
+ */
+export async function replaceSourceRelations(
+  wikiId: string,
+  sourceId: string,
+  tuples: RelationTuple[],
+): Promise<number> {
+  const source = await prisma.source.findFirst({ where: { id: sourceId, wikiId }, select: { id: true } });
+  if (!source) return 0; // 테넌트 격리: 원문이 이 위키 소유가 아니면 no-op
+  const slugs = [...new Set(tuples.flatMap((t) => [t.fromSlug, t.toSlug]))];
+  const pages = slugs.length
+    ? await prisma.page.findMany({ where: { wikiId, slug: { in: slugs } }, select: { id: true, slug: true } })
+    : [];
+  const idBySlug = new Map(pages.map((p) => [p.slug, p.id]));
+
+  const rows: Prisma.ConceptRelationCreateManyInput[] = [];
+  const seen = new Set<string>();
+  for (const t of tuples) {
+    const fromPageId = idBySlug.get(t.fromSlug);
+    const toPageId = idBySlug.get(t.toSlug);
+    if (!fromPageId || !toPageId || fromPageId === toPageId) continue; // 미존재 endpoint·자기루프 드롭
+    const key = `${fromPageId}|${toPageId}|${t.type}`;
+    if (seen.has(key)) continue; // 이 원문 내 중복 튜플 제거(@@unique 위반 회피)
+    seen.add(key);
+    rows.push({ wikiId, fromPageId, toPageId, type: t.type, sourceId });
+  }
+  await prisma.$transaction([
+    prisma.conceptRelation.deleteMany({ where: { wikiId, sourceId } }),
+    ...(rows.length ? [prisma.conceptRelation.createMany({ data: rows, skipDuplicates: true })] : []),
+  ]);
+  return rows.length;
 }
 
 /** 이 파생 페이지가 유래한 원본(들). 기여 순(ingest 시각). note의 단일 provenance와 별개. */

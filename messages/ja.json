@@ -197,7 +197,10 @@
     "entity": "エンティティ",
     "meta": "メタ",
     "conceptOption": "概念 — アイデア・パターン・理論・ドキュメント",
-    "entityOption": "エンティティ — 人物・組織・ツール・製品"
+    "entityOption": "エンティティ — 人物・組織・ツール・製品",
+    "personal": "個人ノート",
+    "personalOption": "個人ノート — 自分だけのメモ(AI対象外)",
+    "personalWarning": "個人ノートはAI対象外ですが暗号化はされません — 本物のパスワードは保存しないでください。"
   },
   "LoginActions": {
     "emptyCredentials": "メールアドレスとパスワードを入力してください",
@@ -299,7 +302,18 @@
     "healthCheck": "ヘルスチェック",
     "integrationGuide": "連携ガイド",
     "settings": "設定",
-    "logout": "ログアウト"
+    "logout": "ログアウト",
+    "pinnedHeading": "ピン留め",
+    "recentHeading": "最近見た文書",
+    "newNoteAtRoot": "新規ノート",
+    "quickSwitch": "クイック移動",
+    "quickCapture": "クイックメモ",
+    "section": {
+      "personal": "マイノート",
+      "sources": "原文・ソース",
+      "knowledge": "整理された知識"
+    },
+    "readingList": "読むもの"
   },
   "WikisPage": {
     "apiKeys": "API キー",
@@ -554,5 +568,44 @@
   "WikisSlugWikiActions": {
     "ingestTitle": "ソースを取り込む",
     "newPageTitle": "新規ページ"
+  },
+  "WikiQuickNav": {
+    "switcherTitle": "クイック移動",
+    "switcherPlaceholder": "タイトルで文書へ移動…",
+    "switcherEmpty": "一致する文書がありません",
+    "switcherHint": "↑↓ 移動 · Enter 開く · Esc 閉じる",
+    "captureTitle": "クイックメモ",
+    "capturePlaceholder": "今思いついたことをメモ…",
+    "captureHint": "1行目がタイトル · 後でフォルダへ整理",
+    "captureSave": "保存",
+    "moveTitle": "フォルダへ移動",
+    "moveLabel": "フォルダ(カテゴリ)パス",
+    "movePlaceholder": "例: 生活/メモ (空欄で受信トレイ)",
+    "moveToInboxHint": "空欄で受信トレイへ",
+    "moveSubmit": "移動"
+  },
+  "PinButton": {
+    "pin": "ピン留め",
+    "unpin": "ピン留め解除"
+  },
+  "WikiArticle": {
+    "createHint": "クリックで「{slug}」文書を新規作成します"
+  },
+  "WikisSlugReadingPage": {
+    "title": "読むもの",
+    "subtitle": "後で読むリンクを保存し、良ければ正式に取り込みます。",
+    "addPlaceholder": "リンクを貼り付け (https://…)",
+    "addButton": "保存",
+    "adding": "保存中…",
+    "empty": "保存したリンクはありません。上にURLを貼るか、⌘⇧Nで保存。",
+    "open": "開く",
+    "promote": "正式取込",
+    "promoteHint": "AIがこのリンクを読み、知識に整理します",
+    "delete": "削除",
+    "promoted": "取込済み"
+  },
+  "FolderPinButton": {
+    "pin": "フォルダ固定",
+    "pinned": "固定済み"
   }
 }

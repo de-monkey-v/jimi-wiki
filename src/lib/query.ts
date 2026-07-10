@@ -1,5 +1,5 @@
 import "server-only";
-import { hybridSearch } from "@/lib/search";
+import { hybridSearch, expandViaGraph, plannedDepth, isRelationalQuery } from "@/lib/search";
 import { generateText, llmEnabledForModel } from "@/lib/gemini";
 import { genModel } from "@/lib/model-config";
 import { detectLang } from "@/lib/lang";
@@ -37,20 +37,34 @@ export async function answerQuery(
     return { answer: "관련 내용을 위키에서 찾지 못했습니다.", sources: [] };
   }
 
-  const context = hits
-    .map((h, i) => `[${i + 1}] ${h.pageTitle ?? h.refType}${h.heading ? " › " + h.heading : ""}\n${h.snippet}`)
-    .join("\n\n");
+  // KG 확장(GraphRAG): seed 페이지에서 타입드 관계 이웃을 끌어와 컨텍스트를 보강한다. 강한 직접매치·비관계
+  // 질의는 plannedDepth가 0을 주고, 빈 KG면 expandViaGraph가 []를 줘 → 아래 컨텍스트/근거가 오늘과 동일.
+  const seedPageIds = hits.filter((h) => h.refType === "page").map((h) => h.refId);
+  const sims = hits.map((h) => h.similarity).filter((s): s is number => typeof s === "number");
+  const depth = plannedDepth({
+    seedCount: seedPageIds.length,
+    topSimilarity: sims.length ? Math.max(...sims) : undefined, // 전체 벡터히트 max(RRF 정렬의 hits[0]은 FTS일 수 있음)
+    isRelational: isRelationalQuery(q),
+  });
+  const neighbors = await expandViaGraph(wikiId, seedPageIds, depth).catch((e) => {
+    console.error(`[query] KG 확장 실패(비치명적): ${(e as Error).message}`);
+    return [];
+  });
+
+  // seed는 [1..N], 이웃은 [N+1..]로 이어붙이고 '(관련 개념)'으로 구분 태그(인용 번호·sources 정렬 일치)
+  const seedBlocks = hits.map((h, i) => `[${i + 1}] ${h.pageTitle ?? h.refType}${h.heading ? " › " + h.heading : ""}\n${h.snippet}`);
+  const neighborBlocks = neighbors.map((n, i) => `[${hits.length + i + 1}] (관련 개념) ${n.title}\n${n.snippet}`);
+  const context = [...seedBlocks, ...neighborBlocks].join("\n\n");
   const answer = await generateText(
     SYSTEM,
     `질문: ${q}\n\n<검색결과>\n${context}\n</검색결과>\n\n위 <검색결과> 근거만으로 답하고 [번호]로 인용하라.\n\nIMPORTANT: Write your entire answer in ${detectLang(q).name}, matching the language of the question above.`,
     { userId: opts?.userId ?? null, apiKeyId: opts?.apiKeyId ?? null, wikiId, route: "query" },
   );
 
-  const sources: QuerySource[] = hits.map((h) => ({
-    pageSlug: h.pageSlug,
-    pageTitle: h.pageTitle,
-    heading: h.heading,
-  }));
+  const sources: QuerySource[] = [
+    ...hits.map((h) => ({ pageSlug: h.pageSlug, pageTitle: h.pageTitle, heading: h.heading })),
+    ...neighbors.map((n) => ({ pageSlug: n.slug, pageTitle: n.title, heading: "관련 개념" })),
+  ];
 
   return { answer, sources };
 }

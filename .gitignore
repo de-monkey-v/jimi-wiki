@@ -56,3 +56,6 @@ next-env.d.ts
 
 # 개인 로컬 전용 (공개 배포 금지) — ChatGPT 구독 codex 프록시 등
 /local/
+
+# Playwright MCP 브라우저 검증 산출물(스냅샷·콘솔 로그)
+/.playwright-mcp/

@@ -53,6 +53,13 @@ let cache: ResolvedConfig | null = null;
 let loadedAt = 0;
 let refreshing: Promise<void> | null = null;
 
+// model-resolver가 프로브로 확정한 OAuth 기본 GPT 모델. 순환 import를 피하려 setter로 주입받는다.
+// null = 아직 미확정 또는 가용 모델 없음 → resolve가 env 폴백을 쓴다.
+let oauthDefaultGptModel: string | null = null;
+export function setOAuthDefaultGptModel(model: string | null): void {
+  oauthDefaultGptModel = model;
+}
+
 type ConfigRow = {
   chatModel: string | null;
   genModel: string | null;
@@ -62,10 +69,14 @@ type ConfigRow = {
 
 function resolve(row: ConfigRow | null): ResolvedConfig {
   const env = envDefaults();
+  // "OAuth를 쓸 수 있으면 GPT가 기본": OAuth 로그인 토큰이 있고 프로브가 호출 가능한 GPT를
+  // 확정했으면 그 모델을 모델 기본값으로 쓴다. 우선순위 = 명시 AppConfig 값 > 프로브 확정 GPT > env.
+  // 프로브 전(null)이면 env로 자연 폴백하므로 미검증 모델을 강제하지 않는다.
+  const gptDefault = storeExists() ? oauthDefaultGptModel : null;
   return {
-    chatModel: row?.chatModel ?? env.chatModel,
-    genModel: row?.genModel ?? env.genModel,
-    ingestModel: row?.ingestModel ?? env.ingestModel,
+    chatModel: row?.chatModel ?? gptDefault ?? env.chatModel,
+    genModel: row?.genModel ?? gptDefault ?? env.genModel,
+    ingestModel: row?.ingestModel ?? gptDefault ?? env.ingestModel,
     openaiTransport: row?.openaiTransport && isTransport(row.openaiTransport) ? row.openaiTransport : env.openaiTransport,
   };
 }
@@ -78,6 +89,11 @@ export function refreshConfig(): Promise<void> {
       const row = await prisma.appConfig.findUnique({ where: { id: SINGLETON } });
       cache = resolve(row);
       loadedAt = Date.now();
+      // OAuth 토큰이 있으면 백그라운드로 기본 GPT 모델을 프로브·확정한다(자체 TTL로 매번은 안 함).
+      // 동적 import로 순환 의존(model-resolver→openai→model-config)을 끊는다. 결과는 다음 resolve에 반영.
+      if (storeExists()) {
+        void import("@/lib/model-resolver").then((m) => m.refreshPreferredGptModel()).catch(() => {});
+      }
     } catch (e) {
       // DB 일시 오류 시 캐시가 없으면 env 폴백으로 채워 계속 동작하게 한다.
       if (!cache) cache = envDefaults();

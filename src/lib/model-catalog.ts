@@ -42,11 +42,19 @@ const LABEL: Record<Provider, string> = {
   anthropic: "Anthropic Claude",
   openai: "OpenAI GPT",
 };
-// OAuth 활성 시 openai 그룹에 덧붙이는, 실측으로 확인된 ChatGPT 구독 모델(카탈로그에 없을 수 있음).
+// OAuth 활성 시 openai 그룹에 덧붙이는, ChatGPT 구독 경로에서 쓰는 모델 선호순(신형→구형).
+// models.dev 카탈로그엔 없을 수 있어 여기서 직접 관리한다. ⚠️ 새 ChatGPT 구독 모델이 나오면
+// **여기 맨 위에 한 줄만 추가**하면 된다 — model-resolver의 프로브가 현재 계정에서 실제 호출되는
+// 첫 모델을 자동 선택하므로(계정에 안 열렸으면 조용히 다음 후보), 다른 코드 변경이 필요 없다.
+// 이 배열이 드롭다운 표시·자동 기본선택·configure-test 프로브의 단일 출처(SSOT)다.
 const OAUTH_OPENAI: CatalogModel[] = [
+  { id: "gpt-5.6", name: "GPT-5.6 (ChatGPT 구독)", reasoning: true, toolCall: true },
   { id: "gpt-5.5", name: "GPT-5.5 (ChatGPT 구독)", reasoning: true, toolCall: true },
   { id: "gpt-5.1", name: "GPT-5.1 (ChatGPT 구독)", reasoning: true, toolCall: true },
 ];
+
+/** OAuth(ChatGPT 구독) 기본 모델 선호순 ID 목록 — 신형→구형. 프로브가 실제 가용 첫 모델을 고른다. */
+export const OAUTH_OPENAI_PREFERENCE: readonly string[] = OAUTH_OPENAI.map((m) => m.id);
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 1일
 const MODELS_DEV_URL = "https://models.dev/api.json";

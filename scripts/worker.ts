@@ -2,6 +2,7 @@ import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { claimNextAgentRun, runClaimedIngestJob, reapStaleRuns, type ClaimedAgentRun } from "../src/lib/ingest";
 import { refreshConfig } from "../src/lib/model-config";
+import { refreshPreferredGptModel } from "../src/lib/model-resolver";
 import { notifyIngestComplete } from "../src/lib/telegram-notify";
 import { processPendingBlobPurges } from "../src/lib/blob-purge";
 
@@ -67,6 +68,9 @@ async function main() {
   console.log(`[worker] started pollMs=${pollMs}`);
   // 첫 잡이 env 기본이 아니라 관리자가 저장한 DB 모델을 쓰도록 캐시를 미리 채운다(비치명적).
   await refreshConfig().catch(() => {});
+  // OAuth 기본 GPT 모델을 첫 잡 전에 확정한다(콜드스타트 창에서 미검증/env-폴백 모델로 편입하는 것 방지).
+  await refreshPreferredGptModel(true).catch(() => {});
+  await refreshConfig().catch(() => {}); // 프로브 결과를 캐시에 즉시 반영
   while (!stopping) {
     // 폴링 루프는 일시적 DB/스키마 오류(예: 마이그레이션 진행 중)에 크래시하지 않고 재시도한다.
     try {

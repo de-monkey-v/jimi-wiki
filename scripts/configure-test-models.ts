@@ -30,17 +30,18 @@ async function main() {
   delete process.env.OPENAI_BASE_URL;
   process.env.OPENAI_OAUTH_PERSONAL = "1";
 
-  const [{ storeExists }, modelConfig, { openaiOAuthProvider }, { prisma }] = await Promise.all([
+  const [{ storeExists }, modelConfig, { openaiOAuthProvider }, { prisma }, { OAUTH_OPENAI_PREFERENCE }] = await Promise.all([
     import("../src/lib/openai-oauth"),
     import("../src/lib/model-config"),
     import("../src/lib/openai"),
     import("../src/lib/db"),
+    import("../src/lib/model-catalog"),
   ]);
   if (!storeExists()) throw new Error("ChatGPT OAuth store가 없습니다. 먼저 pnpm openai:login을 실행하세요.");
 
   let selected: string | null = null;
   const errors: string[] = [];
-  for (const model of ["gpt-5.6", "gpt-5.5"] as const) {
+  for (const model of OAUTH_OPENAI_PREFERENCE) {
     let streamError: unknown;
     try {
       const result = streamText({

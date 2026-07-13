@@ -7,9 +7,9 @@
     "testing": "テスト中…",
     "test": "テスト",
     "title": "モデル選択",
-    "description": "空欄（デフォルト）にすると env 設定に従います。保存すると再起動なしで反映されます（他プロセスは数秒以内）。チャットは Gemini・GPT のみ対応です（Claude は ingest・query・lint で利用可能）。",
+    "description": "空欄（デフォルト）にすると env 設定に従います。保存すると再起動なしで反映されます（他のプロセスには数秒以内に反映されます）。チャットは Gemini・GPT のみ対応しています（Claude は ingest・query・lint で利用できます）。",
     "chatLabel": "チャット (CHAT_MODEL)",
-    "ingestHint": "原文の取り込み・キュレーション。品質へのレバレッジが大きい。",
+    "ingestHint": "原文の取り込み・キュレーション。品質への影響が大きいです。",
     "genLabel": "汎用生成 (GEN_MODEL — query・lint)",
     "save": "保存"
   },
@@ -30,7 +30,7 @@
     },
     "optionUnavailable": "{hint} なし",
     "unavailable": "（不可）",
-    "currentDescription": "現在: <b>{transport}</b> — この方式で GPT モデルを呼び出します。キーがあっても<b>選択した方式</b>のみ使用します。",
+    "currentDescription": "現在: <b>{transport}</b> — この方式で GPT モデルを呼び出します。キーがあっても<b>選択した方式</b>のみが使用されます。",
     "loggedIn": "ログイン済み",
     "account": "（アカウント {id}…）",
     "expiresAt": " · 有効期限 {date}",
@@ -42,7 +42,7 @@
     "step1": "1)",
     "openLink": "開く",
     "step2": "2) コード入力: ",
-    "warning": "⚠️ 個人の self-host 専用 — 個人サブスクリプションを自分だけで使う用途。他の人へサービスとして公開しないこと（ChatGPT 規約）。"
+    "warning": "⚠️ 個人の self-host 専用 — 個人のサブスクリプションを自分で利用する場合のみ。他の人へサービスとして公開しないこと（ChatGPT 規約）。"
   },
   "AdminSettingsPage": {
     "appTitle": "アプリ設定",
@@ -95,7 +95,7 @@
     "section4Title": "4. 方法C — RESTを直接呼び出す",
     "sectionAuthTitle": "認証境界 — APIキーでできること・できないこと",
     "section1": {
-      "auth": "すべての外部呼び出しは<code>{header}</code>ヘッダーで認証します。生のキーは発行時に一度だけ表示されるので、安全に保管してください。",
+      "auth": "すべての外部呼び出しは<code>{header}</code>ヘッダーで認証します。APIキーは発行時に一度だけ表示されるので、安全に保管してください。",
       "li1": "<link>APIキー</link>画面で発行（書き込み操作はeditor以上）。",
       "li2": "キーを特定のwikiに<strong>スコープ</strong>したり、<strong>上限ロール（maxRole）</strong>・<strong>有効期限</strong>を設定できます。有効ロール = min(メンバーシップロール, maxRole)。",
       "li3": "アカウントあたり有効キーは最大20個。レート制限：毎分60回／毎時1000回（超過時は<code>429</code> + Retry-After）。"
@@ -105,8 +105,8 @@
       "toolsLabel": "公開されるツール（11種）："
     },
     "section3": {
-      "p1": "リポジトリの<code>skills/wiki-ingest/</code>スキルバンドルは外部メンテナー向けのワークフローです — 原文の取り込み（ingest）だけでなく、分類・整理（organize）・機械チェック（lint）・照会（query）まで対応します。特定のエージェントに縛られないため、<strong>MCPをサポートすればツールとして、そうでなければRESTで同じ手順</strong>を実行します。内部ingestエージェントと<strong>同じ分類ルール</strong>（オントロジー／カテゴリ）を正本からコピーし、CIでbyte-parityを強制するので、Web UIから入れてもスキルで入れてもwikiの分類が一貫します。",
-      "p2": "ingest手順：① <code>create_source</code>で原文を不変保存 → ② <code>search</code>／<code>list_pages</code>で重複確認 → ③ <code>kind=note</code>でソースノートを作成（原文のコピペ禁止、要約する）→ ④ 影響を受けるconcept/entityを更新（<code>[[slug]]</code>リンク・categoryを再利用）→ ⑤ 最後の呼び出しで<code>embed:true</code>を指定してセマンティック索引化。",
+      "p1": "リポジトリの<code>skills/wiki-ingest/</code>スキルバンドルは外部メンテナー向けのワークフローです — 原文の取り込み（ingest）だけでなく、分類・整理（organize）・機械チェック（lint）・照会（query）まで対応します。特定のエージェントに縛られないため、<strong>MCPをサポートすればツールとして、そうでなければRESTで同じ手順</strong>を実行します。内部ingestエージェントと<strong>同じ分類ルール</strong>（オントロジー／カテゴリ）を正本からコピーし、CIでbyte-parityを保証するので、Web UIから入れてもスキルで入れてもwikiの分類が一貫します。",
+      "p2": "ingest手順：① <code>create_source</code>で原文を不変な状態で保存 → ② <code>search</code>／<code>list_pages</code>で重複確認 → ③ <code>kind=note</code>でソースノートを作成（原文のコピペ禁止、要約する）→ ④ 影響を受けるconcept/entityを更新（<code>[[slug]]</code>リンク・categoryを再利用）→ ⑤ 最後の呼び出しで<code>embed:true</code>を指定してセマンティック索引化。",
       "bundleLabel": "バンドル構成（フォルダごとコピーしてどのハーネスにも配置）：",
       "li1": "<code>SKILL.md</code> — ワークフローの入口（ハーネス非依存）。",
       "li2": "<code>references/ontology-rules.md</code> — 分類ルール正本のコピー（CI byte-parityチェック）。",
@@ -143,7 +143,7 @@
   "InviteTokenPage": {
     "invalidTitle": "無効または期限切れの招待です",
     "invalidDescription": "管理者に新しい招待リンクをリクエストしてください。",
-    "acceptTitle": "招待を承認 · アカウント作成"
+    "acceptTitle": "招待を受ける · アカウント作成"
   },
   "KeysActions": {
     "invalidWikiSelection": "無効なwiki選択です。"
@@ -334,7 +334,7 @@
       "sources": "原文・ソース",
       "knowledge": "整理された知識"
     },
-    "readingList": "読むもの"
+    "readingList": "リーディングリスト"
   },
   "WikisPage": {
     "apiKeys": "API キー",
@@ -376,7 +376,7 @@
       "source": "原文",
       "page": "ドキュメント"
     },
-    "fullPage": "全ページを開く",
+    "fullPage": "ページ全体で開く",
     "close": "閉じる",
     "loading": "読み込み中…",
     "loadError": "ドキュメントを読み込めませんでした。",
@@ -443,7 +443,7 @@
     "type": {
       "ingest": "ソース取り込み",
       "query": "質問",
-      "lint": "健康チェック"
+      "lint": "ヘルスチェック"
     },
     "secondsElapsed": "{sec}秒",
     "minutesElapsed": "{min}分{sec}秒",
@@ -637,17 +637,17 @@
     "createHint": "クリックで「{slug}」文書を新規作成します"
   },
   "WikisSlugReadingPage": {
-    "title": "読むもの",
+    "title": "リーディングリスト",
     "subtitle": "後で読むリンクを保存し、良ければ正式に取り込みます。",
     "addPlaceholder": "リンクを貼り付け (https://…)",
     "addButton": "保存",
     "adding": "保存中…",
     "empty": "保存したリンクはありません。上にURLを貼るか、⌘⇧Nで保存。",
     "open": "開く",
-    "promote": "正式取込",
+    "promote": "正式に取り込む",
     "promoteHint": "AIがこのリンクを読み、知識に整理します",
     "delete": "削除",
-    "promoted": "取込済み"
+    "promoted": "取り込み済み"
   },
   "FolderPinButton": {
     "pin": "フォルダ固定",
@@ -785,7 +785,7 @@
     "errorHeading": "エラー詳細",
     "restoreHeading": "このビルドへ全体復元",
     "restoreBody": "現在の状態をcheckpointビルドとして先に保存し、このビルドの全ページ状態と関係を復元します。より厳しい現在のAIポリシーは維持されます。",
-    "restore": "このビルドを復元",
+    "restore": "このビルドへ復元",
     "restoring": "checkpointを作成して復元中…",
     "restoreConfirm": "現在の状態をcheckpointに保存し、このビルドの完全なスナップショットへ復元しますか？",
     "unrestorable": "必要なリビジョンが完全削除されたため、このビルドは復元できません。",
@@ -865,7 +865,7 @@
       "failed": "操作を完了できませんでした。再読み込みしてお試しください。"
     },
     "lifecycleHeading": "アーカイブと復元",
-    "sourceArchiveImpact": "アーカイブすると、関連ソースノート {notes} 件を保存し、影響する知識ページ {derived} 件を古い状態として表示します。",
+    "sourceArchiveImpact": "アーカイブすると、関連するソースノート {notes} 件をアーカイブし、影響を受ける整理済み文書 {derived} 件を古い状態として表示します。",
     "archive": "アーカイブ",
     "archiving": "アーカイブ中…",
     "archiveConfirm": "この文書をアーカイブしますか？リビジョンとslugは保存され、この画面から復元できます。",

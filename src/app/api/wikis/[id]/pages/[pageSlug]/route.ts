@@ -1,7 +1,22 @@
 import { NextResponse } from "next/server";
-import { apiWikiGate } from "@/lib/api-gate";
-import { getPage, deletePage } from "@/lib/wiki";
+import { apiWikiGate, sessionWikiGate } from "@/lib/api-gate";
+import { prisma } from "@/lib/db";
 import { isReservedSlug } from "@/lib/ontology";
+import { purgePage } from "@/lib/content-store";
+import { changePageModelAccess } from "@/lib/model-policy";
+import { refreshPageDerivedState } from "@/lib/page-projections";
+import { ONTOLOGY_PAGE_SLUG } from "@/lib/wiki-routes";
+import { withModelPolicyWriteLock } from "@/lib/model-access";
+import { archivePageSnapshotTx } from "@/lib/content-store";
+import {
+  contentMutationErrorResponse,
+  optionalExpectedVersionFromRequest,
+  parseExpectedVersion,
+  parseModelAccess,
+  purgeConfirmationMatches,
+  requestsExternalModelScope,
+  withExternalModelResponseScope,
+} from "@/lib/content-api";
 
 export const dynamic = "force-dynamic";
 
@@ -10,34 +25,175 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id, pageSlug } = await params;
   const gate = await apiWikiGate(req, id);
   if (!gate.ok) return gate.res;
-  const page = await getPage(gate.wiki.id, pageSlug);
-  if (!page) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  return NextResponse.json(
-    { slug: page.slug, title: page.title, kind: page.kind, category: page.category, body: page.body },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  return withExternalModelResponseScope(req, gate.wiki.id, async (tx) => {
+    const page = await tx.page.findFirst({
+      where: {
+        wikiId: gate.wiki.id,
+        slug: requestsExternalModelScope(req)
+          ? { equals: pageSlug, not: ONTOLOGY_PAGE_SLUG }
+          : pageSlug,
+        archivedAt: null,
+        ...(requestsExternalModelScope(req)
+          ? {
+              modelAccess: "external" as const,
+              kind: { not: "personal" as const },
+            }
+          : {}),
+      },
+    });
+    if (!page) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return NextResponse.json(
+      {
+        slug: page.slug,
+        title: page.title,
+        kind: page.kind,
+        category: page.category,
+        body: page.body,
+        origin: page.origin,
+        modelAccess: page.modelAccess,
+        currentVersion: page.currentVersion,
+        archivedAt: page.archivedAt,
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  });
 }
 
-/**
- * DELETE /api/wikis/:id/pages/:pageSlug — 페이지 삭제(editor).
- * 파생(concept/entity/meta)은 허용. 소스노트(note)는 **원문에 연결된 경우에만**
- * 불변 계층으로 409. 출처(sourceId) 없는 정크 노트는 보호할 provenance가 없어 삭제 허용.
- * 예약 system 페이지(ontology 등)는 403. 상호참조 깨짐은 lint로 이연한다.
- */
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string; pageSlug: string }> }) {
+/** PATCH /api/wikis/:id/pages/:pageSlug — AI 데이터 흐름 정책 변경(editor). */
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string; pageSlug: string }> }) {
   const { id, pageSlug } = await params;
   const gate = await apiWikiGate(req, id, { minRole: "editor" });
   if (!gate.ok) return gate.res;
-  const page = await getPage(gate.wiki.id, pageSlug);
+  let body: { modelAccess?: unknown; expectedVersion?: unknown; confirmExternalAccess?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+  const modelAccess = parseModelAccess(body?.modelAccess);
+  const expectedVersion = parseExpectedVersion(body?.expectedVersion);
+  if (!modelAccess) return NextResponse.json({ error: "invalid_model_access" }, { status: 400 });
+  if (!expectedVersion) return NextResponse.json({ error: "expected_version_required" }, { status: 400 });
+
+  const page = await prisma.page.findUnique({
+    where: { wikiId_slug: { wikiId: gate.wiki.id, slug: pageSlug } },
+    select: { id: true, modelAccess: true },
+  });
+  if (!page || (requestsExternalModelScope(req) && page.modelAccess !== "external")) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  try {
+    const result = await changePageModelAccess({
+      wikiId: gate.wiki.id,
+      pageId: page.id,
+      expectedVersion,
+      modelAccess,
+      confirmExternalAccess: body.confirmExternalAccess === true,
+      userId: gate.user.id,
+      reason: "page policy changed through REST",
+    });
+    return NextResponse.json(
+      {
+        slug: result.page.slug,
+        origin: result.page.origin,
+        modelAccess: result.page.modelAccess,
+        currentVersion: result.page.currentVersion,
+        archivedAt: result.page.archivedAt,
+        revisionId: result.revision.id,
+        policy: result.plan,
+        signals: result.signals,
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return contentMutationErrorResponse(error);
+  }
+}
+
+/**
+ * DELETE는 기본적으로 suppression archive다. 영구 삭제는 owner 세션·쿼리·slug 확인 헤더를
+ * 모두 요구해, 복원 가능성을 포기하는 동작이 API key나 실수로 실행되지 않게 한다.
+ */
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string; pageSlug: string }> }) {
+  const { id, pageSlug } = await params;
+  const permanent = new URL(req.url).searchParams.get("permanent") === "1";
+
+  if (permanent) {
+    const gate = await sessionWikiGate(id, { minRole: "owner" });
+    if (!gate.ok) return gate.res;
+    const requestedVersion = optionalExpectedVersionFromRequest(req);
+    if (requestedVersion.state === "invalid") {
+      return NextResponse.json({ error: "invalid_expected_version" }, { status: 400 });
+    }
+    if (!purgeConfirmationMatches(req, pageSlug)) {
+      return NextResponse.json({ error: "purge_confirmation_required" }, { status: 400 });
+    }
+    const page = await prisma.page.findUnique({
+      where: { wikiId_slug: { wikiId: gate.wiki.id, slug: pageSlug } },
+      select: { id: true, slug: true, currentVersion: true },
+    });
+    if (!page) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    if (isReservedSlug(page.slug)) {
+      return NextResponse.json({ error: "cannot_delete_system_page" }, { status: 403 });
+    }
+    try {
+      await purgePage({
+        wikiId: gate.wiki.id,
+        pageId: page.id,
+        expectedVersion: requestedVersion.state === "valid" ? requestedVersion.value : page.currentVersion,
+      });
+      return NextResponse.json(
+        { deleted: true, purged: true, slug: page.slug },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    } catch (error) {
+      return contentMutationErrorResponse(error);
+    }
+  }
+
+  const gate = await apiWikiGate(req, id, { minRole: "editor" });
+  if (!gate.ok) return gate.res;
+  const requestedVersion = optionalExpectedVersionFromRequest(req);
+  if (requestedVersion.state === "invalid") {
+    return NextResponse.json({ error: "invalid_expected_version" }, { status: 400 });
+  }
+  const page = await prisma.page.findFirst({
+    where: {
+      wikiId: gate.wiki.id,
+      slug: pageSlug,
+      archivedAt: null,
+      ...(requestsExternalModelScope(req) ? { modelAccess: "external" as const } : {}),
+    },
+    select: { id: true, slug: true, currentVersion: true, origin: true, kind: true },
+  });
   if (!page) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (isReservedSlug(page.slug)) {
     return NextResponse.json({ error: "cannot_delete_system_page" }, { status: 403 });
   }
-  if (page.kind === "note" && page.sourceId != null) {
-    // 원문에 연결된 소스 노트는 불변 계층 — 삭제 대신 원문/노트를 그대로 둔다.
-    // sourceId 없는 노트는 보호할 provenance가 없으므로 삭제 가능(정크 노트 정리).
-    return NextResponse.json({ error: "cannot_delete_source_note" }, { status: 409 });
+  if (
+    requestsExternalModelScope(req) &&
+    (page.origin !== "generated" || !["concept", "entity", "meta"].includes(page.kind))
+  ) {
+    return NextResponse.json({ error: "human_page_requires_review" }, { status: 409 });
   }
-  await deletePage(gate.wiki.id, page.slug);
-  return NextResponse.json({ deleted: true, slug: page.slug }, { headers: { "Cache-Control": "no-store" } });
+  try {
+    await withModelPolicyWriteLock(gate.wiki.id, (tx) => archivePageSnapshotTx(tx, {
+      wikiId: gate.wiki.id,
+      pageId: page.id,
+      expectedVersion: requestedVersion.state === "valid" ? requestedVersion.value : page.currentVersion,
+      suppression: true,
+      context: {
+        actor: requestsExternalModelScope(req) ? "agent" : "human",
+        userId: gate.user.id,
+        reason: "page archived through REST",
+      },
+    }));
+    await refreshPageDerivedState(gate.wiki.id, page.id);
+    return NextResponse.json(
+      { deleted: true, archived: true, slug: page.slug },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return contentMutationErrorResponse(error);
+  }
 }

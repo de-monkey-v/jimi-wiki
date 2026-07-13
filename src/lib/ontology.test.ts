@@ -32,7 +32,21 @@ test("sanitizeLabel: 빈 값은 '무제'로 폴백, 길이 상한", () => {
 });
 
 test("isReservedSlug: system·정적 라우트 slug는 예약", () => {
-  for (const s of ["ontology", "chat", "lint", "settings", "sources", "graph", "new"]) {
+  for (const s of [
+    "ontology",
+    "chat",
+    "lint",
+    "settings",
+    "sources",
+    "graph",
+    "new",
+    "ingest",
+    "reading",
+    "docs",
+    "category",
+    "builds",
+    "history",
+  ]) {
     assert.equal(isReservedSlug(s), true, `${s}는 예약 slug`);
   }
   assert.equal(isReservedSlug("  Graph "), true); // trim+lowercase

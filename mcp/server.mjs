@@ -49,7 +49,12 @@ async function api(method, path, body, { retries = 3, timeoutMs = 90_000 } = {})
     try {
       const res = await fetch(`${BASE}/api/wikis/${encodeURIComponent(WIKI)}${path}`, {
         method,
-        headers: { Authorization: `Bearer ${KEY}`, ...(body ? { "content-type": "application/json" } : {}) },
+        headers: {
+          Authorization: `Bearer ${KEY}`,
+          // MCP는 외부 모델 data flow다. 일반 REST ACL과 별개로 internalOnly를 fail-closed 제외한다.
+          "X-Jimi-Model-Trust": "external",
+          ...(body ? { "content-type": "application/json" } : {}),
+        },
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: ctrl.signal,
       });
@@ -140,6 +145,7 @@ server.registerTool(
       category: z.string().optional().describe("파생 페이지의 분류 경로(예: ai/concepts). 기존 카테고리 재사용 우선"),
       sourceSlug: z.string().optional().describe("근거 원문의 slug (create_source가 반환)"),
       embed: z.boolean().optional().describe("true면 미색인 청크 전체를 임베딩(시맨틱 검색 반영). 작업 마지막 호출에 1회"),
+      expectedVersion: z.number().int().min(1).optional().describe("기존 slug 수정 시 read_page에서 읽은 currentVersion (필수)"),
     },
   },
   async (args) => {
@@ -247,11 +253,14 @@ server.registerTool(
   {
     description:
       "파생 페이지(concept/entity/meta)를 삭제한다. 소스노트(note)와 원문(source)은 불변이라 삭제 불가. 상호참조가 깨질 수 있으니 이후 run_lint로 정리. editor 이상.",
-    inputSchema: { slug: z.string().describe("삭제할 페이지 slug") },
+    inputSchema: {
+      slug: z.string().describe("삭제할 페이지 slug"),
+      expectedVersion: z.number().int().min(1).describe("read_page에서 읽은 currentVersion"),
+    },
   },
-  async ({ slug }) => {
+  async ({ slug, expectedVersion }) => {
     try {
-      return asResult(await api("DELETE", `/pages/${encodeURIComponent(slug)}`));
+      return asResult(await api("DELETE", `/pages/${encodeURIComponent(slug)}?expectedVersion=${expectedVersion}`));
     } catch (e) {
       return asError(e);
     }

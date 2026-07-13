@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 
 /**
  * 사용량 계측(UsageEvent). LLM/임베딩 호출 1건을 이벤트로 남긴다.
@@ -11,6 +12,8 @@ export type UsageMeta = {
   userId?: string | null;
   apiKeyId?: string | null;
   wikiId?: string | null;
+  buildId?: string | null;
+  phase?: string | null;
   route?: string | null;
 };
 
@@ -32,6 +35,8 @@ export function recordUsage(e: UsageInput): void {
         userId: e.userId ?? null,
         apiKeyId: e.apiKeyId ?? null,
         wikiId: e.wikiId ?? null,
+        buildId: e.buildId ?? null,
+        phase: e.phase ?? null,
         model: e.model ?? null,
         inputTokens: e.inputTokens ?? null,
         outputTokens: e.outputTokens ?? null,
@@ -70,10 +75,13 @@ export async function usageSince(
 export const DAILY_TOKEN_LIMIT = Number(process.env.DAILY_TOKEN_LIMIT ?? 3_000_000);
 
 /** UTC 오늘 자정 이후 이 유저에게 귀속된 생성형(kind=llm) 토큰 합(입력+출력). */
-export async function dailyGenerativeTokens(userId: string): Promise<number> {
+export async function dailyGenerativeTokens(
+  userId: string,
+  db: Prisma.TransactionClient = prisma,
+): Promise<number> {
   const since = new Date();
   since.setUTCHours(0, 0, 0, 0);
-  const agg = await prisma.usageEvent.aggregate({
+  const agg = await db.usageEvent.aggregate({
     where: { userId, kind: "llm", createdAt: { gte: since } },
     _sum: { inputTokens: true, outputTokens: true },
   });
@@ -84,9 +92,12 @@ export async function dailyGenerativeTokens(userId: string): Promise<number> {
  * 일일 생성형 토큰 쿼터 판정. ok=false면 호출부가 429(라우트) 또는 throw(서버액션)로 거부한다.
  * 집계 실패 시 fail-open(ok:true) — 계측 DB 장애가 사람 UI를 막지 않도록.
  */
-export async function checkDailyQuota(userId: string): Promise<{ ok: boolean; used: number; limit: number }> {
+export async function checkDailyQuota(
+  userId: string,
+  db: Prisma.TransactionClient = prisma,
+): Promise<{ ok: boolean; used: number; limit: number }> {
   try {
-    const used = await dailyGenerativeTokens(userId);
+    const used = await dailyGenerativeTokens(userId, db);
     return { ok: used < DAILY_TOKEN_LIMIT, used, limit: DAILY_TOKEN_LIMIT };
   } catch {
     return { ok: true, used: 0, limit: DAILY_TOKEN_LIMIT };

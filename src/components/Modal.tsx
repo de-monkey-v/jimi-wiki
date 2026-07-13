@@ -25,18 +25,53 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     prevFocus.current = document.activeElement as HTMLElement | null;
-    // 첫 포커스 가능한 입력으로 이동
-    const focusable = panelRef.current?.querySelector<HTMLElement>(
-      "input:not([type=hidden]), textarea, select, button",
+    const panel = panelRef.current;
+    const overlay = panel?.parentElement;
+    const backgroundNodes = new Set<HTMLElement>();
+    let branch: HTMLElement | null | undefined = overlay;
+    while (branch?.parentElement) {
+      for (const sibling of branch.parentElement.children) {
+        if (sibling !== branch && sibling instanceof HTMLElement) backgroundNodes.add(sibling);
+      }
+      if (branch.parentElement === document.body) break;
+      branch = branch.parentElement;
+    }
+    const background = [...backgroundNodes].map((node) => ({ node, inert: node.inert }));
+    for (const item of background) item.node.inert = true;
+    const preferred = panel?.querySelector<HTMLElement>("[data-autofocus], [autofocus]");
+    const contentControl = panel?.querySelector<HTMLElement>(
+      '[data-modal-content] input:not([type="hidden"]):not([disabled]), [data-modal-content] textarea:not([disabled]), [data-modal-content] select:not([disabled]), [data-modal-content] button:not([disabled]), [data-modal-content] a[href]',
     );
-    focusable?.focus();
+    (preferred ?? contentControl ?? panel)?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
       // 이 모달 위에 다른 dialog 가 있으면(예: 중첩) 그쪽이 먼저 닫히게 최상단만 처리
       const dialogs = document.querySelectorAll('[role="dialog"]');
       if (dialogs.length > 1 && dialogs[dialogs.length - 1] !== panelRef.current) return;
-      onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel) return;
+      const focusable = [...panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => element.getClientRects().length > 0);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -44,6 +79,7 @@ export function Modal({
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
+      for (const item of background) item.node.inert = item.inert;
       prevFocus.current?.focus?.();
     };
   }, [open, onClose]);
@@ -60,6 +96,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         className="my-8 flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl sm:my-0"
       >
         <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-5 py-3">
@@ -75,7 +112,7 @@ export function Modal({
             </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-5">{children}</div>
+        <div data-modal-content className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-5">{children}</div>
       </div>
     </div>,
     document.body,

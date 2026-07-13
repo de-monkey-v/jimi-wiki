@@ -1,8 +1,12 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { prisma } from "@/lib/db";
 import { generateText, llmEnabledForModel } from "@/lib/gemini";
 import { genModel } from "@/lib/model-config";
+import {
+  EXTERNAL_MODEL_SCOPE,
+  getModelPageById,
+  withExternalModelDispatchLock,
+} from "@/lib/model-access";
 import type { LangCode } from "@/lib/lang";
 
 const LANG_NAME: Record<LangCode, string> = { ko: "Korean", en: "English", ja: "Japanese", zh: "Chinese" };
@@ -44,32 +48,38 @@ export interface PageTranslationResult {
  * 호출부(page.tsx)가 locale === 원문 언어인 경우를 걸러 불필요한 번역을 막는다.
  */
 export async function getPageTranslation(
-  page: { id: string; title: string; body: string },
+  pageInput: { id: string; title: string; body: string },
   locale: LangCode,
   meta: { wikiId: string; userId?: string | null },
 ): Promise<PageTranslationResult> {
-  const hash = pageContentHash(page.title, page.body);
-  const existing = await prisma.pageTranslation.findUnique({
-    where: { pageId_locale: { pageId: page.id, locale } },
-  });
-  if (existing && existing.sourceHash === hash) {
-    return { title: existing.title, body: existing.body, cached: true };
-  }
-
-  if (!llmEnabledForModel(genModel())) {
-    throw new Error("LLM provider 미설정 — 번역에는 LLM(키/OAuth)이 필요합니다");
-  }
-
   // single-flight: 같은 (pageId,locale)에 대한 콜드캐시 요청이 동시에 오면 LLM 호출을 1회로 합친다.
-  const key = `${page.id}:${locale}`;
+  const key = `${pageInput.id}:${locale}`;
   const pending = inflight.get(key);
   if (pending) return pending;
 
-  const job = (async (): Promise<PageTranslationResult> => {
+  const job = withExternalModelDispatchLock(meta.wikiId, async (tx): Promise<PageTranslationResult> => {
+    // 호출자가 넘긴 raw content를 신뢰하지 않는다. cache hit 반환부터 dispatch/cache write까지
+    // 동일 shared-lock transaction에서 현재 projection만 사용한다.
+    const currentPage = await getModelPageById(meta.wikiId, pageInput.id, EXTERNAL_MODEL_SCOPE);
+    if (!currentPage) throw new Error("외부 AI 처리가 허용되지 않은 페이지입니다");
+    const currentHash = pageContentHash(currentPage.title, currentPage.body);
+    const existing = await tx.pageTranslation.findUnique({
+      where: { pageId_locale: { pageId: currentPage.id, locale } },
+    });
+    if (existing && existing.sourceHash === currentHash) {
+      return { title: existing.title, body: existing.body, cached: true };
+    }
+    if (!llmEnabledForModel(genModel())) {
+      throw new Error("LLM provider 미설정 — 번역에는 LLM(키/OAuth)이 필요합니다");
+    }
+
     const system = translateSystem(LANG_NAME[locale]);
     const usageMeta = { userId: meta.userId ?? null, apiKeyId: null, wikiId: meta.wikiId, route: "translate" };
-    // 제목+본문 단일 호출(문맥 제공 → 짧은 제목 환각 방지). 구분자로 분리해 파싱.
-    const raw = await generateText(system, `${page.title}\n${FIELD_SEP}\n${page.body}`, usageMeta);
+    const raw = await generateText(
+      system,
+      `${currentPage.title}\n${FIELD_SEP}\n${currentPage.body}`,
+      usageMeta,
+    );
 
     const sepIdx = raw.indexOf(FIELD_SEP);
     let translatedTitle: string;
@@ -79,28 +89,28 @@ export async function getPageTranslation(
       translatedBody = raw.slice(sepIdx + FIELD_SEP.length).trim();
     } else {
       // 구분자 유실 → 제목은 원문 유지(환각 title 오염 방지), 출력 전체를 본문으로 취급.
-      translatedTitle = page.title;
+      translatedTitle = currentPage.title;
       translatedBody = raw.trim();
     }
     // 원문이 비어있지 않은데 번역 본문이 빈 값이면(안전거부·truncation·오류) 캐시하지 않는다.
     // 빈 본문을 upsert하면 sourceHash가 동일해 blank가 영구 고착되고 재시도되지 않는다 → throw로 재시도 유도.
-    if (page.body.trim() && !translatedBody) {
+    if (currentPage.body.trim() && !translatedBody) {
       throw new Error("번역 본문이 비어 있음 — 캐시 생략(재시도 유도)");
     }
-    const result = { title: translatedTitle || page.title, body: translatedBody };
+    const result = { title: translatedTitle || currentPage.title, body: translatedBody };
 
     try {
-      await prisma.pageTranslation.upsert({
-        where: { pageId_locale: { pageId: page.id, locale } },
-        create: { pageId: page.id, locale, sourceHash: hash, title: result.title, body: result.body },
-        update: { sourceHash: hash, title: result.title, body: result.body },
+      await tx.pageTranslation.upsert({
+        where: { pageId_locale: { pageId: currentPage.id, locale } },
+        create: { pageId: currentPage.id, locale, sourceHash: currentHash, title: result.title, body: result.body },
+        update: { sourceHash: currentHash, title: result.title, body: result.body },
       });
     } catch (e) {
       // 교차 프로세스 경쟁: 다른 인스턴스가 먼저 같은 행을 만들었을 수 있음(P2002). 값은 동일하므로 무시.
       if ((e as { code?: string })?.code !== "P2002") throw e;
     }
     return { ...result, cached: false };
-  })();
+  });
 
   inflight.set(key, job);
   try {

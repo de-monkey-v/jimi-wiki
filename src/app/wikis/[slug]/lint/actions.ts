@@ -39,7 +39,14 @@ async function appendRelatedLinks(wikiId: string, pageSlug: string, linkSlugs: s
   const body = hasSection
     ? page.body.replace(/^(#{2,3}\s*관련\s*문서.*)$/m, (_m, g1) => `${g1}\n${linksMd}`)
     : `${page.body.trimEnd()}\n\n## 관련 문서\n${linksMd}\n`;
-  await upsertPage(wikiId, { slug: page.slug, title: page.title, kind: page.kind, body, category: page.category ?? undefined });
+  await upsertPage(wikiId, {
+    slug: page.slug,
+    title: page.title,
+    kind: page.kind,
+    body,
+    category: page.category ?? undefined,
+    expectedVersion: page.currentVersion,
+  });
 }
 
 // 고립 파생 페이지의 링크 제안 적용(방향 인식). outbound 부족이면 P→후보로, inbound 부족이면 후보→P로

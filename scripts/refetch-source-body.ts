@@ -2,11 +2,13 @@ import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { fetchAsText } from "../src/lib/ingest";
 import { reindexSource } from "../src/lib/search";
+import { updateSourceSnapshot } from "../src/lib/content-store";
+import { queueIncrementalKnowledgeBuild } from "../src/lib/builds";
 
 /**
- * 기존 Source의 url을 현재 본문 추출 로직(extractFromHtml)으로 다시 받아와 body/title을 제자리 갱신 + 재색인.
+ * 기존 Source의 url을 현재 본문 추출 로직(extractFromHtml)으로 다시 받아와 새 SourceRevision을 생성 + 재색인.
  * 구버전(원시 strip)으로 편입돼 nav 잡음이 섞인 레거시 원문을 깨끗하게 만든다.
- * 새 Source/note를 만들지 않으므로 중복이 생기지 않는다(연결된 note·파생 페이지는 그대로 유지).
+ * external이면 새 revision을 입력으로 incremental build를 큐잉하고, internalOnly면 로컬 projection/FTS만 갱신한다.
  *
  * 실행(server-only import → shim 필요):
  *   pnpm tsx --require ./scripts/server-only-shim.cjs scripts/refetch-source-body.ts <sourceSlug> [<sourceSlug> ...]
@@ -20,7 +22,10 @@ async function main() {
   }
 
   for (const slug of slugs) {
-    const src = await prisma.source.findFirst({ where: { slug }, select: { id: true, wikiId: true, slug: true, title: true, url: true } });
+    const src = await prisma.source.findFirst({
+      where: { slug, archivedAt: null },
+      select: { id: true, wikiId: true, slug: true, title: true, url: true, currentVersion: true },
+    });
     if (!src) {
       console.log(`✗ ${slug}: Source 없음 — 건너뜀`);
       continue;
@@ -36,9 +41,24 @@ async function main() {
         continue;
       }
       const newTitle = title?.trim() || src.title; // 추출 제목 있으면 hostname 제목 교정
-      await prisma.source.update({ where: { id: src.id }, data: { body: text, title: newTitle } });
+      const saved = await updateSourceSnapshot({
+        wikiId: src.wikiId,
+        sourceId: src.id,
+        expectedVersion: src.currentVersion,
+        changes: { body: text, title: newTitle },
+        context: { actor: "system", reason: "URL refetch" },
+      });
       await reindexSource(src.wikiId, { id: src.id, slug: src.slug, body: text });
-      console.log(`✓ ${slug}: ${text.length}자 갱신${title ? `, 제목 → "${newTitle}"` : ""}`);
+      let queued = "";
+      if (saved.source.modelAccess === "external") {
+        const { buildId } = await queueIncrementalKnowledgeBuild(
+          src.wikiId,
+          null,
+          saved.revision.id,
+        );
+        queued = `, incremental build ${buildId} 큐잉`;
+      }
+      console.log(`✓ ${slug}: ${text.length}자 revision 생성${title ? `, 제목 → "${newTitle}"` : ""}${queued}`);
     } catch (e) {
       console.log(`✗ ${slug}: ${(e as Error).message}`);
     }

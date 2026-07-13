@@ -182,9 +182,13 @@ export function NewPageForm({
   const tk = useTranslations("Kinds");
   const quickCats = KIND_QUICK_CATS[wikiKind];
   const [kind, setKind] = useState(presetKind ?? "concept"); // controlled — personal 선택 시 보안 경고 노출
+  const [allowExternalAi, setAllowExternalAi] = useState(true);
+  const externalAllowed = kind !== "personal" && allowExternalAi;
   return (
     <form action={createPageAction} className="space-y-4">
       <input type="hidden" name="wikiSlug" value={wikiSlug} />
+      {/* checkbox disabled/미체크에서도 서버가 기본 external로 오해하지 않도록 항상 명시적으로 전송. */}
+      <input type="hidden" name="modelAccess" value={externalAllowed ? "external" : "internalOnly"} />
 
       <p className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-500">
         {t(`kindHint.${wikiKind}`)}
@@ -208,7 +212,17 @@ export function NewPageForm({
         <label htmlFor="new-kind" className="mb-1 block text-sm font-medium text-stone-600">
           {t("kindLabel")}
         </label>
-        <select id="new-kind" name="kind" value={kind} onChange={(e) => setKind(e.target.value)} className="w-full rounded border px-3 py-2">
+        <select
+          id="new-kind"
+          name="kind"
+          value={kind}
+          onChange={(e) => {
+            const next = e.target.value;
+            setKind(next);
+            if (next === "personal") setAllowExternalAi(false);
+          }}
+          className="w-full rounded border px-3 py-2"
+        >
           {MANUAL_KIND_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
               {tk(`${o.value}Option`)}
@@ -230,6 +244,25 @@ export function NewPageForm({
       </div>
 
       <CategoryPicker categories={categories} quickCats={quickCats} initialValue={presetCategory} />
+
+      <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5">
+        <label htmlFor="new-model-access" className={`flex items-start gap-2.5 ${kind === "personal" ? "cursor-not-allowed" : "cursor-pointer"}`}>
+          <input
+            id="new-model-access"
+            type="checkbox"
+            checked={externalAllowed}
+            disabled={kind === "personal"}
+            onChange={(event) => setAllowExternalAi(event.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-stone-300 text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-stone-700">{t("modelAccessLabel")}</span>
+            <span className="mt-0.5 block text-xs leading-5 text-stone-500">
+              {kind === "personal" ? t("personalModelAccessHint") : t("modelAccessHint")}
+            </span>
+          </span>
+        </label>
+      </div>
 
       <div>
         <label htmlFor="new-body" className="mb-1 block text-sm font-medium text-stone-600">

@@ -1,13 +1,21 @@
 import "server-only";
 import { Type } from "@google/genai";
-import { prisma } from "@/lib/db";
 import { generateWithTools, llmEnabledForModel, type ToolSpec } from "@/lib/gemini";
 import { genModel } from "@/lib/model-config";
-import { hybridSearch } from "@/lib/search";
+import { modelSearch } from "@/lib/search";
 import { recordUsage } from "@/lib/usage";
-import { listPages, getPage } from "@/lib/wiki";
-import { isAiExcludedKind } from "@/lib/kinds";
+import {
+  EXTERNAL_MODEL_SCOPE,
+  assertExternalModelScope,
+  getModelPage,
+  listModelPages,
+  modelPolicyClient,
+  modelPolicyDispatchSignal,
+  withExternalModelDispatchLock,
+  type ExternalModelScope,
+} from "@/lib/model-access";
 import { detectCategoryIssues, recountItemCounts, type CategoryIssues } from "@/lib/governance";
+import { ONTOLOGY_PAGE_SLUG } from "@/lib/wiki-routes";
 
 export interface LintReport {
   pageCount: number;
@@ -59,8 +67,13 @@ function readTools(wikiId: string): ToolSpec[] {
   return [
     {
       decl: { name: "listPages", description: "위키 페이지 목록(slug,title,kind)", parameters: { type: Type.OBJECT, properties: {} } },
-      // AI 제외 kind(personal)는 lint LLM에게 노출하지 않는다.
-      handler: async () => ({ pages: (await listPages(wikiId)).filter((p) => !isAiExcludedKind(p.kind)).map((p) => ({ slug: p.slug, title: p.title, kind: p.kind })) }),
+      handler: async () => ({
+        pages: (await listModelPages(wikiId, EXTERNAL_MODEL_SCOPE)).map((p) => ({
+          slug: p.slug,
+          title: p.title,
+          kind: p.kind,
+        })),
+      }),
     },
     {
       decl: {
@@ -69,8 +82,8 @@ function readTools(wikiId: string): ToolSpec[] {
         parameters: { type: Type.OBJECT, properties: { slug: { type: Type.STRING } }, required: ["slug"] },
       },
       handler: async (args) => {
-        const p = await getPage(wikiId, String(args.slug ?? ""));
-        if (!p || isAiExcludedKind(p.kind)) return { found: false }; // 개인 노트 본문은 lint LLM이 못 읽는다
+        const p = await getModelPage(wikiId, String(args.slug ?? ""), EXTERNAL_MODEL_SCOPE);
+        if (!p) return { found: false };
         return { found: true, title: p.title, body: p.body };
       },
     },
@@ -87,20 +100,40 @@ const LINT_SYSTEM = `너는 이 위키의 품질 검수자다. 도구(listPages,
 /** 위키 건강검진. 기계적 점검은 항상, deep=true면 LLM 심층 점검 추가. */
 export async function lintWiki(
   wikiId: string,
-  opts?: { deep?: boolean; userId?: string | null; persist?: boolean },
+  opts?: { deep?: boolean; userId?: string | null; persist?: boolean; modelScope?: ExternalModelScope },
 ): Promise<LintReport> {
-  const pages = await prisma.page.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true, kind: true } });
-  const links = await prisma.pageLink.findMany({
-    where: { wikiId },
+  if (opts?.modelScope) assertExternalModelScope(opts.modelScope);
+  const db = modelPolicyClient(wikiId);
+  const externalOnly = !!opts?.modelScope;
+  const pageWhere = {
+    wikiId,
+    archivedAt: null,
+    ...(externalOnly
+      ? {
+          modelAccess: "external" as const,
+          kind: { not: "personal" as const },
+          slug: { not: ONTOLOGY_PAGE_SLUG },
+        }
+      : {}),
+  };
+  const pages = await db.page.findMany({
+    where: pageWhere,
+    select: { id: true, slug: true, title: true, kind: true },
+  });
+  const pageIds = pages.map((page) => page.id);
+  const links = await db.pageLink.findMany({
+    where: { wikiId, fromPageId: { in: pageIds } },
     select: { fromPageId: true, toPageId: true, toSlug: true },
   });
   const pageById = new Map(pages.map((p) => [p.id, p]));
 
   const brokenLinks = links
-    .filter((l) => l.toPageId === null)
+    // 외부 Page가 internalOnly Page를 가리키면 모델 관점에서는 해소되지 않은 링크다. toSlug는
+    // 이미 외부 Page 본문에 포함된 문자열이므로 새 민감 정보를 드러내지 않는다.
+    .filter((l) => l.toPageId === null || !pageById.has(l.toPageId))
     .map((l) => ({ from: pageById.get(l.fromPageId)?.slug ?? l.fromPageId, toSlug: l.toSlug }));
 
-  const inbound = new Set(links.filter((l) => l.toPageId).map((l) => l.toPageId!));
+  const inbound = new Set(links.filter((l) => l.toPageId && pageById.has(l.toPageId)).map((l) => l.toPageId!));
   const outbound = new Set(links.map((l) => l.fromPageId));
   // orphan/noOut는 파생 페이지(concept/entity)만 대상. note는 설계상 그래프의 잎(원문 요약
   // 전용, 상호참조 금지)이고 meta(ontology 등)는 system 페이지라 링크 검사에서 제외한다.
@@ -110,14 +143,25 @@ export async function lintWiki(
 
   // 소스 노트 없는 원문. "처리됨" 판정은 세 경로 중 하나면 충분:
   // (a) note 페이지의 sourceId provenance, (b) 파생 페이지의 PageContribution, (c) 본문 내 slug 언급(구형 위키 호환)
-  const sources = await prisma.source.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true, body: true } });
-  const pageBodies = await prisma.page.findMany({
-    where: { wikiId },
+  const sources = await db.source.findMany({
+    where: {
+      wikiId,
+      archivedAt: null,
+      ...(externalOnly ? { modelAccess: "external" as const } : {}),
+    },
+    select: { id: true, slug: true, title: true, body: true },
+  });
+  const sourceIds = new Set(sources.map((source) => source.id));
+  const pageBodies = await db.page.findMany({
+    where: pageWhere,
     select: { slug: true, title: true, body: true, sourceId: true, kind: true },
   });
   const allBodies = pageBodies.map((p) => p.body).join("\n");
   const treatedSourceIds = new Set(pageBodies.map((p) => p.sourceId).filter((id): id is string => id !== null));
-  for (const c of await prisma.pageContribution.findMany({ where: { wikiId }, select: { sourceId: true } })) {
+  for (const c of await db.pageContribution.findMany({
+    where: { wikiId, pageId: { in: pageIds }, sourceId: { in: [...sourceIds] } },
+    select: { sourceId: true },
+  })) {
     treatedSourceIds.add(c.sourceId);
   }
   const untreatedSources = sources
@@ -148,8 +192,11 @@ export async function lintWiki(
     .map((p) => ({ slug: p.slug, title: p.title }));
 
   // category 건강: itemCount 재계산(C3) 후 중복/고아/미분류 탐지
-  await recountItemCounts(wikiId).catch(() => {});
-  const categoryHealth = await detectCategoryIssues(wikiId);
+  if (!externalOnly) await recountItemCounts(wikiId).catch(() => {});
+  const categoryHealth = await detectCategoryIssues(
+    wikiId,
+    opts?.modelScope ? { modelScope: opts.modelScope } : undefined,
+  );
 
   // 건강 점수: 이슈를 심각도 가중해 페이지수로 정규화(0~100). 심각한 것(깨진 링크·정크 노트)은 3배,
   // 중복·미처리 원문은 2배, 그래프 단절·category 이슈는 1배. 이슈 0이면 100.
@@ -163,12 +210,13 @@ export async function lintWiki(
 
   if (opts?.deep && llmEnabledForModel(genModel()) && pages.length > 0) {
     try {
-      const loop = await generateWithTools({
+      const loop = await withExternalModelDispatchLock(wikiId, () => generateWithTools({
         system: LINT_SYSTEM,
         userPrompt: "이 위키를 점검하고 상충/누락 개념/약한 근거를 보고하라.",
         tools: readTools(wikiId),
         maxTurns: 12,
-      });
+        abortSignal: modelPolicyDispatchSignal(wikiId),
+      }));
       report.llmNotes = loop.text;
       if (loop.usage) {
         recordUsage({
@@ -186,7 +234,7 @@ export async function lintWiki(
     }
   }
 
-  await prisma.logEntry.create({
+  await db.logEntry.create({
     data: {
       wikiId,
       kind: "lint",
@@ -198,7 +246,7 @@ export async function lintWiki(
   // 건강 점수 트렌드: persist=true(명시적 lint 실행·ingest 후)일 때만 AgentRun에 기록.
   // page.tsx는 매 방문 lintWiki를 호출하므로 여기선 persist를 넘기지 않아 트렌드가 오염되지 않는다.
   if (opts?.persist) {
-    await prisma.agentRun
+    await db.agentRun
       .create({
         data: {
           wikiId,
@@ -240,20 +288,35 @@ export async function suggestIsolatedLinks(
     candidates: { slug: string; title: string; kind: string; similarity: number }[];
   }[]
 > {
-  const pages = await prisma.page.findMany({ where: { wikiId }, select: { id: true, slug: true, title: true, kind: true, body: true } });
-  const links = await prisma.pageLink.findMany({ where: { wikiId }, select: { fromPageId: true, toPageId: true } });
+  const db = modelPolicyClient(wikiId);
+  const pages = await db.page.findMany({
+    where: {
+      wikiId,
+      archivedAt: null,
+      modelAccess: "external",
+      kind: { not: "personal" },
+    },
+    select: { id: true, slug: true, title: true, kind: true, body: true },
+  });
+  const links = await db.pageLink.findMany({ where: { wikiId }, select: { fromPageId: true, toPageId: true } });
   const inbound = new Set(links.filter((l) => l.toPageId).map((l) => l.toPageId!));
   const outbound = new Set(links.map((l) => l.fromPageId));
   const bySlug = new Map(pages.map((p) => [p.slug, p]));
-  // AI 제외 kind(personal)는 제외 — 아래 hybridSearch에 title+body를 넣으면 외부 임베딩 API로 개인 노트가 전송된다.
-  const isolated = pages.filter((p) => p.kind !== "note" && p.kind !== "meta" && !isAiExcludedKind(p.kind) && (!inbound.has(p.id) || !outbound.has(p.id))).slice(0, 8);
+  const isolated = pages
+    .filter((p) => p.kind !== "note" && p.kind !== "meta" && (!inbound.has(p.id) || !outbound.has(p.id)))
+    .slice(0, 8);
 
   const out: Awaited<ReturnType<typeof suggestIsolatedLinks>> = [];
   for (const p of isolated) {
     const needs: ("inbound" | "outbound")[] = [];
     if (!inbound.has(p.id)) needs.push("inbound");
     if (!outbound.has(p.id)) needs.push("outbound");
-    const hits = await hybridSearch(wikiId, `${p.title}\n${p.body.slice(0, 500)}`, 8);
+    const hits = await modelSearch({
+      ...EXTERNAL_MODEL_SCOPE,
+      wikiId,
+      queryText: `${p.title}\n${p.body.slice(0, 500)}`,
+      k: 8,
+    });
     const seen = new Set<string>([p.slug]);
     const candidates: { slug: string; title: string; kind: string; similarity: number }[] = [];
     for (const h of hits) {

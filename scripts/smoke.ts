@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/db";
+import { createPageSnapshot } from "../src/lib/content-store";
 
 // 기반 검증: 어댑터 연결 + 관계 + pgvector 삽입/코사인 검색이 실제로 도는지
 async function main() {
@@ -16,8 +17,13 @@ async function main() {
       memberships: { create: { userId: user.id, role: "owner" } },
     },
   });
-  const page = await prisma.page.create({
-    data: { wikiId: wiki.id, slug: "hello", title: "안녕", kind: "note", body: "첫 페이지" },
+  const { page } = await createPageSnapshot({
+    wikiId: wiki.id,
+    slug: "hello",
+    title: "안녕",
+    kind: "note",
+    body: "첫 페이지",
+    context: { actor: "system", reason: "smoke fixture" },
   });
 
   // pgvector: 임베딩 삽입(768차원 더미) + 코사인 거리 검색

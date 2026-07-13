@@ -62,14 +62,11 @@ export async function apiWikiGate(req: Request, slug: string, opts?: { minRole?:
 }
 
 /**
- * 생성형 LLM 소비 라우트 전용 게이트 — API 키로는 인증 불가, 세션(사람 UI)만 허용.
- * "인증 경계 = 비용 경계": 생성형 Gemini(generateText/streamText/generateWithTools)를 돌리는
- * 엔드포인트(query/ingest/lint-deep 등)는 쿠키 세션으로만 연다. 임베딩(search/reindex 등)은
- * agent primitive·저비용이라 apiWikiGate(API 키)로 열되 레이트리밋으로 통제한다.
- * apiWikiGate와 동일한 Gate 반환 형태이되 인증만 getCurrentUser(쿠키)로 대체.
- * 미인증 401, 위키 없음/무권한 404, minRole 미달 403, 레이트리밋 초과 429.
+ * 비용 발생 없는 세션 전용 위키 게이트.
+ * revision 조회·복원, draft 승인 같이 "사람 세션" 자체가 인가 경계인 동작에 쓴다.
+ * 생성형 요청용 레이트리밋·일일 토큰 쿼터를 소비하지 않는다.
  */
-export async function sessionOnlyGate(slug: string, opts?: { minRole?: Role }): Promise<Gate> {
+export async function sessionWikiGate(slug: string, opts?: { minRole?: Role }): Promise<Gate> {
   const user = await getCurrentUser();
   if (!user) {
     return { ok: false, res: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
@@ -81,6 +78,21 @@ export async function sessionOnlyGate(slug: string, opts?: { minRole?: Role }): 
   if (opts?.minRole && !hasRole(wiki.role, opts.minRole)) {
     return { ok: false, res: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   }
+  return { ok: true, user, wiki };
+}
+
+/**
+ * 생성형 LLM 소비 라우트 전용 게이트 — API 키로는 인증 불가, 세션(사람 UI)만 허용.
+ * "인증 경계 = 비용 경계": 생성형 Gemini(generateText/streamText/generateWithTools)를 돌리는
+ * 엔드포인트(query/ingest/lint-deep 등)는 쿠키 세션으로만 연다. 임베딩(search/reindex 등)은
+ * agent primitive·저비용이라 apiWikiGate(API 키)로 열되 레이트리밋으로 통제한다.
+ * sessionWikiGate에 생성형 비용 제어를 덧붙인다.
+ * 미인증 401, 위키 없음/무권한 404, minRole 미달 403, 레이트리밋·쿼터 초과 429.
+ */
+export async function sessionOnlyGate(slug: string, opts?: { minRole?: Role }): Promise<Gate> {
+  const gate = await sessionWikiGate(slug, opts);
+  if (!gate.ok) return gate;
+  const { user } = gate;
   // 생성형 LLM은 비싸다 — 세션(유저) 단위 레이트리밋으로 남용·세션 탈취 시 비용 폭주를 막는다.
   const rl = checkRateLimit(`session:${user.id}`);
   if (!rl.ok) {
@@ -97,5 +109,5 @@ export async function sessionOnlyGate(slug: string, opts?: { minRole?: Role }): 
       res: NextResponse.json({ error: "daily_quota_exceeded", used: q.used, limit: q.limit }, { status: 429 }),
     };
   }
-  return { ok: true, user, wiki };
+  return gate;
 }

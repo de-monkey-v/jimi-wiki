@@ -27,9 +27,28 @@ export function RouteModal({
     const previousFocus = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    panelRef.current?.focus();
+    const panel = panelRef.current;
+    const overlay = panel?.parentElement;
+    const backgroundNodes = new Set<HTMLElement>();
+    let branch: HTMLElement | null | undefined = overlay;
+    while (branch?.parentElement) {
+      for (const sibling of branch.parentElement.children) {
+        if (sibling !== branch && sibling instanceof HTMLElement) backgroundNodes.add(sibling);
+      }
+      if (branch.parentElement === document.body) break;
+      branch = branch.parentElement;
+    }
+    const background = [...backgroundNodes].map((node) => ({ node, inert: node.inert }));
+    for (const item of background) item.node.inert = true;
+    const preferred = panel?.querySelector<HTMLElement>("[data-autofocus], [autofocus]");
+    const contentControl = panel?.querySelector<HTMLElement>(
+      '[data-route-modal-content] input:not([type="hidden"]):not([disabled]), [data-route-modal-content] textarea:not([disabled]), [data-route-modal-content] select:not([disabled]), [data-route-modal-content] button:not([disabled]), [data-route-modal-content] a[href]',
+    );
+    (preferred ?? contentControl ?? panel)?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (dialogs.length > 1 && dialogs[dialogs.length - 1] !== panelRef.current) return;
       if (event.key === "Escape") {
         event.preventDefault();
         close();
@@ -37,16 +56,20 @@ export function RouteModal({
       }
       if (event.key !== "Tab") return;
 
-      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (!focusable || focusable.length === 0) return;
+      const focusable = [...(panelRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [])].filter((element) => element.getClientRects().length > 0);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panel?.focus();
+        return;
+      }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      if (event.shiftKey && (document.activeElement === first || !panel?.contains(document.activeElement))) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && (document.activeElement === last || !panel?.contains(document.activeElement))) {
         event.preventDefault();
         first.focus();
       }
@@ -56,6 +79,7 @@ export function RouteModal({
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
+      for (const item of background) item.node.inert = item.inert;
       previousFocus?.focus?.();
     };
   }, [close]);
@@ -94,7 +118,7 @@ export function RouteModal({
             </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto">{children}</div>
+        <div data-route-modal-content className="min-h-0 flex-1 overscroll-contain overflow-y-auto">{children}</div>
       </div>
     </div>
   );

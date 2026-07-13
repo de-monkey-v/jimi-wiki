@@ -65,6 +65,7 @@ export async function claudeGenerateWithTools(opts: {
   maxTurns?: number;
   model: string;
   history?: LoopMessage[];
+  abortSignal?: AbortSignal;
 }): Promise<ToolLoopResult> {
   const handlers = new Map(opts.tools.map((t) => [t.decl.name!, t.handler]));
   const tools: Anthropic.Tool[] = opts.tools.map((t) => ({
@@ -87,6 +88,7 @@ export async function claudeGenerateWithTools(opts: {
   const maxTurns = opts.maxTurns ?? 12;
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    opts.abortSignal?.throwIfAborted();
     moveCacheBreakpoint(messages);
     const res = await client().messages.create({
       model: opts.model,
@@ -94,7 +96,7 @@ export async function claudeGenerateWithTools(opts: {
       system,
       tools,
       messages,
-    });
+    }, { signal: opts.abortSignal });
     addUsage(usage, res.usage);
 
     const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
@@ -112,7 +114,9 @@ export async function claudeGenerateWithTools(opts: {
       let content: string;
       let isError = false;
       try {
+        opts.abortSignal?.throwIfAborted();
         const r = h ? await h((tu.input ?? {}) as Record<string, unknown>) : { error: `unknown function: ${tu.name}` };
+        opts.abortSignal?.throwIfAborted();
         content = JSON.stringify(r);
         isError = !h;
       } catch (e) {
@@ -125,6 +129,7 @@ export async function claudeGenerateWithTools(opts: {
   }
 
   // maxTurns 도달: 도구 없이 마지막 요약 호출로 마무리(작업물 보존) — gemini.ts와 동일한 정책
+  opts.abortSignal?.throwIfAborted();
   const finalRes = await client().messages.create({
     model: opts.model,
     max_tokens: 16000,
@@ -133,7 +138,7 @@ export async function claudeGenerateWithTools(opts: {
       ...messages,
       { role: "user", content: "이제 도구 호출을 멈추고, 지금까지 만들고 수정한 페이지를 원문·위키 콘텐츠와 같은 언어로 요약 보고하라." },
     ],
-  });
+  }, { signal: opts.abortSignal });
   addUsage(usage, finalRes.usage);
   return { text: textOf(finalRes) || "(요약 없음 · maxTurns 도달)", turns: maxTurns, calls: called, usage };
 }

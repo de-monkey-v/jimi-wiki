@@ -1,15 +1,16 @@
 "use client";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Modal } from "@/components/Modal";
-import { listWikiPagesAction, quickCaptureAction, movePageAction } from "@/app/wikis/actions";
+import { quickCaptureAction, movePageAction } from "@/app/wikis/actions";
+import { quickNavSearchAction, type QuickNavSearchItem } from "./quick-nav-actions";
 
-type PageItem = { slug: string; title: string; kind: string };
 type Ctx = {
   openSwitcher: () => void;
   openCapture: () => void;
-  openMove: (pageSlug: string, currentCategory: string | null) => void;
+  openMove: (pageSlug: string, currentCategory: string | null, currentVersion: number) => void;
 };
 const QuickNavCtx = createContext<Ctx | null>(null);
 /** 위키 레이아웃 안 어디서든 빠른 이동/캡처/이동 모달을 여는 훅. Provider 밖에서는 null. */
@@ -32,26 +33,36 @@ export function QuickNavProvider({
   children: React.ReactNode;
 }) {
   const t = useTranslations("WikiQuickNav");
+  const tk = useTranslations("Kinds");
   const router = useRouter();
+  const inputId = useId();
+  const listId = useId();
+  const statusId = useId();
+  const requestSeq = useRef(0);
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
-  const [move, setMove] = useState<{ pageSlug: string; category: string } | null>(null);
+  const [move, setMove] = useState<{ pageSlug: string; category: string; currentVersion: number } | null>(null);
 
-  // 스위처 데이터(첫 오픈 lazy 로드, 열 때마다 갱신)
-  const [pages, setPages] = useState<PageItem[]>([]);
+  // 빈 질의는 Page 목록, 입력 중엔 서버 local FTS 결과(Page+Source).
+  const [results, setResults] = useState<QuickNavSearchItem[]>([]);
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [requestNonce, setRequestNonce] = useState(0);
 
   const openSwitcher = useCallback(() => {
     setQuery("");
     setSel(0);
+    setResults([]);
+    setLoading(true);
+    setError(false);
     setSwitcherOpen(true);
-    listWikiPagesAction(slug).then(setPages).catch(() => setPages([]));
-  }, [slug]);
+  }, []);
   const openCapture = useCallback(() => setCaptureOpen(true), []);
-  const openMove = useCallback((pageSlug: string, currentCategory: string | null) => {
-    setMove({ pageSlug, category: currentCategory ?? "" });
+  const openMove = useCallback((pageSlug: string, currentCategory: string | null, currentVersion: number) => {
+    setMove({ pageSlug, category: currentCategory ?? "", currentVersion });
   }, []);
 
   const ctx = useMemo<Ctx>(() => ({ openSwitcher, openCapture, openMove }), [openSwitcher, openCapture, openMove]);
@@ -72,20 +83,72 @@ export function QuickNavProvider({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [openSwitcher, canWrite]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = q ? pages.filter((p) => p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q)) : pages;
-    return list.slice(0, 50);
-  }, [pages, query]);
+  // 질의 입력은 debounce, 응답은 sequence로 구버전을 폐기해 느린 응답이 최신 결과를 덮지 않게 한다.
+  useEffect(() => {
+    if (!switcherOpen) return;
+    const seq = ++requestSeq.current;
+    let cancelled = false;
+    const delay = query.trim() ? 180 : 0;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError(false);
+      void quickNavSearchAction(slug, query)
+        .then((items) => {
+          if (cancelled || requestSeq.current !== seq) return;
+          setResults(items);
+          setSel(0);
+          setLoading(false);
+        })
+        .catch(() => {
+          if (cancelled || requestSeq.current !== seq) return;
+          setResults([]);
+          setError(true);
+          setLoading(false);
+        });
+    }, delay);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, requestNonce, slug, switcherOpen]);
 
   const go = useCallback(
-    (p: PageItem | undefined) => {
-      if (!p) return;
+    (item: QuickNavSearchItem | undefined) => {
+      if (!item) return;
       setSwitcherOpen(false);
-      router.push(`/wikis/${encodeURIComponent(slug)}/${encodeURIComponent(p.slug)}`);
+      const base = `/wikis/${encodeURIComponent(slug)}`;
+      router.push(
+        item.refType === "source"
+          ? `${base}/sources/${encodeURIComponent(item.slug)}`
+          : `${base}/${encodeURIComponent(item.slug)}`,
+      );
     },
     [router, slug],
   );
+
+  const hrefFor = useCallback(
+    (item: QuickNavSearchItem) => {
+      const base = `/wikis/${encodeURIComponent(slug)}`;
+      return item.refType === "source"
+        ? `${base}/sources/${encodeURIComponent(item.slug)}`
+        : `${base}/${encodeURIComponent(item.slug)}`;
+    },
+    [slug],
+  );
+
+  const activeId =
+    !loading && !error && results.length > 0 && sel >= 0 && sel < results.length
+      ? `${listId}-option-${sel}`
+      : undefined;
+  useEffect(() => {
+    if (!switcherOpen || !activeId) return;
+    document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+  }, [activeId, switcherOpen]);
+  const statusText = loading
+    ? t("switcherLoading")
+    : error
+      ? t("switcherError")
+      : t("switcherResultCount", { count: results.length });
 
   return (
     <QuickNavCtx.Provider value={ctx}>
@@ -93,49 +156,98 @@ export function QuickNavProvider({
 
       {/* ⌘P 빠른 이동 */}
       <Modal open={switcherOpen} onClose={() => setSwitcherOpen(false)} title={t("switcherTitle")}>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <label htmlFor={inputId} className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
+            <span aria-hidden="true">⌂</span>
+            {t("localSearchLabel")}
+          </label>
+          {!loading && !error && (
+            <span className="text-[11px] tabular-nums text-stone-400">{t("switcherResultCount", { count: results.length })}</span>
+          )}
+        </div>
         <input
-          autoFocus
+          data-autofocus
+          id={inputId}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={!loading && !error && results.length > 0}
+          aria-controls={!loading && !error && results.length > 0 ? listId : undefined}
+          aria-activedescendant={activeId}
+          aria-describedby={statusId}
+          autoComplete="off"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
             setSel(0);
+            setLoading(true);
+            setError(false);
           }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
               e.preventDefault();
-              setSel((s) => Math.min(s + 1, filtered.length - 1));
+              if (results.length > 0) setSel((s) => Math.min(s + 1, results.length - 1));
             } else if (e.key === "ArrowUp") {
               e.preventDefault();
               setSel((s) => Math.max(s - 1, 0));
             } else if (e.key === "Enter") {
               e.preventDefault();
-              go(filtered[sel]);
+              if (!loading && !error) go(results[sel]);
             }
           }}
           placeholder={t("switcherPlaceholder")}
-          className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+          className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
         />
-        <ul className="mt-2 max-h-80 space-y-0.5 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <li className="px-2 py-3 text-sm text-stone-400">{t("switcherEmpty")}</li>
-          ) : (
-            filtered.map((p, i) => (
-              <li key={p.slug}>
-                <button
-                  type="button"
-                  onMouseEnter={() => setSel(i)}
-                  onClick={() => go(p)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                    i === sel ? "bg-stone-200 text-stone-900" : "text-stone-600 hover:bg-stone-100"
-                  }`}
-                >
-                  <span className="min-w-0 flex-1 truncate">{p.title}</span>
-                  <span className="shrink-0 text-[10px] uppercase text-stone-400">{p.kind}</span>
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
+        <span id={statusId} role="status" aria-live="polite" className="sr-only">
+          {statusText}
+        </span>
+
+        {loading ? (
+          <div className="flex items-center gap-2 px-2 py-5 text-sm text-stone-500">
+            <span aria-hidden="true" className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-stone-300 border-t-indigo-600 motion-reduce:animate-none" />
+            {t("switcherLoading")}
+          </div>
+        ) : error ? (
+          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+            <p>{t("switcherError")}</p>
+            <button
+              type="button"
+              onClick={() => setRequestNonce((value) => value + 1)}
+              className="mt-2 rounded border border-red-300 bg-white px-2 py-1 text-xs font-medium hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              {t("switcherRetry")}
+            </button>
+          </div>
+        ) : results.length === 0 ? (
+          <p className="px-2 py-5 text-sm text-stone-400">{t("switcherEmpty")}</p>
+        ) : (
+          <ul id={listId} role="listbox" className="mt-2 max-h-80 space-y-0.5 overflow-y-auto overscroll-contain">
+            {results.map((item, i) => {
+              const kindLabel = item.refType === "source" ? t("sourceResult") : tk.has(item.kind) ? tk(item.kind) : t("pageResult");
+              return (
+                <li key={item.key} role="none">
+                  <Link
+                    id={`${listId}-option-${i}`}
+                    href={hrefFor(item)}
+                    role="option"
+                    aria-selected={i === sel}
+                    onMouseEnter={() => setSel(i)}
+                    onClick={() => setSwitcherOpen(false)}
+                    className={`w-full rounded-md px-2 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                      i === sel ? "bg-stone-200 text-stone-900" : "text-stone-600 hover:bg-stone-100"
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-stone-400">{kindLabel}</span>
+                    </span>
+                    {item.heading && <span className="mt-0.5 block truncate text-xs text-stone-500">{item.heading}</span>}
+                    {item.snippet && <span className="mt-0.5 block line-clamp-2 text-xs leading-4 text-stone-400">{item.snippet}</span>}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <div className="mt-2 text-[11px] text-stone-400">{t("switcherHint")}</div>
       </Modal>
 
@@ -146,14 +258,15 @@ export function QuickNavProvider({
             <input type="hidden" name="wikiSlug" value={slug} />
             <textarea
               name="body"
+              aria-label={t("captureTitle")}
               autoFocus
               rows={8}
               placeholder={t("capturePlaceholder")}
-              className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+              className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
             />
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] text-stone-400">{t("captureHint")}</span>
-              <button type="submit" className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700">
+              <button type="submit" className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                 {t("captureSave")}
               </button>
             </div>
@@ -167,16 +280,18 @@ export function QuickNavProvider({
           <form action={movePageAction} onSubmit={() => setMove(null)}>
             <input type="hidden" name="wikiSlug" value={slug} />
             <input type="hidden" name="pageSlug" value={move.pageSlug} />
-            <label className="mb-1 block text-sm text-stone-600">{t("moveLabel")}</label>
+            <input type="hidden" name="expectedVersion" value={move.currentVersion} />
+            <label htmlFor="quick-nav-move-category" className="mb-1 block text-sm text-stone-600">{t("moveLabel")}</label>
             <input
+              id="quick-nav-move-category"
               name="category"
               defaultValue={move.category}
               placeholder={t("movePlaceholder")}
-              className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+              className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
             />
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] text-stone-400">{t("moveToInboxHint")}</span>
-              <button type="submit" className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700">
+              <button type="submit" className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                 {t("moveSubmit")}
               </button>
             </div>

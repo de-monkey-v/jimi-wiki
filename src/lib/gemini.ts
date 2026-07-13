@@ -12,6 +12,10 @@ import { recordUsage, type UsageMeta } from "@/lib/usage";
 import { genModel, providerUsable } from "@/lib/model-config";
 import { DEFAULT_EMBED_MODEL } from "@/lib/model-defaults";
 import { providerOf } from "@/lib/provider";
+import {
+  modelPolicyDispatchRemainingMs,
+  modelPolicyDispatchSignal,
+} from "@/lib/model-access";
 
 // 임베딩 모델은 env 고정(DB vector 컬럼·HNSW와 결합). 생성 모델(chat/gen/ingest)은 model-config 에서 런타임 조회.
 export const EMBED_MODEL = process.env.EMBED_MODEL || DEFAULT_EMBED_MODEL; // 임베딩(검색·색인)
@@ -39,13 +43,45 @@ function client(): GoogleGenAI {
 }
 
 // 지수 백오프 재시도 (일시적 429/503/네트워크)
-async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+async function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (!signal) {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(done, ms);
+    function cleanup() {
+      signal!.removeEventListener("abort", aborted);
+    }
+    function done() {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    }
+    function aborted() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      cleanup();
+      reject(signal!.reason ?? new Error("model dispatch aborted"));
+    }
+    signal.addEventListener("abort", aborted, { once: true });
+    if (signal.aborted) aborted();
+  });
+}
+
+async function withRetry<T>(fn: () => Promise<T>, label: string, signal?: AbortSignal): Promise<T> {
   const MAX = 4;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= MAX; attempt++) {
+    signal?.throwIfAborted();
     try {
       return await fn();
     } catch (e) {
+      signal?.throwIfAborted();
       lastErr = e;
       const anyE = e as { status?: number; code?: number | string; message?: string };
       const msg = String(anyE?.message ?? "");
@@ -57,10 +93,19 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
       if (attempt === MAX || !retryable) break;
       const backoff = Math.min(8000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250);
       console.warn(`[gemini] ${label} 재시도 ${attempt + 1}/${MAX} (${backoff}ms): ${msg.slice(0, 120)}`);
-      await new Promise((r) => setTimeout(r, backoff));
+      await abortableDelay(backoff, signal);
     }
   }
   throw lastErr;
+}
+
+function dispatchLease(meta?: UsageMeta): { signal?: AbortSignal; timeout?: number } {
+  const wikiId = meta?.wikiId;
+  if (!wikiId) return {};
+  return {
+    signal: modelPolicyDispatchSignal(wikiId),
+    timeout: modelPolicyDispatchRemainingMs(wikiId),
+  };
 }
 
 // ---------- 임베딩 ----------
@@ -94,6 +139,7 @@ function batchByBudget(texts: string[]): string[][] {
 
 /** texts → 768차원 L2정규화 벡터. 키 없으면 throw(호출부에서 geminiEnabled로 분기). meta 주면 사용량 계측. */
 export async function embedTexts(texts: string[], taskType: EmbedTaskType, meta?: UsageMeta): Promise<number[][]> {
+  const lease = dispatchLease(meta);
   const out: number[][] = [];
   let inTok = 0;
   let haveTok = false;
@@ -103,9 +149,15 @@ export async function embedTexts(texts: string[], taskType: EmbedTaskType, meta?
         client().models.embedContent({
           model: EMBED_MODEL,
           contents: chunk,
-          config: { outputDimensionality: EMBED_DIM, taskType },
+          config: {
+            outputDimensionality: EMBED_DIM,
+            taskType,
+            abortSignal: lease.signal,
+            ...(lease.timeout ? { httpOptions: { timeout: lease.timeout } } : {}),
+          },
         }),
       "embedContent",
+      lease.signal,
     );
     const m = (res as { usageMetadata?: { promptTokenCount?: number } }).usageMetadata;
     if (m?.promptTokenCount != null) {
@@ -128,14 +180,19 @@ export async function embedTexts(texts: string[], taskType: EmbedTaskType, meta?
 
 /** 도구 없는 단순 텍스트 생성(질의 답변 등). gen 모델에 따라 provider 라우팅. meta 주면 사용량 계측(성공 경로). */
 export async function generateText(system: string, prompt: string, meta?: UsageMeta): Promise<string> {
+  const lease = dispatchLease(meta);
   const model = genModel();
   const provider = providerOf(model);
   // 비-Gemini provider 는 툴 없는 루프로 위임(동일 계약).
   if (provider === "anthropic" || provider === "openai") {
     const loop =
       provider === "anthropic"
-        ? await (await import("@/lib/claude")).claudeGenerateWithTools({ system, userPrompt: prompt, tools: [], model })
-        : await (await import("@/lib/openai")).openaiGenerateWithTools({ system, userPrompt: prompt, tools: [], model });
+        ? await (await import("@/lib/claude")).claudeGenerateWithTools({
+            system, userPrompt: prompt, tools: [], model, abortSignal: lease.signal,
+          })
+        : await (await import("@/lib/openai")).openaiGenerateWithTools({
+            system, userPrompt: prompt, tools: [], model, abortSignal: lease.signal,
+          });
     if (meta && loop.usage) {
       recordUsage({ ...meta, kind: "llm", model, inputTokens: loop.usage.inputTokens, outputTokens: loop.usage.outputTokens });
     }
@@ -147,9 +204,14 @@ export async function generateText(system: string, prompt: string, meta?: UsageM
       client().models.generateContent({
         model,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: { systemInstruction: system },
+        config: {
+          systemInstruction: system,
+          abortSignal: lease.signal,
+          ...(lease.timeout ? { httpOptions: { timeout: lease.timeout } } : {}),
+        },
       }),
     "generateContent(text)",
+    lease.signal,
   );
   if (meta) {
     const m = res.usageMetadata;
@@ -172,8 +234,13 @@ const VISION_INLINE_MAX = 15 * 1024 * 1024; // 이보다 크면 Files API 경유
 const VISION_PROMPT =
   "이 파일에 담긴 모든 텍스트를 그대로(verbatim) 전사하라. 요약·설명·해설·묘사를 덧붙이지 말고, 표는 마크다운 표로, 사람이 읽는 순서대로 텍스트만 출력하라. 추출할 텍스트가 전혀 없으면 아무것도 출력하지 마라.";
 
-/** 이미지/PDF 바이트 → 전사 텍스트. meta 주면 사용량 계측(성공 경로). 실패/빈 텍스트면 ""를 반환할 수 있다. */
-export async function extractTextFromMedia(bytes: Buffer, mimeType: string, meta?: UsageMeta): Promise<string> {
+/** 이미지/PDF 바이트 → 전사 텍스트. 반드시 wiki policy lock 안에서만 호출한다. */
+export async function extractTextFromMedia(
+  bytes: Buffer,
+  mimeType: string,
+  meta: UsageMeta & { wikiId: string },
+): Promise<string> {
+  const lease = dispatchLease(meta);
   const ai = client();
   let part: Part;
   let uploadedName: string | undefined;
@@ -183,14 +250,28 @@ export async function extractTextFromMedia(bytes: Buffer, mimeType: string, meta
     } else {
       // Files API: 업로드 후 ACTIVE 될 때까지 폴링(대용량 PDF는 PROCESSING 경유)
       const uploaded = await withRetry(
-        () => ai.files.upload({ file: new Blob([new Uint8Array(bytes)], { type: mimeType }), config: { mimeType } }),
+        () => ai.files.upload({
+          file: new Blob([new Uint8Array(bytes)], { type: mimeType }),
+          config: {
+            mimeType,
+            abortSignal: lease.signal,
+            ...(lease.timeout ? { httpOptions: { timeout: lease.timeout } } : {}),
+          },
+        }),
         "files.upload",
+        lease.signal,
       );
       uploadedName = uploaded.name;
       let f = uploaded;
       for (let i = 0; i < 30 && f.state === "PROCESSING"; i++) {
-        await new Promise((r) => setTimeout(r, 1500));
-        f = await ai.files.get({ name: uploadedName! });
+        await abortableDelay(1500, lease.signal);
+        f = await ai.files.get({
+          name: uploadedName!,
+          config: {
+            abortSignal: lease.signal,
+            ...(lease.timeout ? { httpOptions: { timeout: lease.timeout } } : {}),
+          },
+        });
       }
       if (f.state === "FAILED" || !f.uri || !f.mimeType) throw new Error("파일 업로드 처리 실패(Files API)");
       part = createPartFromUri(f.uri, f.mimeType);
@@ -200,9 +281,14 @@ export async function extractTextFromMedia(bytes: Buffer, mimeType: string, meta
         client().models.generateContent({
           model: VISION_MODEL,
           contents: [{ role: "user", parts: [part, { text: VISION_PROMPT }] }],
-          config: { temperature: 0 },
+          config: {
+            temperature: 0,
+            abortSignal: lease.signal,
+            ...(lease.timeout ? { httpOptions: { timeout: lease.timeout } } : {}),
+          },
         }),
       "extractTextFromMedia",
+      lease.signal,
     );
     if (meta) {
       const m = res.usageMetadata;
@@ -211,7 +297,33 @@ export async function extractTextFromMedia(bytes: Buffer, mimeType: string, meta
     return (res.text ?? "").trim();
   } finally {
     // 업로드본은 최대 48h 잔존(쿼터·민감정보 노출) → 반드시 정리
-    if (uploadedName) await ai.files.delete({ name: uploadedName }).catch(() => {});
+    // cleanup 장애가 shared advisory lock을 transaction timeout까지 붙들지 않도록 5초로 제한한다.
+    if (uploadedName) {
+      const cleanupController = new AbortController();
+      const forwardLeaseAbort = () => cleanupController.abort(lease.signal?.reason);
+      lease.signal?.addEventListener("abort", forwardLeaseAbort, { once: true });
+      const cleanupTimer = setTimeout(
+        () => cleanupController.abort(new Error("Gemini file cleanup timeout")),
+        5_000,
+      );
+      const cleanup = ai.files.delete({
+        name: uploadedName,
+        config: {
+          abortSignal: cleanupController.signal,
+          httpOptions: { timeout: Math.min(5_000, lease.timeout ?? 5_000) },
+        },
+      }).catch(() => undefined);
+      let cleanupRaceTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        cleanup,
+        new Promise<void>((resolve) => {
+          cleanupRaceTimer = setTimeout(resolve, 5_000);
+        }),
+      ]);
+      if (cleanupRaceTimer) clearTimeout(cleanupRaceTimer);
+      clearTimeout(cleanupTimer);
+      lease.signal?.removeEventListener("abort", forwardLeaseAbort);
+    }
   }
 }
 
@@ -249,6 +361,7 @@ export async function generateWithTools(opts: {
   maxTurns?: number;
   model?: string;
   history?: LoopMessage[]; // 이전 대화 턴(선택). 없으면 단발 — 기존 동작 그대로.
+  abortSignal?: AbortSignal;
 }): Promise<ToolLoopResult> {
   const model = opts.model ?? genModel();
   const provider = providerOf(model);
@@ -277,6 +390,7 @@ export async function generateWithTools(opts: {
   const maxTurns = opts.maxTurns ?? 12;
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    opts.abortSignal?.throwIfAborted();
     const res = await withRetry(
       () =>
         client().models.generateContent({
@@ -284,6 +398,7 @@ export async function generateWithTools(opts: {
           contents,
           config: {
             systemInstruction: opts.system,
+            abortSignal: opts.abortSignal,
             // 빈 tools 면 function calling config 를 걸지 않는다(Gemini 는 선언 없는 config 를 거부).
             ...(opts.tools.length > 0
               ? {
@@ -294,6 +409,7 @@ export async function generateWithTools(opts: {
           },
         }),
       "generateContent",
+      opts.abortSignal,
     );
     addUsage(res.usageMetadata);
 
@@ -312,6 +428,7 @@ export async function generateWithTools(opts: {
       const h = handlers.get(c.name!);
       let response: Record<string, unknown>;
       try {
+        opts.abortSignal?.throwIfAborted();
         response = h ? await h((c.args ?? {}) as Record<string, unknown>) : { error: `unknown function: ${c.name}` };
       } catch (e) {
         response = { error: (e as Error).message };
@@ -332,9 +449,10 @@ export async function generateWithTools(opts: {
           ...contents,
           { role: "user", parts: [{ text: "이제 도구 호출을 멈추고, 지금까지 만들고 수정한 페이지를 원문·위키 콘텐츠와 같은 언어로 요약 보고하라." }] },
         ],
-        config: { systemInstruction: opts.system },
+        config: { systemInstruction: opts.system, abortSignal: opts.abortSignal },
       }),
     "generateContent(final)",
+    opts.abortSignal,
   );
   addUsage(finalRes.usageMetadata);
   return { text: finalRes.text ?? "(요약 없음 · maxTurns 도달)", turns: maxTurns, calls: called, usage };

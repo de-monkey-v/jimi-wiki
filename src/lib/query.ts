@@ -1,5 +1,6 @@
 import "server-only";
-import { hybridSearch, expandViaGraph, plannedDepth, isRelationalQuery } from "@/lib/search";
+import { modelSearch, expandViaGraph, plannedDepth, isRelationalQuery } from "@/lib/search";
+import { EXTERNAL_MODEL_SCOPE, withExternalModelDispatchLock } from "@/lib/model-access";
 import { generateText, llmEnabledForModel } from "@/lib/gemini";
 import { genModel } from "@/lib/model-config";
 import { detectLang } from "@/lib/lang";
@@ -32,10 +33,11 @@ export async function answerQuery(
   if (!q) return { answer: "질문이 비어 있습니다.", sources: [] };
   if (!llmEnabledForModel(genModel())) throw new Error("LLM provider 미설정 — 질의 답변에는 LLM(키/OAuth)이 필요합니다");
 
-  const hits = await hybridSearch(wikiId, q, 8);
-  if (hits.length === 0) {
-    return { answer: "관련 내용을 위키에서 찾지 못했습니다.", sources: [] };
-  }
+  return withExternalModelDispatchLock(wikiId, async () => {
+    const hits = await modelSearch({ ...EXTERNAL_MODEL_SCOPE, wikiId, queryText: q, k: 8 });
+    if (hits.length === 0) {
+      return { answer: "관련 내용을 위키에서 찾지 못했습니다.", sources: [] };
+    }
 
   // KG 확장(GraphRAG): seed 페이지에서 타입드 관계 이웃을 끌어와 컨텍스트를 보강한다. 강한 직접매치·비관계
   // 질의는 plannedDepth가 0을 주고, 빈 KG면 expandViaGraph가 []를 줘 → 아래 컨텍스트/근거가 오늘과 동일.
@@ -66,5 +68,6 @@ export async function answerQuery(
     ...neighbors.map((n) => ({ pageSlug: n.slug, pageTitle: n.title, heading: "관련 개념" })),
   ];
 
-  return { answer, sources };
+    return { answer, sources };
+  });
 }

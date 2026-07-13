@@ -47,7 +47,7 @@ export interface TocGroup {
 export const KIND_ORDER: PageKind[] = ["personal", "note", "concept", "entity", "meta"];
 
 // ---------- P2: 탐색기(VSCode식) 폴더 트리 ----------
-export type TocLeaf = { type: "page"; slug: string; title: string; kind: PageKind };
+export type TocLeaf = { type: "page"; slug: string; title: string; kind: PageKind; currentVersion: number };
 export type TocFolder = { type: "folder"; name: string; path: string; children: TocEntry[] };
 export type TocEntry = TocLeaf | TocFolder;
 /** 3섹션: 내 노트(personal, 전용 폴더 트리) · 원문/소스(note) · 정리된 지식(파생, category 폴더 트리).

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser, getPage, getBacklinks, getOutlinks, existingSlugSet, getPrevNext, getPageProvenance, getPageSources, getPageNeighborhood, isPagePinned } from "@/lib/wiki";
+import { getWikiForUser, getBacklinks, getOutlinks, existingSlugSet, getPrevNext, getPageProvenance, getPageSources, getPageNeighborhood, isPagePinned } from "@/lib/wiki";
 import { PinButton } from "./PinButton";
 import { RecordVisit } from "../RecordVisit";
 import { renderMarkdown } from "@/lib/markdown";
@@ -15,6 +15,11 @@ import { ReadingPane } from "@/components/ReadingPane";
 import TranslateMenu from "@/components/TranslateMenu";
 import { GraphMount } from "@/components/graph/GraphMount";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
+import { KnowledgeBadges, type KnowledgeBadgeLabels } from "@/components/KnowledgeBadges";
+import { KnowledgeControls } from "@/components/KnowledgeControls";
+import { prisma } from "@/lib/db";
+import { isReservedSlug } from "@/lib/ontology";
+import { isPageSourcePromotionEligible } from "@/lib/page-source-promotion";
 
 export default async function PageView({
   params,
@@ -24,6 +29,7 @@ export default async function PageView({
   searchParams: Promise<{ lang?: string }>;
 }) {
   const t = await getTranslations("WikisSlugPageSlugPage");
+  const ts = await getTranslations("KnowledgeStatus");
   const { slug: rawSlug, pageSlug: rawPageSlug } = await params;
   const { lang } = await searchParams;
   const slug = decodeURIComponent(rawSlug);
@@ -32,7 +38,9 @@ export default async function PageView({
   const wiki = await getWikiForUser(userId, slug);
   if (!wiki) notFound();
 
-  const page = await getPage(wiki.id, pageSlug);
+  // 멤버 전용 상세는 archived projection도 읽어 복원/history 진입점을 유지한다.
+  // 공개·모델 loader는 계속 active-only이므로 노출/AI 경계는 넓어지지 않는다.
+  const page = await prisma.page.findUnique({ where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } } });
   if (!page) notFound();
 
   // 온디맨드 기계 번역: ?lang=<locale> 이 원문 언어와 다를 때만 (캐시 우선) 번역본을 렌더.
@@ -42,7 +50,13 @@ export default async function PageView({
   let viewBody = page.body;
   let translatedTo: typeof wantLocale = null; // 실제로 번역에 성공했을 때만 set → 배지 정확성
   // 개인 노트(AI 제외)는 번역하지 않는다 — 본문이 외부 LLM(Gemini/OpenAI)으로 전송되기 때문. 원문 그대로 표시.
-  if (wantLocale && page.body.trim() && !isAiExcludedKind(page.kind)) {
+  if (
+    wantLocale &&
+    page.body.trim() &&
+    !page.archivedAt &&
+    page.modelAccess === "external" &&
+    !isAiExcludedKind(page.kind)
+  ) {
     // 비용 경계: 번역도 생성형 LLM 소비 → 채팅과 동일하게 일일 쿼터를 적용(초과 시 원문 표시).
     const quota = await checkDailyQuota(userId);
     if (quota.ok) {
@@ -82,7 +96,7 @@ export default async function PageView({
   const sources = !isNote ? await getPageSources(wiki.id, page.id) : undefined;
 
   // 로컬(이웃) 그래프: 파생 페이지에서 이웃이 있을 때만(그래프=정리된 지식. note는 focal이 숨겨져 headless가 되므로 제외)
-  const neighborhood = isNote ? { nodes: [], edges: [] } : await getPageNeighborhood(wiki.id, pageSlug, 1);
+  const neighborhood = isNote || page.archivedAt ? { nodes: [], edges: [] } : await getPageNeighborhood(wiki.id, pageSlug, 1);
   const localGraph =
     neighborhood.nodes.length > 1 ? (
       <section className="mt-10">
@@ -109,17 +123,48 @@ export default async function PageView({
 
   const canWrite = wiki.role !== "viewer";
   const pinned = await isPagePinned(userId, page.id);
+  const knowledgeLabels: KnowledgeBadgeLabels = {
+    group: ts("group"),
+    origin: {
+      human: ts("origin.human"),
+      generated: ts("origin.generated"),
+      mixed: ts("origin.mixed"),
+      system: ts("origin.system"),
+    },
+    modelAccess: {
+      external: ts("modelAccess.external"),
+      internalOnly: ts("modelAccess.internalOnly"),
+    },
+  };
+  const headerMeta = (
+    <div className="flex flex-wrap items-center gap-2">
+      <KnowledgeBadges origin={page.origin} modelAccess={page.modelAccess} labels={knowledgeLabels} />
+      <span className="font-mono text-xs tabular-nums text-stone-400">{ts("version", { version: page.currentVersion })}</span>
+      <Link
+        href={`/wikis/${encodeURIComponent(slug)}/${encodeURIComponent(pageSlug)}/history`}
+        className="rounded-sm text-xs font-medium text-indigo-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      >
+        {ts("history")}
+      </Link>
+    </div>
+  );
+  const archivedNotice = page.archivedAt ? (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+      <span aria-hidden="true" className="mr-1.5">◇</span>
+      {ts("archivedPage")}
+    </div>
+  ) : undefined;
 
   return (
     <>
-      <RecordVisit wikiSlug={slug} pageSlug={pageSlug} title={page.title} />
+      {!page.archivedAt && <RecordVisit wikiSlug={slug} pageSlug={pageSlug} title={page.title} />}
       <ReadingPane
         title={viewTitle}
         html={html}
         isEmpty={page.body.trim() === ""}
-        translateControl={page.body.trim() ? <TranslateMenu current={translatedTo} pageLang={pageLang} /> : undefined}
-        pinControl={<PinButton wikiSlug={slug} pageSlug={pageSlug} pinned={pinned} />}
-        create={canWrite ? { wikiSlug: slug, category: isNote ? null : page.category } : undefined}
+        translateControl={page.body.trim() && !page.archivedAt && page.modelAccess === "external" ? <TranslateMenu current={translatedTo} pageLang={pageLang} /> : undefined}
+        pinControl={page.archivedAt ? undefined : <PinButton wikiSlug={slug} pageSlug={pageSlug} pinned={pinned} />}
+        create={canWrite && !page.archivedAt ? { wikiSlug: slug, category: isNote ? null : page.category } : undefined}
         emptyText={canWrite ? t("emptyEditable") : t("empty")}
         isNote={isNote}
         provenance={provenance}
@@ -131,8 +176,29 @@ export default async function PageView({
         next={next}
         hrefFor={(s) => `/wikis/${slug}/${s}`}
         crumb={crumb}
-        editHref={canWrite ? `/wikis/${slug}/${pageSlug}/edit` : undefined}
+        editHref={canWrite && !page.archivedAt ? `/wikis/${slug}/${pageSlug}/edit` : undefined}
         localGraph={localGraph}
+        headerMeta={headerMeta}
+        notice={archivedNotice}
+        controls={canWrite ? (
+          <KnowledgeControls
+            resourceType="page"
+            wikiSlug={slug}
+            resourceSlug={page.slug}
+            currentVersion={page.currentVersion}
+            modelAccess={page.modelAccess}
+            archived={page.archivedAt != null}
+            personal={page.kind === "personal"}
+            owner={wiki.role === "owner"}
+            canLifecycle={page.origin !== "system"}
+            canPromote={isPageSourcePromotionEligible({
+              origin: page.origin,
+              kind: page.kind,
+              archivedAt: page.archivedAt,
+              reserved: isReservedSlug(page.slug),
+            })}
+          />
+        ) : undefined}
       />
     </>
   );

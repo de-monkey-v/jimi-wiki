@@ -2,7 +2,7 @@
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { logoutAction } from "@/app/login/actions";
 import { useChatModal, useShortcutLabel } from "@/app/wikis/[slug]/chat/ChatModal";
 import { useWikiActions } from "@/app/wikis/[slug]/WikiActions";
@@ -10,12 +10,11 @@ import { useQuickNav } from "@/app/wikis/[slug]/QuickNav";
 import { RecentList } from "@/app/wikis/[slug]/RecentList";
 import { EmptyState } from "@/components/EmptyState";
 import type { TocSection, TocEntry } from "@/lib/kinds";
+import { isReservedWikiPageSlug } from "@/lib/wiki-routes";
 
 type PinnedItem =
   | { type: "page"; slug: string; title: string }
   | { type: "folder"; category: string };
-
-const RESERVED = new Set(["chat", "lint", "settings", "sources", "graph", "new", "ingest", "reading", "docs", "category"]);
 
 function linkCls(active: boolean) {
   return `block truncate rounded-md py-1 pr-2 text-sm ${
@@ -36,7 +35,14 @@ function leafCount(e: TocEntry): number {
 // hydration이 통째로 죽어 사이드바 전체가 클릭 불능이 된다.
 // newKind: 이 섹션에서 "+ 새 노트" 버튼이 만들 kind(personal|concept). undefined면 "+" 없음(원문/소스).
 // movable: 개인 노트처럼 폴더 이동 버튼을 붙일지. parentPath: 이동 시 프리필할 현재 폴더 경로.
-type NodeCtx = { slug: string; current: string | undefined; newKind?: string; movable?: boolean };
+type NodeCtx = {
+  slug: string;
+  current: string | undefined;
+  newKind?: string;
+  movable?: boolean;
+  moveLabel: string;
+  newInFolderLabel: (name: string) => string;
+};
 
 function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: NodeCtx; depth: number; parentPath: string }) {
   const quick = useQuickNav();
@@ -49,12 +55,12 @@ function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: No
         {ctx.movable && quick && (
           <button
             type="button"
-            title="폴더로 이동"
+            title={ctx.moveLabel}
             onClick={(e) => {
               e.stopPropagation();
-              quick.openMove(entry.slug, parentPath || null);
+              quick.openMove(entry.slug, parentPath || null, entry.currentVersion);
             }}
-            className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded px-1 text-xs text-stone-400 hover:bg-stone-200 hover:text-stone-700 group-hover/leaf:block"
+            className="absolute right-1 top-1/2 block -translate-y-1/2 rounded px-1 text-xs text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             ⋯
           </button>
@@ -75,6 +81,7 @@ function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "f
       <div className="group/folder flex items-center">
         <button
           type="button"
+          aria-expanded={open}
           onClick={() => setOverride({ open: !open, whenActive: active })}
           className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-1 pr-2 text-sm text-stone-500 hover:bg-stone-100"
           style={{ paddingLeft: depth * 12 + 4 }}
@@ -86,9 +93,9 @@ function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "f
         {ctx.newKind && actions && (
           <button
             type="button"
-            title={`‘${entry.name}’ 폴더에 새 노트`}
+            title={ctx.newInFolderLabel(entry.name)}
             onClick={() => actions.openNewPage({ category: entry.path, kind: ctx.newKind })}
-            className="hidden shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 group-hover/folder:block"
+            className="block shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             +
           </button>
@@ -137,7 +144,7 @@ export function WikiToc({
   const pathname = decodeURIComponent(usePathname());
   const seg = pathname.split("/"); // ["", "wikis", "<slug>", "<sub>", ...]
   const sub = seg[3];
-  const current = sub && !RESERVED.has(sub) ? sub : undefined;
+  const current = sub && !isReservedWikiPageSlug(sub) ? sub : undefined;
   const chatModal = useChatModal();
   const actions = useWikiActions();
   const quick = useQuickNav();
@@ -147,6 +154,22 @@ export function WikiToc({
 
   // 모바일: 목차를 off-canvas 드로어로. 데스크톱(md+)은 기존 고정 사이드바.
   const [open, setOpen] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)");
+    const sync = () => {
+      const drawer = drawerRef.current;
+      if (!drawer) return;
+      const hidden = !media.matches && !open;
+      drawer.inert = hidden;
+      if (hidden) drawer.setAttribute("aria-hidden", "true");
+      else drawer.removeAttribute("aria-hidden");
+    };
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, [open]);
 
   return (
     <>
@@ -165,6 +188,7 @@ export function WikiToc({
         <div onClick={() => setOpen(false)} aria-hidden className="fixed inset-0 z-30 bg-black/30 md:hidden" />
       )}
       <aside
+        ref={drawerRef}
         // 모바일 드로어에서 내부 링크(<a>)를 누르면 네비게이션과 함께 닫는다(폴더 토글 <button>은 유지).
         onClick={(e) => {
           if (open && (e.target as HTMLElement).closest("a")) setOpen(false);
@@ -220,7 +244,14 @@ export function WikiToc({
           <div className="space-y-4">
             {sections.map((s) => {
               const newKind = canWrite ? SECTION_NEW_KIND[s.key] : undefined;
-              const ctx: NodeCtx = { slug, current, newKind, movable: canWrite && s.key === "personal" };
+              const ctx: NodeCtx = {
+                slug,
+                current,
+                newKind,
+                movable: canWrite && s.key === "personal",
+                moveLabel: t("movePage"),
+                newInFolderLabel: (name) => t("newNoteInFolder", { name }),
+              };
               return (
                 <div key={s.key} className="group/section">
                   <div className="flex items-center px-1 pb-1">
@@ -230,7 +261,7 @@ export function WikiToc({
                         type="button"
                         title={t("newNoteAtRoot")}
                         onClick={() => actions.openNewPage({ kind: newKind })}
-                        className="hidden shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 group-hover/section:block"
+                        className="block shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                       >
                         +
                       </button>
@@ -330,6 +361,11 @@ export function WikiToc({
           <li>
             <Link href={`/wikis/${slug}/reading`} className={`px-2 ${linkCls(sub === "reading")}`}>{t("readingList")}</Link>
           </li>
+          {role !== "viewer" && (
+            <li>
+              <Link href={`/wikis/${slug}/builds`} className={`px-2 ${linkCls(sub === "builds")}`}>{t("builds")}</Link>
+            </li>
+          )}
           {role !== "viewer" && (
             <li>
               <Link href={`/wikis/${slug}/lint`} className={`px-2 ${linkCls(sub === "lint")}`}>{t("healthCheck")}</Link>

@@ -16,7 +16,9 @@ import { DEFAULT_OPENAI_MODEL } from "@/lib/model-defaults";
 // ChatGPT(Codex) 백엔드는 표준 api.openai.com 이 아니고 요청마다 최신 토큰이 필요하다. custom fetch 로
 // 매 요청 Authorization·chatgpt-account-id 헤더를 주입하고, codex 백엔드가 요구하는 store:false 를 강제한다.
 const codexFetch = (async (input, init) => {
+  init?.signal?.throwIfAborted();
   const { access, accountId } = await getFreshAccess();
+  init?.signal?.throwIfAborted();
   const headers = new Headers(init?.headers);
   headers.set("Authorization", `Bearer ${access}`);
   if (accountId) headers.set("chatgpt-account-id", accountId);
@@ -65,6 +67,14 @@ export function openaiProvider(model: string) {
   return resolveModel(model);
 }
 
+/**
+ * 검증/설정 probe 전용 OAuth provider. 현재 AppConfig가 apikey/proxy여도 probe 자체는
+ * 반드시 ChatGPT OAuth transport로 보내며, 성공한 뒤에만 설정을 교체할 수 있게 한다.
+ */
+export function openaiOAuthProvider(model: string) {
+  return createOpenAI({ baseURL: CODEX_BASE_URL, apiKey: "chatgpt-oauth", fetch: codexFetch }).responses(model);
+}
+
 export function openaiEnabled(): boolean {
   return providerHasCredential("openai");
 }
@@ -98,6 +108,7 @@ export async function openaiGenerateWithTools(opts: {
   maxTurns?: number;
   model?: string;
   history?: LoopMessage[];
+  abortSignal?: AbortSignal;
 }): Promise<ToolLoopResult> {
   const model = opts.model ?? DEFAULT_OPENAI_MODEL;
   const calls: string[] = [];
@@ -108,8 +119,11 @@ export async function openaiGenerateWithTools(opts: {
         description: t.decl.description ?? "",
         inputSchema: jsonSchema(toJsonSchema(t.decl.parameters)),
         execute: async (args) => {
+          opts.abortSignal?.throwIfAborted();
           calls.push(t.decl.name!);
-          return t.handler(args as Record<string, unknown>);
+          const result = await t.handler(args as Record<string, unknown>);
+          opts.abortSignal?.throwIfAborted();
+          return result;
         },
       }),
     ]),
@@ -130,6 +144,7 @@ export async function openaiGenerateWithTools(opts: {
     ...(messages ? { messages } : { prompt: opts.userPrompt }),
     tools,
     stopWhen: stepCountIs(opts.maxTurns ?? 12),
+    abortSignal: opts.abortSignal,
   });
 
   const text = await res.text;

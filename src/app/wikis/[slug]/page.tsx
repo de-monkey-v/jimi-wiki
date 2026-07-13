@@ -30,8 +30,10 @@ export default async function WikiHome({
   const runRow = run ? await prisma.agentRun.findUnique({ where: { id: run } }) : null;
   const runStatus = runRow && runRow.wikiId === wiki.id ? runRow : null;
 
+  // "최근 활동"은 사용자가 남긴 지식 활동(편입·온톨로지·질의)을 보여준다. 매 편입/방문마다 쌓이는
+  // 자동 건강검진(lint)은 노이즈라 제외 — 안 그러면 목록이 lint로만 도배돼 실제 편입이 안 보인다.
   const logs = await prisma.logEntry.findMany({
-    where: { wikiId: wiki.id },
+    where: { wikiId: wiki.id, kind: { not: "lint" } },
     orderBy: { createdAt: "desc" },
     take: 6,
   });

@@ -1,6 +1,7 @@
 import "server-only";
 import { getBlobStore, makeStorageKey } from "@/lib/blob";
-import { createIngestRun } from "@/lib/ingest";
+import { createIngestRun, type IngestInput } from "@/lib/ingest";
+import type { ModelAccessValue } from "@/lib/model-access";
 import {
   classifyUpload,
   ZIP_MAX_ENTRIES,
@@ -17,8 +18,14 @@ import {
  * (경로 traversal 무의미화), 중첩 zip 은 펼치지 않음(깊이 1 제한), 지원하지 않는 엔트리는 건너뛴다.
  * 반환: 실제로 팬아웃한 소스 수.
  */
-export async function fanOutZip(opts: { wikiId: string; buffer: Buffer; userId?: string | null }): Promise<number> {
-  const { wikiId, buffer, userId } = opts;
+export async function fanOutZip(opts: {
+  wikiId: string;
+  buffer: Buffer;
+  userId?: string | null;
+  /** 부모 ingest의 정책. internalOnly ZIP의 모든 child run에 그대로 상속한다. */
+  modelAccess?: ModelAccessValue;
+}): Promise<number> {
+  const { wikiId, buffer, userId, modelAccess } = opts;
   const store = getBlobStore();
   const yauzl = (await import("yauzl")).default;
 
@@ -85,15 +92,18 @@ export async function fanOutZip(opts: { wikiId: string; buffer: Buffer; userId?:
             // 중첩 zip 은 펼치지 않고(깊이 1) 지원 안 하는 엔트리도 조용히 스킵
             if (!("rejected" in cls) && cls.kind !== "zip") {
               const key = makeStorageKey(wikiId, cls.ext);
+              const childInput: IngestInput & { modelAccess?: ModelAccessValue } = {
+                storageKey: key,
+                filename: base,
+                mimeType: cls.mimeType,
+                size: buf.length,
+                ...(modelAccess ? { modelAccess } : {}),
+              };
               pending.push(
                 store
                   .put(key, buf)
                   .then(() =>
-                    createIngestRun(
-                      wikiId,
-                      { storageKey: key, filename: base, mimeType: cls.mimeType, size: buf.length },
-                      userId ?? undefined,
-                    ),
+                    createIngestRun(wikiId, childInput, userId ?? undefined),
                   )
                   .then(() => {
                     count++;

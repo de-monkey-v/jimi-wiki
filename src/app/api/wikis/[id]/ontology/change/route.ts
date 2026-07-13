@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiWikiGate } from "@/lib/api-gate";
 import { renameCategory, mergeCategory, retireCategory } from "@/lib/governance";
+import { requestsExternalModelScope } from "@/lib/content-api";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -13,6 +14,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const gate = await apiWikiGate(req, id, { minRole: "editor" });
   if (!gate.ok) return gate.res;
+  if (requestsExternalModelScope(req)) {
+    return NextResponse.json({ error: "ontology_governance_session_only" }, { status: 403 });
+  }
 
   let body: { op?: string; from?: string; to?: string; into?: string; slug?: string; reassignTo?: string };
   try {

@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { updatePageSnapshot, updatePageSnapshotTx } from "@/lib/content-store";
 import {
   getOntology,
   setOntology,
@@ -16,6 +17,12 @@ import {
   findSimilarCategories,
   matchCategorySemantic,
 } from "@/lib/search";
+import {
+  assertExternalModelScope,
+  listExternalModelCategories,
+  modelPolicyClient,
+  type ExternalModelScope,
+} from "@/lib/model-access";
 
 // category 거버넌스는 ontology.ts + search.ts 를 모두 조율하지만 그 둘은 governance를 import하지 않는다(순환 회피).
 
@@ -63,21 +70,33 @@ async function reconcile(wikiId: string): Promise<void> {
 
 /** Page.category 벌크 이동: exact(from) + subpath(from/*). to=null이면 미분류. slug의 `_`가 LIKE 와일드카드라 left()로 접두 비교. */
 async function movePageCategories(wikiId: string, from: string, to: string | null): Promise<void> {
-  if (to === null) {
-    await prisma.$executeRawUnsafe(`UPDATE "Page" SET category=NULL WHERE "wikiId"=$1 AND category=$2`, wikiId, from);
-    await prisma.$executeRawUnsafe(
-      `UPDATE "Page" SET category=NULL WHERE "wikiId"=$1 AND left(category, length($2)+1) = $2 || '/'`,
-      wikiId,
-      from,
-    );
-    return;
-  }
-  await prisma.$executeRawUnsafe(`UPDATE "Page" SET category=$3 WHERE "wikiId"=$1 AND category=$2`, wikiId, from, to);
-  await prisma.$executeRawUnsafe(
-    `UPDATE "Page" SET category = $3 || substring(category, length($2)+1) WHERE "wikiId"=$1 AND left(category, length($2)+1) = $2 || '/'`,
-    wikiId,
-    from,
-    to,
+  await prisma.$transaction(
+    async (tx) => {
+      const pages = await tx.page.findMany({
+        where: {
+          wikiId,
+          archivedAt: null,
+          OR: [{ category: from }, { category: { startsWith: `${from}/` } }],
+        },
+        select: { id: true, category: true, currentVersion: true },
+        orderBy: { id: "asc" },
+      });
+      for (const page of pages) {
+        const category = to === null
+          ? null
+          : page.category === from
+            ? to
+            : `${to}${page.category!.slice(from.length)}`;
+        await updatePageSnapshotTx(tx, {
+          wikiId,
+          pageId: page.id,
+          expectedVersion: page.currentVersion,
+          changes: { category },
+          context: { actor: "human", reason: `category move: ${from} -> ${to ?? "(uncategorized)"}` },
+        });
+      }
+    },
+    { maxWait: 15_000, timeout: 120_000 },
   );
 }
 
@@ -158,13 +177,24 @@ export async function retireCategory(wikiId: string, slug: string, reassignTo?: 
 /** 페이지 1건에 category 지정(정규화). null이면 미분류. 이후 온톨로지/코퍼스 동기화. */
 export async function setPageCategory(wikiId: string, pageSlug: string, categoryRaw: string | null): Promise<void> {
   const category = categoryRaw ? sanitizeCategorySlug(categoryRaw) : null;
-  await prisma.page.update({ where: { wikiId_slug: { wikiId, slug: pageSlug } }, data: { category } });
+  const page = await prisma.page.findFirstOrThrow({ where: { wikiId, slug: pageSlug, archivedAt: null } });
+  await updatePageSnapshot({
+    wikiId,
+    pageId: page.id,
+    expectedVersion: page.currentVersion,
+    changes: { category },
+    context: { actor: "human", reason: "category assigned" },
+  });
   await reconcile(wikiId);
 }
 
 /** 온톨로지의 itemCount를 실제 페이지에서 재계산(증분 카운터 금지, C3). */
 export async function recountItemCounts(wikiId: string): Promise<void> {
-  const rows = await prisma.page.groupBy({ by: ["category"], where: { wikiId, category: { not: null } }, _count: true });
+  const rows = await prisma.page.groupBy({
+    by: ["category"],
+    where: { wikiId, archivedAt: null, category: { not: null } },
+    _count: true,
+  });
   const counts = new Map(rows.map((r) => [r.category as string, r._count]));
   const onto = await getOntology(wikiId);
   // 변화 없으면 write 안 함(lint는 읽기 — 매 로드 version/log churn·CAS 경합 방지)
@@ -196,17 +226,41 @@ export interface CategoryIssues {
 const DEEP_MIN_DEPTH = 3;
 
 /** lint용 category 건강 탐지: 중복 의심 쌍 + 고아 category + 미분류 파생 페이지 + 과깊이·희소 category. */
-export async function detectCategoryIssues(wikiId: string): Promise<CategoryIssues> {
-  const [nearDup, onto, live, derived] = await Promise.all([
+export async function detectCategoryIssues(
+  wikiId: string,
+  opts?: { modelScope?: ExternalModelScope },
+): Promise<CategoryIssues> {
+  if (opts?.modelScope) assertExternalModelScope(opts.modelScope);
+  const externalOnly = !!opts?.modelScope;
+  const db = modelPolicyClient(wikiId);
+  const [nearDupRaw, ontoRaw, liveRaw, derived] = await Promise.all([
     findSimilarCategories(wikiId, 0.82),
-    getOntology(wikiId),
-    listCategories(wikiId),
-    prisma.page.findMany({
-      where: { wikiId, kind: { notIn: ["note", "meta"] } },
+    externalOnly
+      ? listExternalModelCategories(wikiId, opts!.modelScope!).then((categories) => ({
+          version: 0,
+          categories,
+          relationTypes: [],
+        }))
+      : getOntology(wikiId),
+    externalOnly
+      ? listExternalModelCategories(wikiId, opts!.modelScope!).then((categories) => categories.map((c) => c.slug))
+      : listCategories(wikiId),
+    db.page.findMany({
+      where: {
+        wikiId,
+        archivedAt: null,
+        kind: externalOnly ? { notIn: ["note", "meta", "personal"] } : { notIn: ["note", "meta"] },
+        ...(externalOnly ? { modelAccess: "external" as const } : {}),
+      },
       select: { slug: true, title: true, category: true },
     }),
   ]);
-  const liveSet = new Set(live);
+  const allowed = new Set(liveRaw);
+  const nearDup = externalOnly
+    ? nearDupRaw.filter((pair) => allowed.has(pair.a) && allowed.has(pair.b))
+    : nearDupRaw;
+  const onto = ontoRaw;
+  const liveSet = new Set(liveRaw);
   const orphanCats = onto.categories.map((c) => c.slug).filter((s) => !liveSet.has(s));
   // 미분류 = category 없음 OR category가 sanitize와 불일치(오염·과깊이 → 문서에 못 들어감 = 실질 미분류/고아 페이지)
   const uncategorized = derived

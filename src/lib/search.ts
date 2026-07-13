@@ -1,10 +1,17 @@
 import "server-only";
-import { prisma } from "@/lib/db";
 import { createHash } from "node:crypto";
 import { embedTexts, geminiEnabled, EMBED_DIM } from "@/lib/gemini";
 import { ONTOLOGY_SLUG } from "@/lib/ontology";
-import { AI_EXCLUDED_KINDS, isAiExcludedKind } from "@/lib/kinds";
-import type { PageKind } from "@/generated/prisma/client";
+import {
+  EXTERNAL_MODEL_SCOPE,
+  assertExternalModelScope,
+  modelPolicyClient,
+  normalizeModelAccess,
+  withExternalModelDispatchLock,
+  type ExternalModelScope,
+  type ModelAccessValue,
+} from "@/lib/model-access";
+import type { PageKind, Prisma } from "@/generated/prisma/client";
 
 export const MAX_CHUNK = 4000;
 export const MIN_CHUNK = 200;
@@ -78,15 +85,17 @@ export function chunkText(label: string, raw: string): Chunk[] {
 // ---------- 콘텐츠 코어 인덱싱 (FTS 전용, AI 무관) ----------
 // 불변식: 저장 훅은 항상 FTS 청크만 갱신한다. 임베딩(AI)은 reindexEmbeddings 단일 경로에서만.
 async function indexChunksOnly(
+  tx: Prisma.TransactionClient,
   wikiId: string,
   refType: RefType,
   refId: string,
   label: string,
   body: string,
+  modelAccess: ModelAccessValue,
 ): Promise<{ chunks: number }> {
   const chunks = chunkText(label, body);
 
-  const existing = await prisma.searchChunk.findMany({
+  const existing = await tx.searchChunk.findMany({
     where: { wikiId, refType, refId },
     select: { hash: true },
   });
@@ -94,37 +103,98 @@ async function indexChunksOnly(
   const newSet = new Set(chunks.map((c) => c.hash));
   const hashesSame = oldSet.size === newSet.size && [...newSet].every((h) => oldSet.has(h));
 
-  // 내용 무변경이면 조기 반환 → 기존 임베딩 보존(재저장 시 벡터 유실 방지)
-  if (hashesSame && chunks.length > 0) return { chunks: chunks.length };
-
-  await prisma.$transaction(async (tx) => {
-    await tx.searchChunk.deleteMany({ where: { wikiId, refType, refId } });
-    if (chunks.length) {
-      await tx.searchChunk.createMany({
-        data: chunks.map((c) => ({ wikiId, refType, refId, heading: c.heading, text: c.text, hash: c.hash })),
-      });
+  // 내용 무변경이어도 정책은 동기화한다. internalOnly로 내려간 기존 벡터는 즉시 제거한다.
+  if (hashesSame && chunks.length > 0) {
+    if (modelAccess === "internalOnly") {
+      // CHECK(modelAccess != internalOnly OR embedding IS NULL)를 한 순간도 깨지 않게
+      // vector를 먼저 지운 뒤 같은 policy-lock transaction에서 projection을 내린다.
+      await tx.$executeRawUnsafe(
+        `UPDATE "SearchChunk" SET embedding = NULL WHERE "wikiId"=$1 AND "refType"=$2 AND "refId"=$3`,
+        wikiId,
+        refType,
+        refId,
+      );
     }
-  });
+    await tx.searchChunk.updateMany({
+      where: { wikiId, refType, refId },
+      data: { modelAccess },
+    });
+    return { chunks: chunks.length };
+  }
+
+  await tx.searchChunk.deleteMany({ where: { wikiId, refType, refId } });
+  if (chunks.length) {
+    await tx.searchChunk.createMany({
+      data: chunks.map((c) => ({
+        wikiId,
+        refType,
+        refId,
+        heading: c.heading,
+        text: c.text,
+        hash: c.hash,
+        modelAccess,
+      })),
+    });
+  }
   // 새 청크는 embedding NULL로 남고 reindexEmbeddings가 backfill한다.
   return { chunks: chunks.length };
 }
 
-// 단일 색인 chokepoint. 모든 페이지 저장(createPage/updatePage/upsertPage)이 여기를 지난다.
-// AI 제외 kind(personal)는 SearchChunk를 아예 만들지 않고, kind-flip(concept→personal) 시 기존 청크도 purge한다.
-// → personal 본문은 코퍼스(임베딩·FTS·벡터)에 존재하지 않음(데이터 부재로 유출 원천 차단). 별도 게이트를 흩뿌리지 않는다.
+// 단일 색인 chokepoint. personal/internalOnly도 로컬 FTS를 위해 청크는 만들되 embedding은 항상 NULL이다.
 export async function reindexPage(
   wikiId: string,
-  page: { id: string; slug: string; body: string; kind: PageKind },
+  page: {
+    id: string;
+    slug: string;
+    body: string;
+    kind: PageKind;
+    modelAccess?: ModelAccessValue;
+    archivedAt?: Date | null;
+  },
 ): Promise<{ chunks: number }> {
-  if (page.slug === ONTOLOGY_SLUG) return { chunks: 0 }; // O1: 온톨로지 페이지는 검색에 색인하지 않음
-  if (isAiExcludedKind(page.kind)) {
-    await prisma.searchChunk.deleteMany({ where: { wikiId, refType: "page", refId: page.id } });
-    return { chunks: 0 };
-  }
-  return indexChunksOnly(wikiId, "page", page.id, page.slug, page.body);
+  return withExternalModelDispatchLock(wikiId, async (tx) => {
+    // 호출자가 가진 stale projection/누락된 modelAccess를 신뢰하지 않고 현재 DB 상태를 색인한다.
+    const current = await tx.page.findFirst({
+      where: { id: page.id, wikiId },
+      select: { id: true, slug: true, body: true, kind: true, modelAccess: true, archivedAt: true },
+    });
+    if (!current || current.archivedAt || current.slug === ONTOLOGY_SLUG) {
+      await tx.searchChunk.deleteMany({ where: { wikiId, refType: "page", refId: page.id } });
+      return { chunks: 0 };
+    }
+    const modelAccess = normalizeModelAccess(current.kind, current.modelAccess);
+    return indexChunksOnly(tx, wikiId, "page", current.id, current.slug, current.body, modelAccess);
+  });
 }
-export function reindexSource(wikiId: string, src: { id: string; slug: string; body: string }) {
-  return indexChunksOnly(wikiId, "source", src.id, src.slug, src.body);
+export async function reindexSource(
+  wikiId: string,
+  src: {
+    id: string;
+    slug: string;
+    body: string;
+    modelAccess?: ModelAccessValue;
+    archivedAt?: Date | null;
+  },
+) {
+  return withExternalModelDispatchLock(wikiId, async (tx) => {
+    const current = await tx.source.findFirst({
+      where: { id: src.id, wikiId },
+      select: { id: true, slug: true, body: true, modelAccess: true, archivedAt: true },
+    });
+    if (!current || current.archivedAt) {
+      await tx.searchChunk.deleteMany({ where: { wikiId, refType: "source", refId: src.id } });
+      return { chunks: 0 };
+    }
+    return indexChunksOnly(
+      tx,
+      wikiId,
+      "source",
+      current.id,
+      current.slug,
+      current.body ?? "",
+      current.modelAccess,
+    );
+  });
 }
 
 // ---------- P2: 온톨로지 category 재사용 코퍼스 (refType='category') ----------
@@ -136,61 +206,108 @@ const isP2002 = (e: unknown) => (e as { code?: string })?.code === "P2002";
  * `@@unique(wikiId, refId) WHERE refType='category'`(부분 유니크)로 중복 행을 막고,
  * 임베딩 UPDATE는 refId가 아니라 **행 id** 기준(동시 ingest 시 벡터/텍스트 불일치 방지).
  */
-export async function indexCategory(wikiId: string, slug: string, text: string): Promise<void> {
+export async function categoryEligibleForExternalModel(wikiId: string, slug: string): Promise<boolean> {
+  const n = await modelPolicyClient(wikiId).page.count({
+    where: {
+      wikiId,
+      archivedAt: null,
+      modelAccess: "external",
+      kind: { not: "personal" },
+      OR: [{ category: slug }, { category: { startsWith: `${slug}/` } }],
+    },
+  });
+  return n > 0;
+}
+
+export async function indexCategory(wikiId: string, slug: string, _text: string): Promise<void> {
+  void _text;
+  const db = modelPolicyClient(wikiId);
   const refId = catRef(slug);
+  // internalOnly 문서에서만 생긴 category 라벨/slug도 민감할 수 있다. active external 사용처가
+  // 확인되지 않으면 category corpus 자체를 만들지 않는다(문자열 match는 ontology에서 계속 가능).
+  if (!(await categoryEligibleForExternalModel(wikiId, slug))) {
+    await db.searchChunk.deleteMany({ where: { wikiId, refType: "category", refId } });
+    return;
+  }
+  // ontology label/synonym에는 internalOnly 문서에서 유래한 문자열이 섞일 수 있다. category
+  // corpus와 Gemini payload는 external Page에서 확인 가능한 경로 slug만으로 재생성한다.
+  const text = slug;
   const hash = sha(text);
-  const existing = await prisma.searchChunk.findFirst({
+  const existing = await db.searchChunk.findFirst({
     where: { wikiId, refType: "category", refId },
     select: { id: true, hash: true },
   });
   let id: string;
   if (existing) {
-    if (existing.hash === hash) return; // 변화 없음
-    await prisma.searchChunk.update({ where: { id: existing.id }, data: { text, hash } });
+    if (existing.hash === hash) {
+      await db.searchChunk.update({ where: { id: existing.id }, data: { modelAccess: "external" } });
+      return; // 변화 없음
+    }
+    await db.searchChunk.update({ where: { id: existing.id }, data: { text, hash, modelAccess: "external" } });
     id = existing.id;
   } else {
     try {
-      const created = await prisma.searchChunk.create({
-        data: { wikiId, refType: "category", refId, heading: "", text, hash },
+      const created = await db.searchChunk.create({
+        data: { wikiId, refType: "category", refId, heading: "", text, hash, modelAccess: "external" },
         select: { id: true },
       });
       id = created.id;
     } catch (e) {
       if (!isP2002(e)) throw e; // 동시 생성 경합 → 기존 행 update로 폴백
-      const row = await prisma.searchChunk.findFirst({ where: { wikiId, refType: "category", refId }, select: { id: true } });
+      const row = await db.searchChunk.findFirst({ where: { wikiId, refType: "category", refId }, select: { id: true } });
       if (!row) return;
-      await prisma.searchChunk.update({ where: { id: row.id }, data: { text, hash } });
+      await db.searchChunk.update({ where: { id: row.id }, data: { text, hash, modelAccess: "external" } });
       id = row.id;
     }
   }
   if (geminiEnabled()) {
     try {
-      const [vec] = await embedTexts([text], "RETRIEVAL_DOCUMENT", { wikiId, route: "ingest" });
-      if (vec?.length === EMBED_DIM) {
-        await prisma.$executeRawUnsafe(`UPDATE "SearchChunk" SET embedding = $1::vector WHERE id = $2`, `[${vec.join(",")}]`, id);
-      }
+      await withExternalModelDispatchLock(wikiId, async (tx) => {
+        const eligible = await tx.page.count({
+          where: {
+            wikiId,
+            archivedAt: null,
+            modelAccess: "external",
+            kind: { not: "personal" },
+            OR: [{ category: slug }, { category: { startsWith: `${slug}/` } }],
+          },
+        });
+        if (eligible === 0) {
+          await tx.searchChunk.deleteMany({ where: { id } });
+          return;
+        }
+        const [vec] = await embedTexts([text], "RETRIEVAL_DOCUMENT", { wikiId, route: "ingest" });
+        if (vec?.length === EMBED_DIM) {
+          await tx.$executeRawUnsafe(
+            `UPDATE "SearchChunk" SET embedding = $1::vector WHERE id = $2 AND "modelAccess"='external'`,
+            `[${vec.join(",")}]`,
+            id,
+          );
+        }
+      });
     } catch (e) {
       console.error(`[search] category 임베딩 실패(backfill 예정): ${(e as Error).message}`);
     }
   } else {
     // 텍스트가 바뀌었는데 임베딩 못 하면 stale 벡터 제거(reindexEmbeddings가 backfill)
-    await prisma.$executeRawUnsafe(`UPDATE "SearchChunk" SET embedding = NULL WHERE id = $1`, id).catch(() => {});
+    await db.$executeRawUnsafe(`UPDATE "SearchChunk" SET embedding = NULL WHERE id = $1`, id).catch(() => {});
   }
 }
 
 /** rename/retire 시 category 코퍼스 행 삭제(합성 refId라 cascade 없음). */
 export async function deleteCategoryChunk(wikiId: string, slug: string): Promise<void> {
-  await prisma.searchChunk.deleteMany({ where: { wikiId, refType: "category", refId: catRef(slug) } });
+  await modelPolicyClient(wikiId).searchChunk.deleteMany({ where: { wikiId, refType: "category", refId: catRef(slug) } });
 }
 
 /** 코퍼스 내 category 쌍 중 코사인 유사도가 높은(중복 의심) 쌍. lint의 병합 후보 탐지용. */
 export async function findSimilarCategories(wikiId: string, minSim = 0.8): Promise<{ a: string; b: string; sim: number }[]> {
-  const rows = await prisma.$queryRawUnsafe<{ a: string; b: string; sim: number }[]>(
+  const rows = await modelPolicyClient(wikiId).$queryRawUnsafe<{ a: string; b: string; sim: number }[]>(
     `SELECT a."refId" AS a, b."refId" AS b, 1 - (a.embedding <=> b.embedding) AS sim
      FROM "SearchChunk" a
      JOIN "SearchChunk" b
-       ON b."wikiId" = a."wikiId" AND b."refType" = 'category' AND b.embedding IS NOT NULL AND a."refId" < b."refId"
-     WHERE a."wikiId" = $1 AND a."refType" = 'category' AND a.embedding IS NOT NULL
+       ON b."wikiId" = a."wikiId" AND b."refType" = 'category' AND b."modelAccess"='external'
+       AND b.embedding IS NOT NULL AND a."refId" < b."refId"
+     WHERE a."wikiId" = $1 AND a."refType" = 'category' AND a."modelAccess"='external' AND a.embedding IS NOT NULL
        AND 1 - (a.embedding <=> b.embedding) >= $2
      ORDER BY sim DESC LIMIT 20`,
     wikiId,
@@ -203,25 +320,46 @@ export async function findSimilarCategories(wikiId: string, minSim = 0.8): Promi
 export async function matchCategorySemantic(wikiId: string, text: string): Promise<{ slug: string; score: number }[]> {
   const q = text.trim();
   if (!q || !geminiEnabled()) return [];
-  let qv: number[] | undefined;
   try {
-    [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "category-match" });
+    return await withExternalModelDispatchLock(wikiId, async (tx) => {
+      // governance가 internalOnly 페이지 제목을 그대로 넘기는 경로도 fail-closed. 정책 검사와
+      // query embedding dispatch를 같은 shared lock에 둬 downgrade 경합도 막는다.
+      const sensitiveTitle = await tx.page.count({
+        where: { wikiId, archivedAt: null, modelAccess: "internalOnly", title: q },
+      });
+      if (sensitiveTitle > 0) return [];
+      const [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "category-match" });
+      if (!qv || qv.length !== EMBED_DIM) return [];
+      // S2: wikiId + refType='category' 필터(테넌트 격리 + 오염 방지)
+      const rows = await tx.$queryRawUnsafe<{ refId: string; score: number }[]>(
+        `SELECT "refId", 1 - (embedding <=> $2::vector) AS score FROM "SearchChunk"
+         WHERE "wikiId"=$1 AND "refType"='category' AND "modelAccess"='external' AND embedding IS NOT NULL
+         ORDER BY embedding <=> $2::vector ASC LIMIT 8`,
+        wikiId,
+        `[${qv.join(",")}]`,
+      );
+      // 유사도 하한: 무관한 도메인 category가 재사용 후보로 주입되는 것 방지.
+      const ranked = rows
+        .map((row) => ({ slug: row.refId.replace(/^category:/, ""), score: Number(row.score) }))
+        .filter((row) => row.score >= 0.62);
+      const out: typeof ranked = [];
+      for (const row of ranked) {
+        const eligible = await tx.page.count({
+          where: {
+            wikiId,
+            archivedAt: null,
+            modelAccess: "external",
+            kind: { not: "personal" },
+            OR: [{ category: row.slug }, { category: { startsWith: `${row.slug}/` } }],
+          },
+        });
+        if (eligible > 0) out.push(row);
+      }
+      return out;
+    });
   } catch {
     return [];
   }
-  if (!qv || qv.length !== EMBED_DIM) return [];
-  // S2: wikiId + refType='category' 필터(테넌트 격리 + 오염 방지)
-  const rows = await prisma.$queryRawUnsafe<{ refId: string; score: number }[]>(
-    `SELECT "refId", 1 - (embedding <=> $2::vector) AS score FROM "SearchChunk"
-     WHERE "wikiId"=$1 AND "refType"='category' AND embedding IS NOT NULL
-     ORDER BY embedding <=> $2::vector ASC LIMIT 8`,
-    wikiId,
-    `[${qv.join(",")}]`,
-  );
-  // 유사도 하한: 무관한 도메인 category가 재사용 후보로 주입되는 것 방지(문자열 경로의 0.5 floor와 대칭)
-  return rows
-    .map((r) => ({ slug: r.refId.replace(/^category:/, ""), score: Number(r.score) }))
-    .filter((r) => r.score >= 0.62);
 }
 
 /**
@@ -230,28 +368,64 @@ export async function matchCategorySemantic(wikiId: string, text: string): Promi
  */
 const REINDEX_BATCH = 500; // 호출당 처리 상한(대량 시 타임아웃 방지, remaining>0이면 재호출로 이어감)
 
+const EMBEDDABLE_EXTERNAL_SQL = `
+  c."modelAccess"='external'
+  AND (
+    (c."refType"='page' AND EXISTS (
+      SELECT 1 FROM "Page" p
+      WHERE p.id=c."refId" AND p."wikiId"=c."wikiId"
+        AND p."archivedAt" IS NULL AND p."modelAccess"='external' AND p.kind <> 'personal'
+    ))
+    OR (c."refType"='source' AND EXISTS (
+      SELECT 1 FROM "Source" s
+      WHERE s.id=c."refId" AND s."wikiId"=c."wikiId"
+        AND s."archivedAt" IS NULL AND s."modelAccess"='external'
+    ))
+    OR (c."refType"='category' AND EXISTS (
+      SELECT 1 FROM "Page" p
+      WHERE p."wikiId"=c."wikiId" AND p."archivedAt" IS NULL
+        AND p."modelAccess"='external' AND p.kind <> 'personal'
+        AND (
+          p.category=substring(c."refId" from 10)
+          OR left(p.category, length(substring(c."refId" from 10))+1)=substring(c."refId" from 10) || '/'
+        )
+    ))
+  )`;
+
 export async function reindexEmbeddings(wikiId: string): Promise<{ embedded: number; remaining: number }> {
   if (!geminiEnabled()) return { embedded: 0, remaining: 0 };
-  const rows = await prisma.$queryRawUnsafe<{ id: string; text: string }[]>(
-    `SELECT id, text FROM "SearchChunk" WHERE "wikiId"=$1 AND embedding IS NULL LIMIT ${REINDEX_BATCH}`,
-    wikiId,
-  );
-  if (rows.length === 0) return { embedded: 0, remaining: 0 };
+  return withExternalModelDispatchLock(wikiId, async (tx) => {
+    // SearchChunk 복제 정책만 믿지 않고 Page/Source projection을 dispatch 직전에 재검증한다.
+    const rows = await tx.$queryRawUnsafe<{ id: string; text: string }[]>(
+      `SELECT c.id, c.text FROM "SearchChunk" c
+       WHERE c."wikiId"=$1 AND c.embedding IS NULL AND ${EMBEDDABLE_EXTERNAL_SQL}
+       LIMIT ${REINDEX_BATCH}`,
+      wikiId,
+    );
+    if (rows.length === 0) return { embedded: 0, remaining: 0 };
 
-  const vecs = await embedTexts(
-    rows.map((r) => r.text),
-    "RETRIEVAL_DOCUMENT",
-    { wikiId, route: "reindex" },
-  );
-  for (let i = 0; i < rows.length; i++) {
-    const lit = `[${vecs[i].join(",")}]`;
-    await prisma.$executeRawUnsafe(`UPDATE "SearchChunk" SET embedding = $1::vector WHERE id = $2`, lit, rows[i].id);
-  }
-  const rest = await prisma.$queryRawUnsafe<{ n: number }[]>(
-    `SELECT count(*)::int AS n FROM "SearchChunk" WHERE "wikiId"=$1 AND embedding IS NULL`,
-    wikiId,
-  );
-  return { embedded: rows.length, remaining: Number(rest[0]?.n ?? 0) };
+    const vecs = await embedTexts(
+      rows.map((r) => r.text),
+      "RETRIEVAL_DOCUMENT",
+      { wikiId, route: "reindex" },
+    );
+    let embedded = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const lit = `[${vecs[i].join(",")}]`;
+      embedded += await tx.$executeRawUnsafe(
+        `UPDATE "SearchChunk" c SET embedding = $1::vector
+         WHERE c.id=$2 AND ${EMBEDDABLE_EXTERNAL_SQL}`,
+        lit,
+        rows[i].id,
+      );
+    }
+    const rest = await tx.$queryRawUnsafe<{ n: number }[]>(
+      `SELECT count(*)::int AS n FROM "SearchChunk" c
+       WHERE c."wikiId"=$1 AND c.embedding IS NULL AND ${EMBEDDABLE_EXTERNAL_SQL}`,
+      wikiId,
+    );
+    return { embedded, remaining: Number(rest[0]?.n ?? 0) };
+  });
 }
 
 // ---------- 하이브리드 검색 ----------
@@ -267,8 +441,9 @@ export interface SearchHit {
   pageTitle?: string;
 }
 
-// S2: category 코퍼스가 일반 검색에 오염되지 않게 refType을 page/source로 제한.
-const FTS_SQL = `
+// category 코퍼스가 일반 검색에 오염되지 않게 refType을 page/source로 제한.
+// 로컬 FTS는 정책을 가리지 않으며 외부 API를 전혀 호출하지 않는다.
+const LOCAL_FTS_SQL = `
   SELECT id FROM "SearchChunk"
   WHERE "wikiId" = $1
     AND "refType" IN ('page','source')
@@ -276,61 +451,75 @@ const FTS_SQL = `
   ORDER BY ts_rank(to_tsvector('simple', text), websearch_to_tsquery('simple', $2)) DESC
   LIMIT $3`;
 
-const VEC_SQL = `
+const MODEL_FTS_SQL = `
+  SELECT id FROM "SearchChunk"
+  WHERE "wikiId" = $1
+    AND "refType" IN ('page','source')
+    AND "modelAccess" = 'external'
+    AND to_tsvector('simple', text) @@ websearch_to_tsquery('simple', $2)
+  ORDER BY ts_rank(to_tsvector('simple', text), websearch_to_tsquery('simple', $2)) DESC
+  LIMIT $3`;
+
+const MODEL_VEC_SQL = `
   SELECT id, 1 - (embedding <=> $2::vector) AS sim FROM "SearchChunk"
-  WHERE "wikiId" = $1 AND "refType" IN ('page','source') AND embedding IS NOT NULL
+  WHERE "wikiId" = $1
+    AND "refType" IN ('page','source')
+    AND "modelAccess" = 'external'
+    AND embedding IS NOT NULL
   ORDER BY embedding <=> $2::vector ASC
   LIMIT $3`;
 
 type IdRow = { id: string };
 type VecRow = { id: string; sim: number };
 
-export async function hybridSearch(wikiId: string, queryText: string, k = RESULT_N): Promise<SearchHit[]> {
-  const q = queryText.trim();
-  if (!q) return [];
-
-  const ftsRows = await prisma.$queryRawUnsafe<IdRow[]>(FTS_SQL, wikiId, q, POOL);
-
-  let vecRows: VecRow[] = [];
-  if (geminiEnabled()) {
-    try {
-      const [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "search" });
-      if (qv?.length === EMBED_DIM) {
-        vecRows = await prisma.$queryRawUnsafe<VecRow[]>(VEC_SQL, wikiId, `[${qv.join(",")}]`, POOL);
-      }
-    } catch (e) {
-      // 쿼리 임베딩 실패 시 FTS 단독으로 graceful degrade (검색 자체는 죽지 않음)
-      console.error(`[search] 쿼리 임베딩 실패, FTS 단독 폴백: ${(e as Error).message}`);
-    }
-  }
-
-  // 관련도 게이팅용 원시 코사인 유사도(id → sim)
-  const simById = new Map(vecRows.map((r) => [r.id, Number(r.sim)]));
-
-  // RRF: score = Σ 1/(K + rank)
-  const scores = new Map<string, number>();
-  const add = (rows: IdRow[]) =>
-    rows.forEach((r, i) => scores.set(r.id, (scores.get(r.id) ?? 0) + 1 / (RRF_K + i + 1)));
-  add(ftsRows);
-  add(vecRows);
-
-  const rankedAll = [...scores.entries()].sort((a, b) => b[1] - a[1]);
-  if (!rankedAll.length) return [];
-
-  // 페이지/소스 단위 dedup을 위해 후보를 넉넉히(k*3) 확보
-  const candidates = rankedAll.slice(0, k * 3);
+async function hydrateActiveHits(
+  tx: Prisma.TransactionClient,
+  wikiId: string,
+  candidates: [string, number][],
+  simById: Map<string, number>,
+  k: number,
+  access: "local" | "external",
+): Promise<SearchHit[]> {
+  if (candidates.length === 0) return [];
   const ids = candidates.map(([id]) => id);
-  const chunks = await prisma.searchChunk.findMany({
+  const chunks = await tx.searchChunk.findMany({
     where: { id: { in: ids } },
-    select: { id: true, refType: true, refId: true, heading: true, text: true },
+    select: { id: true, refType: true, refId: true, heading: true, text: true, modelAccess: true },
   });
   const byId = new Map(chunks.map((c) => [c.id, c]));
 
   const pageIds = chunks.filter((c) => c.refType === "page").map((c) => c.refId);
+  const sourceIds = chunks.filter((c) => c.refType === "source").map((c) => c.refId);
   const pages = pageIds.length
-    ? await prisma.page.findMany({ where: { id: { in: pageIds } }, select: { id: true, slug: true, title: true } })
+    ? await tx.page.findMany({
+        where: {
+          wikiId,
+          id: { in: pageIds },
+          archivedAt: null,
+          ...(access === "external"
+            ? {
+                modelAccess: "external" as const,
+                kind: { not: "personal" as const },
+                slug: { not: ONTOLOGY_SLUG },
+              }
+            : {}),
+        },
+        select: { id: true, slug: true, title: true },
+      })
+    : [];
+  const sources = sourceIds.length
+    ? await tx.source.findMany({
+        where: {
+          wikiId,
+          id: { in: sourceIds },
+          archivedAt: null,
+          ...(access === "external" ? { modelAccess: "external" as const } : {}),
+        },
+        select: { id: true },
+      })
     : [];
   const pageById = new Map(pages.map((p) => [p.id, p]));
+  const sourceSet = new Set(sources.map((s) => s.id));
 
   const seenRefs = new Set<string>();
   const hits: SearchHit[] = [];
@@ -338,11 +527,15 @@ export async function hybridSearch(wikiId: string, queryText: string, k = RESULT
     if (hits.length >= k) break;
     const c = byId.get(id);
     if (!c) continue;
+    if (access === "external" && c.modelAccess !== "external") continue;
+    const pg = c.refType === "page" ? pageById.get(c.refId) : undefined;
+    if (c.refType === "page" && !pg) continue;
+    if (c.refType === "source" && !sourceSet.has(c.refId)) continue;
+    if (c.refType !== "page" && c.refType !== "source") continue;
     const refKey = `${c.refType}:${c.refId}`;
     if (seenRefs.has(refKey)) continue; // 같은 페이지/소스의 다른 청크 중복 제거
     seenRefs.add(refKey);
     const snippet = c.text.replace(/^\[.*?\]\n/, "").replace(/\s+/g, " ").slice(0, 180);
-    const pg = c.refType === "page" ? pageById.get(c.refId) : undefined;
     hits.push({
       id,
       refType: c.refType as RefType,
@@ -356,6 +549,63 @@ export async function hybridSearch(wikiId: string, queryText: string, k = RESULT
     });
   }
   return hits;
+}
+
+/** 인증된 UI 전용 로컬 검색. Gemini query embedding을 포함해 외부 호출을 전혀 하지 않는다. */
+export async function localFtsSearch(wikiId: string, queryText: string, k = RESULT_N): Promise<SearchHit[]> {
+  const q = queryText.trim();
+  if (!q) return [];
+  const rows = await modelPolicyClient(wikiId).$queryRawUnsafe<IdRow[]>(LOCAL_FTS_SQL, wikiId, q, Math.max(POOL, k * 3));
+  const candidates: [string, number][] = rows
+    .slice(0, k * 3)
+    .map((r, i) => [r.id, 1 / (RRF_K + i + 1)]);
+  return hydrateActiveHits(modelPolicyClient(wikiId), wikiId, candidates, new Map(), k, "local");
+}
+
+export interface ModelSearchOptions extends ExternalModelScope {
+  wikiId: string;
+  queryText: string;
+  k?: number;
+}
+
+/** 외부 모델용 검색. external active projection만 반환하고 query embedding도 이 경로에서만 수행한다. */
+export async function modelSearch(opts: ModelSearchOptions): Promise<SearchHit[]> {
+  assertExternalModelScope(opts);
+  const { wikiId } = opts;
+  const k = opts.k ?? RESULT_N;
+  const q = opts.queryText.trim();
+  if (!q) return [];
+
+  return withExternalModelDispatchLock(wikiId, async (tx) => {
+    const ftsRows = await tx.$queryRawUnsafe<IdRow[]>(MODEL_FTS_SQL, wikiId, q, POOL);
+    let vecRows: VecRow[] = [];
+    if (geminiEnabled()) {
+      try {
+        const [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "search" });
+        if (qv?.length === EMBED_DIM) {
+          vecRows = await tx.$queryRawUnsafe<VecRow[]>(MODEL_VEC_SQL, wikiId, `[${qv.join(",")}]`, POOL);
+        }
+      } catch (e) {
+        console.error(`[search] 쿼리 임베딩 실패, FTS 단독 폴백: ${(e as Error).message}`);
+      }
+    }
+
+    const simById = new Map(vecRows.map((r) => [r.id, Number(r.sim)]));
+    const scores = new Map<string, number>();
+    const add = (rows: IdRow[]) =>
+      rows.forEach((r, i) => scores.set(r.id, (scores.get(r.id) ?? 0) + 1 / (RRF_K + i + 1)));
+    add(ftsRows);
+    add(vecRows);
+    const candidates = [...scores.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, k * 3);
+    return hydrateActiveHits(tx, wikiId, candidates, simById, k, "external");
+  });
+}
+
+/** 기존 호출자 호환. 무스코프 이름이지만 동작은 항상 external-only로 축소한다. */
+export function hybridSearch(wikiId: string, queryText: string, k = RESULT_N): Promise<SearchHit[]> {
+  return modelSearch({ ...EXTERNAL_MODEL_SCOPE, wikiId, queryText, k });
 }
 
 // ---------- KG(지식 그래프) 검색 확장 ----------
@@ -440,19 +690,29 @@ const isCuidLike = (s: string) => /^[a-z0-9]+$/.test(s);
 // 재귀 항에 집계 서브쿼리를 넣으면 pg가 거부하므로 LEFT JOIN 으로 게이팅한다. 허브캡은 seed(depth=0) 제외.
 const EXPAND_SQL = `
 WITH RECURSIVE
+external_rel AS (
+  SELECT r."fromPageId", r."toPageId"
+  FROM "ConceptRelation" r
+  JOIN "Source" s ON s.id=r."sourceId" AND s."wikiId"=r."wikiId"
+  JOIN "Page" pf ON pf.id=r."fromPageId" AND pf."wikiId"=r."wikiId"
+  JOIN "Page" pt ON pt.id=r."toPageId" AND pt."wikiId"=r."wikiId"
+  WHERE r."wikiId"=$1 AND s."archivedAt" IS NULL AND s."modelAccess"='external'
+    AND pf."archivedAt" IS NULL AND pf."modelAccess"='external' AND pf.kind <> 'personal'
+    AND pt."archivedAt" IS NULL AND pt."modelAccess"='external' AND pt.kind <> 'personal'
+),
 deg AS (
   -- 위상적 차수 = 서로 다른 이웃 개념 수. count(*)로 엣지 행을 세면 같은 논리 엣지가
   -- 원문마다 1행(unique 키에 sourceId 포함)이라, 다중근거 개념이 허브로 오판돼 확장이 막힌다.
   SELECT pid, count(DISTINCT nbr)::int AS c FROM (
-    SELECT "fromPageId" AS pid, "toPageId" AS nbr FROM "ConceptRelation" WHERE "wikiId" = $1
+    SELECT "fromPageId" AS pid, "toPageId" AS nbr FROM external_rel
     UNION ALL
-    SELECT "toPageId" AS pid, "fromPageId" AS nbr FROM "ConceptRelation" WHERE "wikiId" = $1
+    SELECT "toPageId" AS pid, "fromPageId" AS nbr FROM external_rel
   ) u GROUP BY pid
 ),
 uedges AS (
-  SELECT "fromPageId" AS src, "toPageId" AS dst FROM "ConceptRelation" WHERE "wikiId" = $1
+  SELECT "fromPageId" AS src, "toPageId" AS dst FROM external_rel
   UNION ALL
-  SELECT "toPageId" AS src, "fromPageId" AS dst FROM "ConceptRelation" WHERE "wikiId" = $1
+  SELECT "toPageId" AS src, "fromPageId" AS dst FROM external_rel
 ),
 seed(page_id) AS ( SELECT unnest($2::text[]) ),
 walk(page_id, depth, path) AS (
@@ -485,7 +745,7 @@ export async function expandViaGraph(wikiId: string, seedPageIds: string[], dept
   const literal = `{${seeds.join(",")}}`; // 검증된 cuid만 → 안전한 Postgres text[] 리터럴
   let rows: { page_id: string; depth: number }[];
   try {
-    rows = await prisma.$queryRawUnsafe<{ page_id: string; depth: number }[]>(
+    rows = await modelPolicyClient(wikiId).$queryRawUnsafe<{ page_id: string; depth: number }[]>(
       EXPAND_SQL,
       wikiId,
       literal,
@@ -499,10 +759,16 @@ export async function expandViaGraph(wikiId: string, seedPageIds: string[], dept
   }
   if (rows.length === 0) return [];
   const depthById = new Map(rows.map((r) => [r.page_id, Number(r.depth)]));
-  const pages = await prisma.page.findMany({
-    // 테넌트 재격리 + 온톨로지 제외 + AI 제외 kind 제외(concept→personal flip 시 남은 엣지로 personal 본문이
-    // 이웃 스니펫으로 새는 것 차단 — 추출 단계에서 personal은 애초에 KG에 안 들어가지만 flip 케이스 방어).
-    where: { wikiId, id: { in: rows.map((r) => r.page_id) }, slug: { not: ONTOLOGY_SLUG }, kind: { notIn: AI_EXCLUDED_KINDS } },
+  const pages = await modelPolicyClient(wikiId).page.findMany({
+    // 테넌트 재격리 + active external 정책 재검증. stale 엣지가 남아도 internal 본문은 반환하지 않는다.
+    where: {
+      wikiId,
+      id: { in: rows.map((r) => r.page_id) },
+      slug: { not: ONTOLOGY_SLUG },
+      archivedAt: null,
+      modelAccess: "external",
+      kind: { not: "personal" },
+    },
     select: { id: true, slug: true, title: true, body: true },
   });
   return pages

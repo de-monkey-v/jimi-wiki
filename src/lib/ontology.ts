@@ -1,5 +1,11 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import {
+  ContentVersionConflictError,
+  createPageSnapshot,
+  updatePageSnapshot,
+} from "@/lib/content-store";
+import { ONTOLOGY_PAGE_SLUG, isReservedWikiPageSlug } from "@/lib/wiki-routes";
 
 // ---------- 정본 규칙과 동기화되는 상수 (rules/ontology-rules.md 의 version:과 일치) ----------
 export const ONTOLOGY_RULES_VERSION = 2;
@@ -8,11 +14,10 @@ export const CATEGORY_MAX_DEPTH = 4;
 export const RESERVED_RELATIONS = ["uses", "is-a", "part-of", "contradicts", "example-of", "developed-by"] as const;
 
 // system 페이지 slug 예약(O2). 일반 writePage/upsertPage로 쓸 수 없다.
-export const ONTOLOGY_SLUG = "ontology";
-// system slug + 정적 자식 라우트(chat/lint/settings/sources/graph/new)와 충돌 방지: 이 slug로는 페이지를 만들 수 없다.
-const RESERVED_SLUGS = new Set<string>([ONTOLOGY_SLUG, "chat", "lint", "settings", "sources", "graph", "new"]);
+export const ONTOLOGY_SLUG = ONTOLOGY_PAGE_SLUG;
+// system slug + `/wikis/[slug]/...` 정적 라우트와의 충돌을 공용 SSOT로 방지한다.
 export function isReservedSlug(slug: string): boolean {
-  return RESERVED_SLUGS.has(slug.trim().toLowerCase());
+  return isReservedWikiPageSlug(slug);
 }
 
 // ---------- 온톨로지 문서 ----------
@@ -104,8 +109,8 @@ function validate(raw: Partial<OntologyDoc>): OntologyDoc {
 /** meta:ontology 페이지를 읽어 파싱. 없거나 깨졌으면 기본 spine 반환(절대 throw 안 함). */
 export async function getOntology(wikiId: string): Promise<OntologyDoc> {
   try {
-    const page = await prisma.page.findUnique({
-      where: { wikiId_slug: { wikiId, slug: ONTOLOGY_SLUG } },
+    const page = await prisma.page.findFirst({
+      where: { wikiId, slug: ONTOLOGY_SLUG, archivedAt: null },
       select: { body: true },
     });
     return parseDoc(page?.body) ?? { ...DEFAULT_ONTOLOGY };
@@ -117,7 +122,7 @@ export async function getOntology(wikiId: string): Promise<OntologyDoc> {
 /** 실제 페이지에 쓰인 category(자유형) 목록. 온톨로지 미성숙 단계의 부트스트랩·에이전트 힌트용. */
 export async function listCategories(wikiId: string): Promise<string[]> {
   const rows = await prisma.page.findMany({
-    where: { wikiId, category: { not: null } },
+    where: { wikiId, archivedAt: null, category: { not: null } },
     select: { category: true },
     distinct: ["category"],
   });
@@ -133,8 +138,9 @@ export async function setOntology(wikiId: string, mutate: (cur: OntologyDoc) => 
   for (let attempt = 0; attempt < 6; attempt++) {
     const page = await prisma.page.findUnique({
       where: { wikiId_slug: { wikiId, slug: ONTOLOGY_SLUG } },
-      select: { id: true, body: true },
+      select: { id: true, body: true, currentVersion: true, archivedAt: true },
     });
+    if (page?.archivedAt) throw new Error("보관된 온톨로지 페이지가 system slug를 점유하고 있습니다");
     const cur = parseDoc(page?.body) ?? { ...DEFAULT_ONTOLOGY };
     const next = validate(mutate(structuredClone(cur)));
     next.version = cur.version + 1;
@@ -142,15 +148,31 @@ export async function setOntology(wikiId: string, mutate: (cur: OntologyDoc) => 
 
     if (!page) {
       try {
-        await prisma.page.create({ data: { wikiId, slug: ONTOLOGY_SLUG, title: "온톨로지", kind: "meta", body } });
+        await createPageSnapshot({
+          wikiId,
+          slug: ONTOLOGY_SLUG,
+          title: "온톨로지",
+          kind: "meta",
+          body,
+          context: { actor: "system", reason: `ontology v${next.version}` },
+        });
       } catch (e) {
         if (isP2002(e)) continue; // 경합 생성 → 재시도(update 경로로)
         throw e;
       }
     } else {
-      // CAS: body가 우리가 읽은 값 그대로일 때만 갱신
-      const upd = await prisma.page.updateMany({ where: { id: page.id, body: page.body }, data: { body } });
-      if (upd.count !== 1) continue; // 그 사이 누가 바꿈 → 재시도
+      try {
+        await updatePageSnapshot({
+          wikiId,
+          pageId: page.id,
+          expectedVersion: page.currentVersion,
+          changes: { body },
+          context: { actor: "system", reason: `ontology v${next.version}` },
+        });
+      } catch (e) {
+        if (e instanceof ContentVersionConflictError) continue; // 그 사이 누가 바꿈 → 재시도
+        throw e;
+      }
     }
 
     await prisma.logEntry.create({

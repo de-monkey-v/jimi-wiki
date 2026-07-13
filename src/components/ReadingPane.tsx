@@ -33,6 +33,9 @@ export function ReadingPane({
   translateControl,
   pinControl,
   create,
+  headerMeta,
+  notice,
+  controls,
 }: {
   title: string;
   html: string;
@@ -53,23 +56,35 @@ export function ReadingPane({
   translateControl?: ReactNode;
   pinControl?: ReactNode; // 개인 즐겨찾기 별 토글(비공개 뷰만)
   create?: { wikiSlug: string; category: string | null }; // 있으면 미해결 [[link]] 클릭 → 생성(비공개 쓰기 뷰만)
+  headerMeta?: ReactNode; // origin/modelAccess/version 등 비공개 뷰 전용 헤더 메타
+  notice?: ReactNode; // archive 등 현재 문서 상태 안내
+  controls?: ReactNode; // 비공개 화면의 정책·수명주기 제어
 }) {
   const t = useTranslations("ReadingPane");
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       {crumb}
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{title}</h1>
-        <div className="flex items-center gap-2">
-          {pinControl}
-          {translateControl}
-          {editHref && (
-            <Link href={editHref} className="rounded border px-3 py-1 text-sm hover:bg-stone-50">
-              {t("edit")}
-            </Link>
-          )}
+      {notice && <div className="mt-3">{notice}</div>}
+      <div className="mb-6 mt-3">
+        {headerMeta && <div className="mb-2">{headerMeta}</div>}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="min-w-0 break-words text-2xl font-bold">{title}</h1>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {pinControl}
+            {translateControl}
+            {editHref && (
+              <Link
+                href={editHref}
+                className="rounded border px-3 py-1 text-sm hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
+                {t("edit")}
+              </Link>
+            )}
+          </div>
         </div>
       </div>
+
+      {controls && <div className="mb-6">{controls}</div>}
 
       {/* 소스 노트: 원문 provenance 카드(합성/관계는 본문에 없음) */}
       {isNote && provenance && <ProvenanceCard title={provenance.title} href={provenance.href} url={provenance.url} />}

@@ -13,7 +13,11 @@ import { reindexEmbeddings } from "@/lib/search";
 import { normalizeCategoryForWrite } from "@/lib/governance";
 import { checkDailyQuota } from "@/lib/usage";
 import { prisma } from "@/lib/db";
-import type { PageKind, WikiKind } from "@/generated/prisma/client";
+import type { ModelAccess, PageKind, WikiKind } from "@/generated/prisma/client";
+
+function formModelAccess(formData: FormData): ModelAccess {
+  return String(formData.get("modelAccess") ?? "external") === "internalOnly" ? "internalOnly" : "external";
+}
 
 // 쓰기 액션 공통: 멤버십 + editor 이상 역할 확인
 async function requireWriteAccess(userId: string, wikiSlug: string) {
@@ -60,8 +64,9 @@ export async function createPageAction(formData: FormData) {
   const catRaw = String(formData.get("category") ?? "").trim();
   const category = catRaw ? await normalizeCategoryForWrite(wiki.id, catRaw) : null;
   const body = String(formData.get("body") ?? "");
+  const modelAccess = formModelAccess(formData);
   // 제목·종류·카테고리·본문을 한 화면에서 받아 곧바로 저장하고 페이지 뷰로 이동한다(별도 편집 단계 없음).
-  const page = await createPage(wiki.id, { title, kind, category, body });
+  const page = await createPage(wiki.id, { title, kind, category, body, modelAccess, userId });
   revalidatePath(`/wikis/${wikiSlug}`, "layout"); // 사이드바 TOC 갱신(폴더 "+"·수동 생성이 즉시 반영)
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(page.slug)}`);
 }
@@ -70,14 +75,17 @@ export async function savePageAction(formData: FormData) {
   const userId = await getCurrentUserId();
   const wikiSlug = String(formData.get("wikiSlug"));
   const pageSlug = String(formData.get("pageSlug"));
+  if (isReservedSlug(pageSlug)) throw new Error("system page는 일반 편집할 수 없습니다");
   const wiki = await requireWriteAccess(userId, wikiSlug);
   const title = String(formData.get("title") ?? "");
   const submittedKind = String(formData.get("kind") ?? "") as PageKind;
   const body = String(formData.get("body") ?? "");
+  const expectedVersion = Number(formData.get("expectedVersion"));
+  if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) throw new Error("유효한 page version이 필요합니다");
   // kind는 수동 kind(concept/entity)로만 변경 허용. 시스템 kind(note/meta)면 기존 값을 유지한다.
   const current = await getPage(wiki.id, pageSlug);
   const kind: PageKind = MANUAL_KINDS.includes(submittedKind) ? submittedKind : (current?.kind ?? "concept");
-  await updatePage(wiki.id, pageSlug, { title, kind, body });
+  await updatePage(wiki.id, pageSlug, { title, kind, body, userId, expectedVersion });
   revalidatePath(`/wikis/${wikiSlug}/${pageSlug}`);
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(pageSlug)}`);
 }
@@ -114,7 +122,14 @@ export async function quickCaptureAction(formData: FormData) {
     redirect(`/wikis/${encodeURIComponent(wikiSlug)}/reading`);
   }
   const wiki = await requireWriteAccess(userId, wikiSlug);
-  const page = await createPage(wiki.id, { title: firstLineTitle(body), kind: "personal", body, category: null });
+  const page = await createPage(wiki.id, {
+    title: firstLineTitle(body),
+    kind: "personal",
+    body,
+    category: null,
+    modelAccess: "internalOnly",
+    userId,
+  });
   revalidatePath(`/wikis/${wikiSlug}`, "layout"); // 사이드바 TOC(레이아웃) 갱신 — 새 노트가 '내 노트'에 즉시 노출
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(page.slug)}`);
 }
@@ -179,10 +194,13 @@ export async function movePageAction(formData: FormData) {
   const userId = await getCurrentUserId();
   const wikiSlug = String(formData.get("wikiSlug"));
   const pageSlug = String(formData.get("pageSlug"));
+  if (isReservedSlug(pageSlug)) throw new Error("system page는 이동할 수 없습니다");
   const wiki = await requireWriteAccess(userId, wikiSlug);
   const catRaw = String(formData.get("category") ?? "").trim();
   const category = catRaw ? await normalizeCategoryForWrite(wiki.id, catRaw) : null;
-  await setPageCategory(wiki.id, pageSlug, category);
+  const expectedVersion = Number(formData.get("expectedVersion"));
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion <= 0) throw new Error("유효한 page version이 필요합니다");
+  await setPageCategory(wiki.id, pageSlug, category, expectedVersion, userId);
   revalidatePath(`/wikis/${wikiSlug}`, "layout"); // 이동(refile) 후 사이드바 폴더 위치 갱신
   revalidatePath(`/wikis/${wikiSlug}/${pageSlug}`);
 }
@@ -227,7 +245,7 @@ export async function createFromWikilinkAction(wikiSlug: string, targetSlug: str
   const existing = await getPage(wiki.id, slug);
   if (existing) return existing.slug; // 이미 있으면 그대로 이동
   const cat = category ? await normalizeCategoryForWrite(wiki.id, category) : null;
-  const page = await createPage(wiki.id, { title: slug, kind: "concept", body: "", slug, category: cat });
+  const page = await createPage(wiki.id, { title: slug, kind: "concept", body: "", slug, category: cat, userId });
   revalidatePath(`/wikis/${wikiSlug}`, "layout"); // 미해결 링크로 생성된 페이지가 사이드바에 즉시 노출
   return page.slug;
 }
@@ -236,7 +254,8 @@ export async function ingestAction(formData: FormData) {
   const userId = await getCurrentUserId();
   const wikiSlug = String(formData.get("wikiSlug"));
   const wiki = await requireWriteAccess(userId, wikiSlug);
-  await requireQuota(userId);
+  const modelAccess = formModelAccess(formData);
+  if (modelAccess === "external") await requireQuota(userId);
   const url = String(formData.get("url") ?? "").trim() || undefined;
   const text = String(formData.get("text") ?? "").trim() || undefined;
   const title = String(formData.get("title") ?? "").trim() || undefined;
@@ -260,11 +279,15 @@ export async function ingestAction(formData: FormData) {
   // 검증 통과 후에만 잡 생성(비동기: 처리는 별도 worker). ?run=으로 첫 잡의 상태 배지 표시.
   let firstRunId: string | undefined;
   if (url || text) {
-    const run = await createIngestRun(wiki.id, { url, text, title }, userId);
+    const run = await createIngestRun(wiki.id, { url, text, title, modelAccess }, userId);
     firstRunId ??= run.id;
   }
   for (const { file, buffer } of files) {
-    const run = await createFileIngestRun(wiki.id, { buffer, filename: file.name, mimeType: file.type || undefined }, userId);
+    const run = await createFileIngestRun(
+      wiki.id,
+      { buffer, filename: file.name, mimeType: file.type || undefined, modelAccess },
+      userId,
+    );
     firstRunId ??= run.id;
   }
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}${firstRunId ? `?run=${firstRunId}` : ""}`);

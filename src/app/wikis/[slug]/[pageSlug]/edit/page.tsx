@@ -32,6 +32,7 @@ export default async function EditPage({
       <form action={savePageAction} className="space-y-4">
         <input type="hidden" name="wikiSlug" value={slug} />
         <input type="hidden" name="pageSlug" value={pageSlug} />
+        <input type="hidden" name="expectedVersion" value={page.currentVersion} />
 
         <div className="flex gap-3">
           <input

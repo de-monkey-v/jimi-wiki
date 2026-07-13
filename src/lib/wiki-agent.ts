@@ -6,6 +6,12 @@ import { chatModel } from "@/lib/model-config";
 import { DEFAULT_CHAT_MODEL } from "@/lib/model-defaults";
 import { detectLang } from "@/lib/lang";
 import { recordUsage, checkDailyQuota } from "@/lib/usage";
+import {
+  EXTERNAL_MODEL_SCOPE,
+  modelPolicyDispatchSignal,
+  scopeToolsForExternalModel,
+  withExternalModelDispatchLock,
+} from "@/lib/model-access";
 
 const MAX_TURNS = 10;
 
@@ -46,18 +52,24 @@ export async function runWikiAgent(opts: {
 
   const wiki = await prisma.wiki.findUnique({ where: { id: opts.wikiId }, select: { title: true } });
   const langName = detectLang(opts.userMessage).name;
-  const tools: ToolSpec[] = [
-    ...buildReadTools(opts.wikiId), // 찾기: 검색·조회
-    ...buildIngestActionTools(opts.wikiId, opts.chatId, opts.userId), // 넣기: URL/텍스트 편입(비동기)
-  ];
-
-  const loop = await generateWithTools({
-    system: botSystem(wiki?.title ?? "위키", langName),
-    userPrompt: opts.userMessage,
-    history: opts.history,
-    tools,
-    model,
-    maxTurns: MAX_TURNS,
+  const loop = await withExternalModelDispatchLock(opts.wikiId, async (tx) => {
+    // tool handler는 AsyncLocalStorage로 이 tx를 재사용한다. 모델 루프 안에서 별도 Prisma
+    // 연결을 빌리면 동시 요청 시 shared-lock transaction끼리 pool을 고갈시킬 수 있다.
+    void tx;
+    const tools: ToolSpec[] = [
+      // ingest의 공용 tool schema는 재사용하되 list/read handler는 active external loader로 교체한다.
+      ...scopeToolsForExternalModel(opts.wikiId, buildReadTools(opts.wikiId), EXTERNAL_MODEL_SCOPE),
+      ...buildIngestActionTools(opts.wikiId, opts.chatId, opts.userId), // 넣기: URL/텍스트 편입(비동기)
+    ];
+    return generateWithTools({
+      system: botSystem(wiki?.title ?? "위키", langName),
+      userPrompt: opts.userMessage,
+      history: opts.history,
+      tools,
+      model,
+      maxTurns: MAX_TURNS,
+      abortSignal: modelPolicyDispatchSignal(opts.wikiId),
+    });
   });
 
   if (loop.usage) {

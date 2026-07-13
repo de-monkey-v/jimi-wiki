@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { apiWikiGate, sessionOnlyGate } from "@/lib/api-gate";
 import { lintWiki } from "@/lib/lint";
+import { requestsExternalModelScope, withExternalModelResponseScope } from "@/lib/content-api";
+import { EXTERNAL_MODEL_SCOPE } from "@/lib/model-access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -38,8 +40,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   try {
-    const report = await lintWiki(wikiId, { deep: !!body?.deep, userId, persist: true });
-    return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } });
+    return await withExternalModelResponseScope(req, wikiId, async (tx) => {
+      void tx; // lint loaders use the ambient model-policy transaction.
+      const report = await lintWiki(wikiId, {
+        deep: !!body?.deep,
+        userId,
+        persist: true,
+        ...(requestsExternalModelScope(req) ? { modelScope: EXTERNAL_MODEL_SCOPE } : {}),
+      });
+      return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } });
+    });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

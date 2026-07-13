@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { ensureSourceNote } from "../src/lib/ingest";
+import { queueIncrementalKnowledgeBuild } from "../src/lib/builds";
 
 /**
  * 고아 Source 정리 도구(로컬 인스턴스용, 공개 배포 무관).
@@ -19,14 +20,25 @@ async function main() {
 
   // note(kind=note, Page.sourceId=Source.id)가 하나도 없는 Source
   const orphanSources = await prisma.source.findMany({
-    where: { pages: { none: { kind: "note" } } },
-    select: { id: true, wikiId: true, slug: true, title: true, url: true, body: true, ingestedAt: true },
+    where: { archivedAt: null, pages: { none: { kind: "note", archivedAt: null } } },
+    select: {
+      id: true,
+      wikiId: true,
+      slug: true,
+      title: true,
+      url: true,
+      body: true,
+      modelAccess: true,
+      currentVersion: true,
+      ingestedAt: true,
+      revisions: { orderBy: { version: "desc" }, take: 1, select: { id: true, version: true } },
+    },
     orderBy: { ingestedAt: "desc" },
   });
 
   // 원문(Source)에 연결되지 않은 note 페이지(원문 아닌데 "원문/소스" 목록에 뜨는 것)
   const orphanNotes = await prisma.page.findMany({
-    where: { kind: "note", sourceId: null },
+    where: { kind: "note", sourceId: null, archivedAt: null },
     select: { wikiId: true, slug: true, title: true },
     orderBy: { createdAt: "desc" },
   });
@@ -52,15 +64,30 @@ async function main() {
     return;
   }
 
-  console.log(`\n--apply: note 없는 Source ${orphanSources.length}개에 스텁 note 생성...`);
+  console.log(`\n--apply: internal/blob-only는 스텁 생성, external 본문은 incremental build 큐잉...`);
   let created = 0;
+  let queued = 0;
   for (const s of orphanSources) {
-    // ensureSourceNote는 멱등: 이미 note가 있으면 no-op. content가 비어도 헤더 스텁은 생성된다.
-    await ensureSourceNote(s.wikiId, s.id, s.slug, s.url ?? undefined, s.title, s.body ?? "");
-    created++;
-    console.log(`  ✓ ${s.slug}`);
+    const revision = s.revisions[0];
+    if (!revision || revision.version !== s.currentVersion) {
+      console.log(`  ✗ ${s.slug}: current SourceRevision 없음`);
+      continue;
+    }
+    if (s.modelAccess === "internalOnly" || !(s.body ?? "").trim()) {
+      await ensureSourceNote(s.wikiId, s.id, s.slug, s.url ?? undefined, s.title, s.body ?? "", undefined, {
+        sourceRevisionId: revision.id,
+        modelAccess: s.modelAccess,
+        deterministicOnly: s.modelAccess === "internalOnly",
+      });
+      created++;
+      console.log(`  ✓ ${s.slug}: deterministic stub`);
+      continue;
+    }
+    const { buildId } = await queueIncrementalKnowledgeBuild(s.wikiId, null, revision.id);
+    queued++;
+    console.log(`  ✓ ${s.slug}: build ${buildId} 큐잉`);
   }
-  console.log(`\n완료: 스텁 note ${created}개 생성. "원문/소스" 목록에 이제 노출된다.\n`);
+  console.log(`\n완료: 스텁 ${created}개 생성, build ${queued}개 큐잉.\n`);
 }
 
 main()

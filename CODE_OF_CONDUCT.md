@@ -34,12 +34,12 @@ Examples of unacceptable behavior · 용납되지 않는 행동의 예:
 ## Enforcement · 집행
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project
-maintainer via [GitHub Security Advisories](https://github.com/gyuhyeonLee/jimi-wiki-app/security/advisories/new)
+maintainer via [GitHub Security Advisories](https://github.com/de-monkey-v/jimi-wiki-app/security/advisories/new)
 or by email. All complaints will be reviewed and investigated promptly and fairly. Maintainers are
 obligated to respect the privacy and security of the reporter.
 
 학대·괴롭힘 등 용납되지 않는 행동은 관리자에게
-[GitHub Security Advisories](https://github.com/gyuhyeonLee/jimi-wiki-app/security/advisories/new)
+[GitHub Security Advisories](https://github.com/de-monkey-v/jimi-wiki-app/security/advisories/new)
 또는 이메일로 신고할 수 있습니다. 모든 신고는 신속·공정하게 검토되며, 관리자는 신고자의 사생활과
 안전을 존중할 의무가 있습니다.
 

@@ -6,8 +6,8 @@ body:
     attributes:
       value: |
         Thanks for the report! For **security vulnerabilities**, do NOT use this form —
-        see [SECURITY.md](https://github.com/gyuhyeonLee/jimi-wiki-app/blob/main/SECURITY.md).
-        보안 취약점은 이 양식 대신 [SECURITY.md](https://github.com/gyuhyeonLee/jimi-wiki-app/blob/main/SECURITY.md)를 따라 주세요.
+        see [SECURITY.md](https://github.com/de-monkey-v/jimi-wiki-app/blob/main/SECURITY.md).
+        보안 취약점은 이 양식 대신 [SECURITY.md](https://github.com/de-monkey-v/jimi-wiki-app/blob/main/SECURITY.md)를 따라 주세요.
   - type: textarea
     id: what-happened
     attributes:

@@ -48,6 +48,7 @@ enum AgentType {
   ingest
   query
   lint
+  rebuild
 }
 
 enum AgentStatus {
@@ -55,6 +56,51 @@ enum AgentStatus {
   running
   done
   error
+}
+
+enum PageOrigin {
+  human
+  generated
+  mixed
+  system
+}
+
+enum ModelAccess {
+  external
+  internalOnly
+}
+
+enum RevisionActor {
+  human
+  agent
+  system
+  restore
+}
+
+enum BuildMode {
+  incremental
+  full
+  restore
+}
+
+enum BuildStatus {
+  pending
+  running
+  review
+  published
+  publishedDegraded
+  failed
+  cancelled
+}
+
+enum DraftStatus {
+  staged
+  conflict
+  published
+  accepted
+  rejected
+  stale
+  suppressed
 }
 
 // ---------- 앱 전역 설정 (단일행) ----------
@@ -146,6 +192,8 @@ model UsageEvent {
   userId       String? // 호출 주체(세션/키 소유자). 컨텍스트 없으면 null
   apiKeyId     String? // API 키 호출이면 그 키 id
   wikiId       String? // 대상 위키
+  buildId      String? // KnowledgeBuild 귀속(soft reference; build purge가 usage를 지우지 않음)
+  phase        String? // extract|synthesize|publish|index 등 build 단계
   kind         String // "llm" | "embed"
   route        String   @default("") // 호출 출처("query"|"ingest"|"chat"|"lint"|"search"|"reindex" 등)
   model        String? // 사용 모델명
@@ -155,6 +203,7 @@ model UsageEvent {
 
   @@index([userId, createdAt])
   @@index([wikiId, createdAt])
+  @@index([buildId, createdAt])
 }
 
 model Account {
@@ -193,31 +242,32 @@ model VerificationToken {
 
 // ---------- 테넌트 ----------
 model Wiki {
-  id          String       @id @default(cuid())
-  slug        String       @unique
-  title       String
-  description String?
-  visibility  Visibility   @default(private)
-  kind        WikiKind     @default(personal)
-  createdById String
-  createdBy   User         @relation("WikiCreatedBy", fields: [createdById], references: [id])
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  memberships Membership[]
-  pages       Page[]
-  pageLinks   PageLink[]
-  sources     Source[]
-  chunks      SearchChunk[]
+  id               String            @id @default(cuid())
+  slug             String            @unique
+  title            String
+  description      String?
+  visibility       Visibility        @default(private)
+  kind             WikiKind          @default(personal)
+  createdById      String
+  createdBy        User              @relation("WikiCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  memberships      Membership[]
+  pages            Page[]
+  pageLinks        PageLink[]
+  sources          Source[]
+  chunks           SearchChunk[]
   conceptRelations ConceptRelation[]
-  logs        LogEntry[]
-  shareLinks  ShareLink[]
-  agentRuns   AgentRun[]
-  apiKeys     ApiKey[]
-  invites     Invite[]
-  pagePins    PagePin[]
-  folderPins  FolderPin[]
-  savedLinks  SavedLink[]
+  logs             LogEntry[]
+  shareLinks       ShareLink[]
+  agentRuns        AgentRun[]
+  apiKeys          ApiKey[]
+  invites          Invite[]
+  pagePins         PagePin[]
+  folderPins       FolderPin[]
+  savedLinks       SavedLink[]
   telegramBindings TelegramBinding[]
+  knowledgeBuilds  KnowledgeBuild[]
 }
 
 model Membership {
@@ -245,35 +295,91 @@ model ShareLink {
 
 // ---------- 콘텐츠 ----------
 model Page {
-  id          String     @id @default(cuid())
-  wikiId      String
-  slug        String
-  title       String
-  kind        PageKind   @default(note)
-  frontmatter Json       @default("{}")
-  body        String     @default("")
-  sortOrder   Int        @default(0) // 형제 페이지 간 순서(책 목차)
-  parentId    String? // 상위 페이지(챕터). 루트는 null
-  category    String? // 자유형 폴더 경로(예: "ai/architectures"). 온톨로지 조직 축
-  sourceId    String? // 이 페이지가 파생된 원문(provenance). note에 주로 연결
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  wiki        Wiki       @relation(fields: [wikiId], references: [id], onDelete: Cascade)
-  parent      Page?      @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Page[]     @relation("PageTree")
-  source      Source?    @relation("PageSource", fields: [sourceId], references: [id], onDelete: SetNull)
-  outLinks    PageLink[] @relation("PageOut")
-  inLinks     PageLink[] @relation("PageIn")
-  contributions PageContribution[] // 이 파생 페이지에 기여한 원본들(M:N provenance)
-  relationsFrom ConceptRelation[] @relation("ConceptRelFrom") // 이 개념에서 나가는 타입드 관계
-  relationsTo   ConceptRelation[] @relation("ConceptRelTo")   // 이 개념으로 들어오는 타입드 관계
-  pins         PagePin[] // 이 페이지를 고정한 유저들(개인 즐겨찾기)
-  translations PageTranslation[] // 온디맨드 기계 번역 캐시(언어별)
+  id                   String                       @id @default(cuid())
+  wikiId               String
+  slug                 String
+  title                String
+  kind                 PageKind                     @default(note)
+  frontmatter          Json                         @default("{}")
+  body                 String                       @default("")
+  sortOrder            Int                          @default(0) // 형제 페이지 간 순서(책 목차)
+  parentId             String? // 상위 페이지(챕터). 루트는 null
+  category             String? // 자유형 폴더 경로(예: "ai/architectures"). 온톨로지 조직 축
+  sourceId             String? // 이 페이지가 파생된 원문(provenance). note에 주로 연결
+  origin               PageOrigin                   @default(human)
+  modelAccess          ModelAccess                  @default(external)
+  currentVersion       Int                          @default(1)
+  policyVersion        Int                          @default(1)
+  archivedAt           DateTime?
+  suppressedAt         DateTime?
+  staleAt              DateTime?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  wiki                 Wiki                         @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  parent               Page?                        @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children             Page[]                       @relation("PageTree")
+  source               Source?                      @relation("PageSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  outLinks             PageLink[]                   @relation("PageOut")
+  inLinks              PageLink[]                   @relation("PageIn")
+  contributions        PageContribution[] // 이 파생 페이지에 기여한 원본들(M:N provenance)
+  relationsFrom        ConceptRelation[]            @relation("ConceptRelFrom") // 이 개념에서 나가는 타입드 관계
+  relationsTo          ConceptRelation[]            @relation("ConceptRelTo") // 이 개념으로 들어오는 타입드 관계
+  pins                 PagePin[] // 이 페이지를 고정한 유저들(개인 즐겨찾기)
+  translations         PageTranslation[] // 온디맨드 기계 번역 캐시(언어별)
+  revisions            PageRevision[]
+  knowledgeDrafts      KnowledgeDraft[]
+  buildManifestEntries KnowledgeBuildPageRevision[]
 
   @@unique([wikiId, slug])
   @@index([wikiId, kind])
   @@index([wikiId, parentId, sortOrder])
   @@index([wikiId, category])
+  @@index([wikiId, archivedAt])
+  @@index([wikiId, modelAccess, archivedAt])
+}
+
+model PageRevision {
+  id                   String                       @id @default(cuid())
+  pageId               String
+  version              Int
+  title                String
+  body                 String
+  kind                 PageKind
+  frontmatter          Json                         @default("{}")
+  category             String?
+  parentId             String?
+  sortOrder            Int
+  sourceId             String?
+  origin               PageOrigin
+  modelAccess          ModelAccess
+  archivedAt           DateTime?
+  suppressedAt         DateTime?
+  staleAt              DateTime?
+  contentHash          String
+  actor                RevisionActor
+  reason               String?
+  userId               String?
+  agentRunId           String?
+  buildId              String?
+  createdAt            DateTime                     @default(now())
+  page                 Page                         @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  build                KnowledgeBuild?              @relation("BuildCreatedPageRevisions", fields: [buildId], references: [id], onDelete: SetNull)
+  sources              PageRevisionSource[]
+  buildManifestEntries KnowledgeBuildPageRevision[]
+
+  @@unique([pageId, version])
+  @@index([buildId])
+  @@index([createdAt])
+}
+
+model PageRevisionSource {
+  pageRevisionId   String
+  sourceRevisionId String
+  pageRevision     PageRevision   @relation(fields: [pageRevisionId], references: [id], onDelete: Cascade)
+  sourceRevision   SourceRevision @relation(fields: [sourceRevisionId], references: [id], onDelete: Cascade)
+
+  @@id([pageRevisionId, sourceRevisionId])
+  @@index([sourceRevisionId])
 }
 
 // 온디맨드 기계 번역 캐시. (page, locale)당 1행. 원문이 바뀌면 sourceHash 불일치로 재번역.
@@ -307,20 +413,56 @@ model PageLink {
 }
 
 model Source {
-  id         String   @id @default(cuid())
-  wikiId     String
-  slug       String
-  title      String
-  url        String?
-  body       String?
-  storageKey String?
-  ingestedAt DateTime @default(now())
-  wiki       Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
-  pages      Page[]   @relation("PageSource")
-  contributions PageContribution[] @relation("SourceContribs") // 이 원본이 기여한 파생 페이지들
-  relations  ConceptRelation[]  @relation("SourceRelations")  // 이 원본이 근거로 만든 개념 관계(접지)
+  id             String             @id @default(cuid())
+  wikiId         String
+  slug           String
+  title          String
+  url            String?
+  body           String?
+  storageKey     String?
+  modelAccess    ModelAccess        @default(external)
+  currentVersion Int                @default(1)
+  policyVersion  Int                @default(1)
+  archivedAt     DateTime?
+  ingestedAt     DateTime           @default(now())
+  wiki           Wiki               @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  pages          Page[]             @relation("PageSource")
+  contributions  PageContribution[] @relation("SourceContribs") // 이 원본이 기여한 파생 페이지들
+  relations      ConceptRelation[]  @relation("SourceRelations") // 이 원본이 근거로 만든 개념 관계(접지)
+  revisions      SourceRevision[]
 
   @@unique([wikiId, slug])
+  @@index([wikiId, archivedAt])
+  @@index([wikiId, modelAccess, archivedAt])
+}
+
+model SourceRevision {
+  id               String                     @id @default(cuid())
+  sourceId         String
+  version          Int
+  title            String
+  url              String?
+  body             String?
+  storageKey       String?
+  modelAccess      ModelAccess
+  archivedAt       DateTime?
+  contentHash      String
+  actor            RevisionActor
+  reason           String?
+  userId           String?
+  agentRunId       String?
+  buildId          String?
+  createdAt        DateTime                   @default(now())
+  source           Source                     @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  pageRevisions    PageRevisionSource[]
+  extractions      SourceExtraction[]
+  draftSources     KnowledgeDraftSource[]
+  buildExtractions KnowledgeBuildExtraction[]
+  conceptRelations ConceptRelation[]
+
+  @@unique([sourceId, version])
+  @@index([buildId])
+  @@index([createdAt])
 }
 
 // 파생 페이지(concept/entity) ↔ 기여 원본(Source)의 M:N. note의 단일 Page.sourceId와 별개.
@@ -349,36 +491,41 @@ enum RelationType {
 // 정체성 키에 sourceId 포함 → 같은 논리 엣지라도 원문마다 1행. 원문 삭제/재수집이 그 원문의 엣지만 정확히 지운다.
 // 논리 dedup(무향 병합)은 순회(expandViaGraph) 시에만 한다. sourceId NOT NULL = 근거 없는 엣지는 존재하지 않는다(트러스트 모델).
 model ConceptRelation {
-  id         String       @id @default(cuid())
-  wikiId     String
-  fromPageId String
-  toPageId   String
-  type       RelationType @default(relatedTo)
-  sourceId   String // 접지(grounding). 이 엣지를 만든 run의 원문. onDelete Cascade → 원문이 사라지면 엣지도 소멸
-  createdAt  DateTime     @default(now())
-  wiki       Wiki         @relation(fields: [wikiId], references: [id], onDelete: Cascade)
-  from       Page         @relation("ConceptRelFrom", fields: [fromPageId], references: [id], onDelete: Cascade)
-  to         Page         @relation("ConceptRelTo", fields: [toPageId], references: [id], onDelete: Cascade)
-  source     Source       @relation("SourceRelations", fields: [sourceId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  wikiId           String
+  fromPageId       String
+  toPageId         String
+  type             RelationType   @default(relatedTo)
+  sourceId         String // 접지(grounding). 이 엣지를 만든 run의 원문. onDelete Cascade → 원문이 사라지면 엣지도 소멸
+  sourceRevisionId String // 이 엣지를 실제로 근거 지은 immutable SourceRevision
+  createdAt        DateTime       @default(now())
+  wiki             Wiki           @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  from             Page           @relation("ConceptRelFrom", fields: [fromPageId], references: [id], onDelete: Cascade)
+  to               Page           @relation("ConceptRelTo", fields: [toPageId], references: [id], onDelete: Cascade)
+  source           Source         @relation("SourceRelations", fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceRevision   SourceRevision @relation(fields: [sourceRevisionId], references: [id], onDelete: Cascade)
 
-  @@unique([wikiId, fromPageId, toPageId, type, sourceId]) // 원문당 1엣지(멱등 set-replace / createMany skipDuplicates 키)
+  @@unique([wikiId, fromPageId, toPageId, type, sourceRevisionId])
   @@index([wikiId, fromPageId]) // 정방향 확장
   @@index([wikiId, toPageId]) // 역방향 확장(무향 순회)
   @@index([sourceId]) // deleteSource cascade / provenance 조회
+  @@index([sourceRevisionId])
 }
 
 model SearchChunk {
-  id        String                       @id @default(cuid())
-  wikiId    String
-  refType   String // 'page' | 'source'
-  refId     String
-  heading   String                       @default("")
-  text      String
-  hash      String
-  embedding Unsupported("vector(768)")?
-  wiki      Wiki                         @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  id          String                      @id @default(cuid())
+  wikiId      String
+  refType     String // 'page' | 'source'
+  refId       String
+  heading     String                      @default("")
+  text        String
+  hash        String
+  modelAccess ModelAccess                 @default(external)
+  embedding   Unsupported("vector(768)")?
+  wiki        Wiki                        @relation(fields: [wikiId], references: [id], onDelete: Cascade)
 
   @@index([wikiId])
+  @@index([wikiId, modelAccess])
   @@index([refType, refId])
 }
 
@@ -395,21 +542,149 @@ model LogEntry {
 }
 
 model AgentRun {
-  id         String      @id @default(cuid())
-  wikiId     String
-  userId     String?
-  type       AgentType
-  status     AgentStatus @default(pending)
-  stage      String? // running 중 현재 단계(fetch|curate|embed|lint). 단계 전이마다 갱신, 종료 시 null
-  input      Json        @default("{}")
-  output     Json?
-  error      String?
-  createdAt  DateTime    @default(now()) // 큐 진입(pending) 시각
-  startedAt  DateTime? // running 전이 시각 — 대기 시간과 실제 실행 시간을 구분(경과시간·정직한 진행표시)
-  finishedAt DateTime?
-  wiki       Wiki        @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  id              String           @id @default(cuid())
+  wikiId          String
+  userId          String?
+  type            AgentType
+  status          AgentStatus      @default(pending)
+  stage           String? // running 중 현재 단계(fetch|curate|embed|lint). 단계 전이마다 갱신, 종료 시 null
+  input           Json             @default("{}")
+  output          Json?
+  error           String?
+  createdAt       DateTime         @default(now()) // 큐 진입(pending) 시각
+  startedAt       DateTime? // running 전이 시각 — 대기 시간과 실제 실행 시간을 구분(경과시간·정직한 진행표시)
+  finishedAt      DateTime?
+  wiki            Wiki             @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  knowledgeBuilds KnowledgeBuild[]
 
   @@index([wikiId, createdAt])
+}
+
+model KnowledgeBuild {
+  id                 String                       @id @default(cuid())
+  wikiId             String
+  agentRunId         String?
+  createdById        String?
+  mode               BuildMode
+  status             BuildStatus                  @default(pending)
+  model              String?
+  promptVersion      String?
+  rulesHash          String?
+  inputManifest      Json                         @default("{}")
+  publishedManifest  Json                         @default("{}")
+  relationManifest   Json                         @default("[]")
+  costUsd            Float?
+  error              Json?
+  restorable         Boolean                      @default(true)
+  unrestorableReason String?
+  forceExtraction    Boolean                      @default(false)
+  createdAt          DateTime                     @default(now())
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  publishedAt        DateTime?
+  wiki               Wiki                         @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  agentRun           AgentRun?                    @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  drafts             KnowledgeDraft[]
+  pageRevisions      PageRevision[]               @relation("BuildCreatedPageRevisions")
+  pageManifest       KnowledgeBuildPageRevision[]
+  extractions        KnowledgeBuildExtraction[]
+
+  @@index([wikiId, createdAt])
+  @@index([wikiId, status])
+  @@index([agentRunId])
+}
+
+model SourceExtraction {
+  id               String                     @id @default(cuid())
+  sourceRevisionId String
+  fingerprint      String
+  model            String
+  promptVersion    String
+  rulesHash        String
+  claims           Json                       @default("[]")
+  concepts         Json                       @default("[]")
+  entities         Json                       @default("[]")
+  relations        Json                       @default("[]")
+  sourceNote       Json                       @default("{}")
+  createdAt        DateTime                   @default(now())
+  sourceRevision   SourceRevision             @relation(fields: [sourceRevisionId], references: [id], onDelete: Cascade)
+  buildUsages      KnowledgeBuildExtraction[]
+
+  @@index([sourceRevisionId, fingerprint])
+  @@index([createdAt])
+}
+
+model KnowledgeBuildExtraction {
+  id                 String           @id @default(cuid())
+  buildId            String
+  sourceExtractionId String
+  sourceRevisionId   String
+  createdAt          DateTime         @default(now())
+  build              KnowledgeBuild   @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  sourceExtraction   SourceExtraction @relation(fields: [sourceExtractionId], references: [id], onDelete: Cascade)
+  sourceRevision     SourceRevision   @relation(fields: [sourceRevisionId], references: [id], onDelete: Cascade)
+
+  @@unique([buildId, sourceRevisionId])
+  @@index([sourceExtractionId])
+  @@index([sourceRevisionId])
+}
+
+model KnowledgeDraft {
+  id           String                 @id @default(cuid())
+  buildId      String
+  pageId       String?
+  slug         String
+  baseVersion  Int?
+  status       DraftStatus            @default(staged)
+  title        String
+  body         String
+  kind         PageKind
+  frontmatter  Json                   @default("{}")
+  category     String?
+  parentId     String?
+  sortOrder    Int                    @default(0)
+  origin       PageOrigin             @default(generated)
+  modelAccess  ModelAccess            @default(external)
+  archivedAt   DateTime?
+  suppressedAt DateTime?
+  staleAt      DateTime?
+  contentHash  String
+  validation   Json?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  build        KnowledgeBuild         @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  page         Page?                  @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  sources      KnowledgeDraftSource[]
+
+  @@unique([buildId, slug])
+  @@index([pageId])
+  @@index([buildId, status])
+}
+
+model KnowledgeDraftSource {
+  draftId          String
+  sourceRevisionId String
+  draft            KnowledgeDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  sourceRevision   SourceRevision @relation(fields: [sourceRevisionId], references: [id], onDelete: Cascade)
+
+  @@id([draftId, sourceRevisionId])
+  @@index([sourceRevisionId])
+}
+
+model KnowledgeBuildPageRevision {
+  id             String         @id @default(cuid())
+  buildId        String
+  pageId         String
+  pageRevisionId String
+  slug           String
+  createdAt      DateTime       @default(now())
+  build          KnowledgeBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  page           Page           @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageRevision   PageRevision   @relation(fields: [pageRevisionId], references: [id], onDelete: Cascade)
+
+  @@unique([buildId, pageId])
+  @@unique([buildId, pageRevisionId])
+  @@index([pageRevisionId])
 }
 
 // 유저별 페이지 고정(개인 즐겨찾기). 위키 공유가 아니라 유저 스코프 — Page.pinned 컬럼이 아니라 별도 행.
@@ -444,7 +719,7 @@ model FolderPin {
 // 유저별 "읽을거리"(read-later) 링크. 개인·임시 트리아지 — 괜찮으면 정식 편입(ingest), 아니면 삭제.
 // AI 코퍼스와 무관(SavedLink는 페이지가 아님). title/description은 저장 시 OG/메타태그로 자동 라벨(LLM 없음).
 model SavedLink {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   wikiId      String
   url         String

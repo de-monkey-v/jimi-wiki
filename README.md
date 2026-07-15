@@ -78,6 +78,17 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 | `DAILY_TOKEN_LIMIT` | 유저별 일일 생성형 토큰 상한 |
 | `WORKER_POLL_MS` | ingest worker 폴링 주기 |
 
+### API 키 격리 · 비용 안전 ⚠️
+
+앱은 `process.env`에서 키를 읽는다. **표준(Next.js·dotenv) 우선순위상 셸에 export된 환경변수가 `.env`보다 우선한다** — 즉 `.zshrc` 등에 개인 `OPENAI_API_KEY`가 export돼 있으면, `.env`에 뭘 넣든(혹은 비워도) 그 **셸 키로 과금**된다. 무심코 개인 키가 쓰이는 것을 막으려면:
+
+- **Docker (가장 확실)**: `docker compose`는 `env_file: .env`로만 키를 읽고 **컨테이너는 호스트 셸 env를 상속하지 않는다** → `.env`만 사용, 완전 격리. 비용이 걱정되면 Docker로 돌리는 것이 답이다.
+- **로컬(비-Docker)**: API 키를 **셸에 export하지 말고 프로젝트 `.env`에만** 둔다. 현재 셸 상태 확인: `env | grep -E 'OPENAI|GEMINI|ANTHROPIC|_API_KEY'` — 여기 뜬 키가 앱에 쓰인다. (디렉터리별 격리가 필요하면 [`direnv`](https://direnv.net) 사용 권장)
+- **`override: true`로 `.env`가 셸을 이기게 하는 것은 비권장** — dotenv를 쓰는 worker/스크립트에만 적용되고 Next 웹 서버는 자체 로더라, 웹은 셸 키·워커는 `.env` 키로 **갈려 서로 다른 키를 쓰는** 더 위험한 상태가 된다.
+- **전용 API 키 권장**: 이 앱 전용으로 별도 발급한 키를 쓰면(다른 도구와 공유 X) 사용량·비용을 독립 추적하고 필요 시 이 키만 폐기할 수 있다. provider 콘솔에서 **사용량 상한(budget)** 을 걸어두면 이중 안전장치가 된다.
+
+`worker`는 시작 시 **활성 provider 키와 그 출처(`.env` vs 셸/환경 ⚠️)** 를 로그로 찍어, 어떤 키로 과금되는지 바로 확인할 수 있다.
+
 ## 스크립트
 
 | 명령 | 설명 |

@@ -87,6 +87,17 @@ Afterwards the admin creates users at **`/admin/users`** or issues **invite link
 | `DAILY_TOKEN_LIMIT` | per-user daily generative-token ceiling |
 | `WORKER_POLL_MS` | ingest worker polling interval |
 
+### API key isolation & cost safety ⚠️
+
+The app reads keys from `process.env`. **By the standard (Next.js / dotenv) precedence, environment variables exported in your shell take priority over `.env`** — so if a personal `OPENAI_API_KEY` is exported in your `.zshrc`, that shell key is billed regardless of what `.env` contains (or even if it's empty). To avoid spending on a key by accident:
+
+- **Docker (most reliable)**: `docker compose` reads keys only via `env_file: .env`, and **the container does not inherit the host shell env** → only `.env` is used, fully isolated. If cost is a concern, running via Docker is the answer.
+- **Local (non-Docker)**: keep API keys **only in the project `.env`, not exported in your shell**. Check your current shell with `env | grep -E 'OPENAI|GEMINI|ANTHROPIC|_API_KEY'` — whatever shows up there is what the app uses. (For per-directory isolation, use [`direnv`](https://direnv.net).)
+- **Do NOT use `override: true` to make `.env` win over the shell** — it only applies to the dotenv-loaded worker/scripts, not the Next web server (which has its own loader), so the web and worker could end up using **different keys**, which is worse.
+- **Use a dedicated API key**: issuing a separate key just for this app (not shared with other tools) lets you track usage/cost independently and revoke only this key. Setting a **usage budget** in the provider console adds a second safety net.
+
+On startup the `worker` logs the **active provider keys and their source (`.env` vs shell/env ⚠️)**, so you can immediately see which key you're being billed on.
+
 ## Scripts
 
 | Command | Description |

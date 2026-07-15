@@ -1,8 +1,18 @@
 import "dotenv/config";
+import { existsSync, readFileSync } from "node:fs";
+import { parse as parseDotenv } from "dotenv";
 import { prisma } from "../src/lib/db";
 import { claimNextAgentRun, runClaimedIngestJob, reapStaleRuns, type ClaimedAgentRun } from "../src/lib/ingest";
-import { refreshConfig } from "../src/lib/model-config";
+import {
+  refreshConfig,
+  providerHasCredential,
+  effectiveOpenAITransport,
+  chatModel,
+  genModel,
+  ingestModel,
+} from "../src/lib/model-config";
 import { refreshPreferredGptModel } from "../src/lib/model-resolver";
+import { storeExists } from "../src/lib/openai-oauth";
 import { notifyIngestComplete } from "../src/lib/telegram-notify";
 import { processPendingBlobPurges } from "../src/lib/blob-purge";
 
@@ -64,6 +74,45 @@ async function runClaimedAgentJob(run: ClaimedAgentRun): Promise<void> {
   }
 }
 
+/**
+ * 시작 시 "지금 어떤 provider 키로 과금되는지"를 명시적으로 찍는다. 특히 키가 프로젝트 `.env`에서
+ * 왔는지 셸/환경에서 왔는지를 구분해 표시한다 — 셸에 export된 개인 키가 무심코 쓰여 과금되는 사고를 막기 위함.
+ * (Next/dotenv 표준 우선순위상 셸 env가 `.env`보다 우선하므로, 여기서 그 사실을 눈에 보이게 한다.)
+ */
+function logProviderStatus(): void {
+  const envFile: Record<string, string> = existsSync(".env")
+    ? parseDotenv(readFileSync(".env"))
+    : {};
+  // 활성 process.env 값이 .env 선언값과 같으면 출처=.env, 아니면 셸/환경(경고).
+  const source = (name: string): string => {
+    const val = process.env[name];
+    if (!val) return "";
+    return envFile[name] === val ? ".env" : "셸/환경 ⚠️";
+  };
+  console.log("[worker] LLM provider 상태 — 아래 표시된 키로 과금됩니다:");
+  console.log(
+    `  google    ${providerHasCredential("google") ? `✓ GEMINI_API_KEY (출처: ${source("GEMINI_API_KEY")})` : "✗ (키 없음)"}`,
+  );
+  if (providerHasCredential("openai")) {
+    const t = effectiveOpenAITransport();
+    const detail =
+      t === "oauth"
+        ? storeExists()
+          ? "OAuth(ChatGPT 구독)"
+          : "oauth 선택됐지만 토큰 없음"
+        : t === "proxy"
+          ? `프록시 OPENAI_BASE_URL (출처: ${source("OPENAI_BASE_URL")})`
+          : `OPENAI_API_KEY (출처: ${source("OPENAI_API_KEY")})`;
+    console.log(`  openai    ✓ ${detail}`);
+  } else {
+    console.log("  openai    ✗ (자격증명 없음)");
+  }
+  console.log(
+    `  anthropic ${providerHasCredential("anthropic") ? `✓ ANTHROPIC_API_KEY (출처: ${source("ANTHROPIC_API_KEY")})` : "✗ (키 없음)"}`,
+  );
+  console.log(`  → 사용 모델: chat=${chatModel()}  gen=${genModel()}  ingest=${ingestModel()}`);
+}
+
 async function main() {
   console.log(`[worker] started pollMs=${pollMs}`);
   // 첫 잡이 env 기본이 아니라 관리자가 저장한 DB 모델을 쓰도록 캐시를 미리 채운다(비치명적).
@@ -71,6 +120,7 @@ async function main() {
   // OAuth 기본 GPT 모델을 첫 잡 전에 확정한다(콜드스타트 창에서 미검증/env-폴백 모델로 편입하는 것 방지).
   await refreshPreferredGptModel(true).catch(() => {});
   await refreshConfig().catch(() => {}); // 프로브 결과를 캐시에 즉시 반영
+  logProviderStatus();
   while (!stopping) {
     // 폴링 루프는 일시적 DB/스키마 오류(예: 마이그레이션 진행 중)에 크래시하지 않고 재시도한다.
     try {

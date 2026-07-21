@@ -10,17 +10,15 @@ import {
 } from "@google/genai";
 import { recordUsage, type UsageMeta } from "@/lib/usage";
 import { genModel, providerUsable } from "@/lib/model-config";
-import { DEFAULT_EMBED_MODEL } from "@/lib/model-defaults";
+import { EMBED_DIM, embedModelName, type EmbedTaskType } from "@/lib/embed-config";
 import { providerOf } from "@/lib/provider";
 import {
   modelPolicyDispatchRemainingMs,
   modelPolicyDispatchSignal,
 } from "@/lib/model-access";
 
-// 임베딩 모델은 env 고정(DB vector 컬럼·HNSW와 결합). 생성 모델(chat/gen/ingest)은 model-config 에서 런타임 조회.
-export const EMBED_MODEL = process.env.EMBED_MODEL || DEFAULT_EMBED_MODEL; // 임베딩(검색·색인)
-// ⚠️ EMBED_DIM은 DB의 vector(N) 컬럼·HNSW 인덱스와 결합. 바꾸면 스키마 마이그레이션 + 전체 재색인 필요.
-export const EMBED_DIM = Number(process.env.EMBED_DIM) || 768;
+// 임베딩 설정(모델·차원·프로바이더)은 embed-config 가 단일 소스다. 여기는 gemini 백엔드 구현만 둔다.
+// 생성 모델(chat/gen/ingest)은 model-config 에서 런타임 조회.
 const EMBED_MAX_ITEMS = 100;
 const EMBED_MAX_CHARS = 18_000; // 요청당 총 문자 예산(토큰/배치 상한 회피)
 
@@ -108,8 +106,7 @@ function dispatchLease(meta?: UsageMeta): { signal?: AbortSignal; timeout?: numb
   };
 }
 
-// ---------- 임베딩 ----------
-export type EmbedTaskType = "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY";
+// ---------- 임베딩 (gemini 백엔드) ----------
 
 function l2normalize(v: number[]): number[] {
   let n = 0;
@@ -137,8 +134,13 @@ function batchByBudget(texts: string[]): string[][] {
   return batches;
 }
 
-/** texts → 768차원 L2정규화 벡터. 키 없으면 throw(호출부에서 geminiEnabled로 분기). meta 주면 사용량 계측. */
-export async function embedTexts(texts: string[], taskType: EmbedTaskType, meta?: UsageMeta): Promise<number[][]> {
+/**
+ * gemini 임베딩 백엔드 — texts → EMBED_DIM 차원 L2정규화 벡터.
+ * 호출은 embedding.ts 의 embedTexts 를 통해서만 한다(프로바이더 분기가 거기 있다).
+ * GEMINI_API_KEY 없으면 throw. meta 주면 사용량 계측.
+ * ⚠️ gemini-embedding-001 은 3072 외 차원에서 정규화를 해주지 않으므로 여기서 반드시 L2 정규화한다.
+ */
+export async function geminiEmbedTexts(texts: string[], taskType: EmbedTaskType, meta?: UsageMeta): Promise<number[][]> {
   const lease = dispatchLease(meta);
   const out: number[][] = [];
   let inTok = 0;
@@ -147,7 +149,7 @@ export async function embedTexts(texts: string[], taskType: EmbedTaskType, meta?
     const res = await withRetry(
       () =>
         client().models.embedContent({
-          model: EMBED_MODEL,
+          model: embedModelName("gemini"),
           contents: chunk,
           config: {
             outputDimensionality: EMBED_DIM,
@@ -174,7 +176,7 @@ export async function embedTexts(texts: string[], taskType: EmbedTaskType, meta?
     }
   }
   // 성공 경로에서만 계측(부분 실패 시 throw로 빠져나가 기록 안 함)
-  if (meta) recordUsage({ ...meta, kind: "embed", model: EMBED_MODEL, inputTokens: haveTok ? inTok : null });
+  if (meta) recordUsage({ ...meta, kind: "embed", model: embedModelName("gemini"), inputTokens: haveTok ? inTok : null });
   return out;
 }
 

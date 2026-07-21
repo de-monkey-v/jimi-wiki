@@ -521,7 +521,7 @@ model SearchChunk {
   text        String
   hash        String
   modelAccess ModelAccess                 @default(external)
-  embedding   Unsupported("vector(768)")?
+  embedding   Unsupported("vector(1024)")?
   wiki        Wiki                        @relation(fields: [wikiId], references: [id], onDelete: Cascade)
 
   @@index([wikiId])

@@ -17,6 +17,36 @@ services:
       timeout: 5s
       retries: 10
 
+  # 자가호스팅 임베딩(bge-m3). EMBED_PROVIDER=local 일 때 web·worker 가 여기로 임베딩을 보낸다.
+  # → 임베딩에 외부 API 키가 필요 없어진다. gemini 로 되돌리려면 .env 에서 EMBED_PROVIDER=gemini 로
+  #   바꾸고 재색인만 하면 된다(벡터 차원 1024 로 통일돼 있어 스키마 변경 불필요).
+  #
+  # ⚠️ GPU 필요: NVIDIA 드라이버 + nvidia-container-toolkit 이 있어야 한다(CUDA 12.2+).
+  #    이미지 태그는 GPU 아키텍처별로 다르다 — 86 = Ampere consumer(RTX 30xx). 다른 GPU 는
+  #    text-embeddings-inference README 의 "Supported models and hardware" 표를 볼 것.
+  #    GPU 가 없으면 이 서비스를 지우고 EMBED_PROVIDER=gemini 로 쓰면 된다.
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:86-1.9
+    container_name: jimi-wiki-embeddings
+    restart: unless-stopped
+    command: ["--model-id", "BAAI/bge-m3", "--auto-truncate"]
+    environment:
+      HUGGINGFACE_HUB_CACHE: /data
+    ports:
+      # 컨테이너 밖(호스트에서 pnpm dev 로 띄운 web·worker)에서도 쓰도록 게시.
+      # 컨테이너끼리는 http://embeddings:80 을 쓴다(EMBED_BASE_URL 참고).
+      - "8080:80"
+    volumes:
+      # 모델 가중치 캐시(수 GB) — 없으면 컨테이너를 새로 만들 때마다 다시 받는다.
+      - jimi-embed-models:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
   # web·worker 는 같은 이미지, command 로 역할 구분. 같은 DB·OAuth 토큰 볼륨을 공유한다.
   # env_file(.env)의 API 키 등을 쓰되, DATABASE_URL/토큰 경로는 컨테이너용으로 덮어쓴다.
   web:
@@ -31,6 +61,7 @@ services:
       DATABASE_URL: postgresql://jimi:jimi@db:5432/jimi
       OPENAI_OAUTH_STORE: /data/openai-oauth.json
       BLOB_DIR: /data/blobs
+      EMBED_BASE_URL: http://embeddings:80
     ports:
       - "3007:3007"
     volumes:
@@ -51,6 +82,7 @@ services:
       DATABASE_URL: postgresql://jimi:jimi@db:5432/jimi
       OPENAI_OAUTH_STORE: /data/openai-oauth.json
       BLOB_DIR: /data/blobs
+      EMBED_BASE_URL: http://embeddings:80
     volumes:
       - jimi-oauth:/data
       # web 이 저장한 업로드 원본을 worker 가 읽어 텍스트화한다(같은 볼륨 공유 필수).
@@ -60,5 +92,6 @@ services:
 
 volumes:
   jimi-wiki-pgdata:
+  jimi-embed-models:
   jimi-oauth:
   jimi-blobs:

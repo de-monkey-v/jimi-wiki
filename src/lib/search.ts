@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { embedTexts, geminiEnabled, EMBED_DIM } from "@/lib/gemini";
+import { embedTexts, embeddingEnabled, EMBED_DIM } from "@/lib/embedding";
 import { ONTOLOGY_SLUG } from "@/lib/ontology";
 import {
   EXTERNAL_MODEL_SCOPE,
@@ -260,7 +260,7 @@ export async function indexCategory(wikiId: string, slug: string, _text: string)
       id = row.id;
     }
   }
-  if (geminiEnabled()) {
+  if (embeddingEnabled()) {
     try {
       await withExternalModelDispatchLock(wikiId, async (tx) => {
         const eligible = await tx.page.count({
@@ -319,7 +319,7 @@ export async function findSimilarCategories(wikiId: string, minSim = 0.8): Promi
 /** 텍스트에 시맨틱하게 가까운 기존 category(재사용 후보). 키 없으면 [](G1). auto-merge 아님 — 후보만. */
 export async function matchCategorySemantic(wikiId: string, text: string): Promise<{ slug: string; score: number }[]> {
   const q = text.trim();
-  if (!q || !geminiEnabled()) return [];
+  if (!q || !embeddingEnabled()) return [];
   try {
     return await withExternalModelDispatchLock(wikiId, async (tx) => {
       // governance가 internalOnly 페이지 제목을 그대로 넘기는 경로도 fail-closed. 정책 검사와
@@ -393,7 +393,7 @@ const EMBEDDABLE_EXTERNAL_SQL = `
   )`;
 
 export async function reindexEmbeddings(wikiId: string): Promise<{ embedded: number; remaining: number }> {
-  if (!geminiEnabled()) return { embedded: 0, remaining: 0 };
+  if (!embeddingEnabled()) return { embedded: 0, remaining: 0 };
   return withExternalModelDispatchLock(wikiId, async (tx) => {
     // SearchChunk 복제 정책만 믿지 않고 Page/Source projection을 dispatch 직전에 재검증한다.
     const rows = await tx.$queryRawUnsafe<{ id: string; text: string }[]>(
@@ -579,7 +579,7 @@ export async function modelSearch(opts: ModelSearchOptions): Promise<SearchHit[]
   return withExternalModelDispatchLock(wikiId, async (tx) => {
     const ftsRows = await tx.$queryRawUnsafe<IdRow[]>(MODEL_FTS_SQL, wikiId, q, POOL);
     let vecRows: VecRow[] = [];
-    if (geminiEnabled()) {
+    if (embeddingEnabled()) {
       try {
         const [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "search" });
         if (qv?.length === EMBED_DIM) {

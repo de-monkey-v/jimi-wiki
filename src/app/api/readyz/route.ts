@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { geminiEnabled } from "@/lib/gemini";
+import { embeddingStatus } from "@/lib/embedding";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function GET() {
   }
 
   return NextResponse.json(
-    { ok: missing.length === 0, db: true, gemini: geminiEnabled(), missing },
+    { ok: missing.length === 0, db: true, gemini: geminiEnabled(), embedding: embeddingStatus(), missing },
     { status: missing.length === 0 ? 200 : 503, headers: { "Cache-Control": "no-store" } },
   );
 }

@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { requireAdmin } from "@/lib/admin";
-import { EMBED_MODEL, EMBED_DIM } from "@/lib/gemini";
+import { EMBED_DIM, embedModelName, embedProvider } from "@/lib/embed-config";
 import { getModelCatalog, getProviderStatuses } from "@/lib/model-catalog";
 import {
   getRawConfigRow,
@@ -65,7 +65,8 @@ export default async function AdminSettings() {
       <section className="border rounded-lg p-4 space-y-2">
         <h2 className="font-semibold">{t("embeddingTitle")}</h2>
         <p className="text-sm text-gray-500">
-          EMBED_MODEL=<code>{EMBED_MODEL}</code> · EMBED_DIM=<code>{EMBED_DIM}</code>
+          EMBED_PROVIDER=<code>{embedProvider()}</code> · EMBED_MODEL=<code>{embedModelName()}</code> ·
+          EMBED_DIM=<code>{EMBED_DIM}</code>
         </p>
         <p className="text-xs text-amber-600">
           {t("embeddingWarning")}

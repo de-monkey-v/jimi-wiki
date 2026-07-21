@@ -73,7 +73,8 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 | `OPENAI_API_KEY` | (선택) 모델을 `gpt-*`/`o*`로 쓸 때 필요 (chat·ingest·lint) |
 | `OPENAI_BASE_URL` | (선택·개인 로컬 전용) OpenAI 호환 프록시 주소. 외부 codex-auth 프록시를 직접 띄워 태울 때만. ⚠️ 공개 배포 금지 |
 | `OPENAI_OAUTH_PERSONAL` | (선택·개인 로컬 전용) `1`이면 `pnpm openai:login`으로 로그인한 ChatGPT 구독 OAuth를 앱에서 직접 사용(별도 프록시 불필요). `OPENAI_BASE_URL`이 있으면 그쪽 우선. ⚠️ 개인 self-host 전용, 여러 사람에게 서비스로 열지 말 것(약관). 자세한 사용법은 [`docs/openai-oauth.md`](docs/openai-oauth.md) |
-| `EMBED_MODEL` / `EMBED_DIM` | 임베딩 모델·차원 (기본 `gemini-embedding-001` / `768`, Gemini 전용). ⚠️ 차원 변경은 DB 마이그레이션+재색인 필요 |
+| `EMBED_PROVIDER` / `EMBED_BASE_URL` | 임베딩 제공자: `local`(자가호스팅 bge-m3, docker compose 의 `embeddings` 서비스) \| `gemini`. 미지정 시 `EMBED_BASE_URL`이 있으면 local. `local`이면 임베딩에 외부 API 키가 필요 없다 |
+| `EMBED_MODEL` / `EMBED_DIM` | 임베딩 모델·차원 (기본 local=`BAAI/bge-m3`, gemini=`gemini-embedding-001` / 차원 `1024`). ⚠️ 차원 변경은 DB 마이그레이션+재색인 필요. 제공자만 바꿀 때는 재색인만 하면 된다 |
 | `INGEST_MODEL` / `GEN_MODEL` / `CHAT_MODEL` | ingest / query·lint / 채팅 모델. `gemini-*` \| `claude-*` \| `gpt-*` 혼용 가능 (기본 Gemini) |
 | `DAILY_TOKEN_LIMIT` | 유저별 일일 생성형 토큰 상한 |
 | `WORKER_POLL_MS` | ingest worker 폴링 주기 |

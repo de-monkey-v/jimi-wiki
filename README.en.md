@@ -82,7 +82,8 @@ Afterwards the admin creates users at **`/admin/users`** or issues **invite link
 | `OPENAI_API_KEY` | (optional) needed when a model is `gpt-*`/`o*` (chat/ingest/lint) |
 | `OPENAI_BASE_URL` | (optional, personal-local only) OpenAI-compatible proxy URL. ⚠️ Do not use in public deployments |
 | `OPENAI_OAUTH_PERSONAL` | (optional, personal-local only) `1` uses your ChatGPT-subscription OAuth via `pnpm openai:login`. ⚠️ Personal self-host only; don't open it as a service to multiple people (ToS). See [`docs/openai-oauth.md`](docs/openai-oauth.md) |
-| `EMBED_MODEL` / `EMBED_DIM` | embedding model/dim (default `gemini-embedding-001` / `768`, Gemini only). ⚠️ Changing the dim requires a DB migration + reindex |
+| `EMBED_PROVIDER` / `EMBED_BASE_URL` | embedding provider: `local` (self-hosted bge-m3 via the `embeddings` compose service) \| `gemini`. Defaults to local when `EMBED_BASE_URL` is set. With `local`, embeddings need no external API key |
+| `EMBED_MODEL` / `EMBED_DIM` | embedding model/dim (default local=`BAAI/bge-m3`, gemini=`gemini-embedding-001`; dim `1024`). ⚠️ Changing the dim requires a DB migration + reindex; switching providers only requires a reindex |
 | `INGEST_MODEL` / `GEN_MODEL` / `CHAT_MODEL` | ingest / query·lint / chat models. `gemini-*` \| `claude-*` \| `gpt-*` can be mixed (default Gemini) |
 | `DAILY_TOKEN_LIMIT` | per-user daily generative-token ceiling |
 | `WORKER_POLL_MS` | ingest worker polling interval |

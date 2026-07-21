@@ -9,7 +9,9 @@ const roots = ["src", "scripts", "prisma/seed.ts"];
 const allowed = new Set(["src/lib/content-store.ts"]);
 const patterns = [
   String.raw`\b(?:prisma|tx)\.(?:page|source)\.(?:create|update|updateMany|upsert|delete|deleteMany)\b`,
-  String.raw`\b(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO)\s+['\"\x60]?(?:Page|Source)['\"\x60]?\b`,
+  // String.raw 가 아니다 — 따옴표 클래스에 백틱을 넣으려면 \x60 을 JS 가 해석해야 한다.
+  // (String.raw 였을 때는 rg 정규식이 `\"` 를 미지원 이스케이프로 보고 컴파일 자체가 실패했다.)
+  "\\b(?:UPDATE|DELETE\\s+FROM|INSERT\\s+INTO)\\s+['\"\x60]?(?:Page|Source)['\"\x60]?\\b",
 ];
 
 const failures = [];

@@ -2,7 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 // search.ts는 server-only + @/lib/db 를 임포트하지만 DB는 지연 연결이라 순수 함수 chunkText는
 // 연결/쿼리 없이 돈다. server-only 는 test 실행 shim(-r server-only-shim.cjs)이 처리.
-import { chunkText, MAX_CHUNK, MIN_CHUNK, plannedDepth, isRelationalQuery, type KgConfig } from "./search";
+import {
+  chunkText,
+  MAX_CHUNK,
+  MIN_CHUNK,
+  plannedDepth,
+  isRelationalQuery,
+  requestedGraphDepth,
+  type KgConfig,
+} from "./search";
 
 test("chunkText: 단일 짧은 본문 → 라벨 컨텍스트가 붙은 청크 1개", () => {
   const chunks = chunkText("문서", "안녕하세요");
@@ -102,4 +110,30 @@ test("isRelationalQuery: ASCII cue의 부분문자열 오탐 방지(단어경계
   for (const q of ["A vs B", "does X depend on Y", "what causes Z"]) {
     assert.equal(isRelationalQuery(q), true, `관계 질의여야 함: ${q}`);
   }
+});
+
+// ---------- requestedGraphDepth (외부 REST/MCP 검색의 graph 파라미터) ----------
+
+test("requestedGraphDepth: graph 미지정/거짓값 → 0 (기존 검색과 동일, 하위호환)", () => {
+  for (const graph of [undefined, null, "", "0", "false", "no", "아무거나"]) {
+    assert.equal(requestedGraphDepth({ graph, depth: "3" }, CFG), 0, `확장하면 안 됨: ${graph}`);
+  }
+});
+
+test("requestedGraphDepth: graph 참값 + depth 생략 → 1홉", () => {
+  for (const graph of ["1", "true", "TRUE", "yes"]) {
+    assert.equal(requestedGraphDepth({ graph }, CFG), 1, `1홉이어야 함: ${graph}`);
+  }
+});
+
+test("requestedGraphDepth: depth는 maxHop으로 clamp, 하한은 1", () => {
+  assert.equal(requestedGraphDepth({ graph: "1", depth: "2" }, CFG), 2); // CFG.maxHop=2
+  assert.equal(requestedGraphDepth({ graph: "1", depth: "9" }, CFG), 2); // 상한 clamp
+  assert.equal(requestedGraphDepth({ graph: "1", depth: "0" }, CFG), 1); // 하한 clamp
+  assert.equal(requestedGraphDepth({ graph: "1", depth: "-5" }, CFG), 1);
+  assert.equal(requestedGraphDepth({ graph: "1", depth: "abc" }, CFG), 1); // 파싱 실패 → 기본 1
+});
+
+test("requestedGraphDepth: maxHop=0 킬스위치면 graph를 요청해도 0", () => {
+  assert.equal(requestedGraphDepth({ graph: "1", depth: "3" }, { ...CFG, maxHop: 0 }), 0);
 });

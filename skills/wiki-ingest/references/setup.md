@@ -43,6 +43,26 @@ claude mcp add jimi-wiki \
 }
 ```
 
+**Hermes Agent** — `~/.hermes/config.yaml`의 `mcp_servers` 아래에 등록한다. 서버별 `tools.include`로 노출 도구를 좁힐 수 있다:
+```yaml
+mcp_servers:
+  jimi-wiki:
+    command: "node"
+    args: ["<repo>/mcp/server.mjs"]
+    env:
+      JIMI_WIKI_URL: "<앱주소>"
+      JIMI_WIKI_API_KEY: "<발급받은-키>"
+      JIMI_WIKI_SLUG: "<대상-위키-slug>"
+    tools:
+      # 비서 프로필 — 찾고·넣고·담아두는 일상 사용
+      include: [search_wiki, read_page, list_pages, ingest_url, ingest_text, get_run_status, save_link, list_saved_links]
+```
+
+- **비서 프로필**(위 `include`): 위임형 편입과 검색 위주. 에이전트가 문서 구조를 직접 건드리지 않는다.
+- **유지보수 프로필**: `include`를 지우면 전체 도구(`create_source`, `write_page`, `list_sources`, `read_source`, `get_ontology`, `match_category`, `run_lint`)가 노출된다 — 스킬 절차대로 직접 큐레이션할 때.
+- `delete_page`는 어느 프로필에서도 기본 미노출이다. 필요하면 `env`에 `JIMI_MCP_ALLOW_DESTRUCTIVE: "1"`을 추가한다(자율 에이전트에는 권장하지 않음).
+- 자율 에이전트에 주는 키는 **위키 스코프 + `maxRole=editor` + 만료일**을 걸어 발급하라. 사고 시 그 키만 폐기하면 된다.
+
 ### 2-b) REST로 연결 (MCP 없는 하네스)
 
 MCP를 못 쓰는 환경은 bash+curl로 REST를 직접 호출한다. 능력↔엔드포인트 매핑은 [`tools.md`](./tools.md), 전체 레퍼런스는 저장소의 `docs/rest-api.md`.
@@ -60,6 +80,7 @@ curl -sH "Authorization: Bearer $KEY" "$BASE/pages"   # 연결 확인
 스킬 본체는 `SKILL.md` + `references/`다. 폴더째로 옮겨야 참조(ontology-rules·tools·setup)가 유지된다.
 
 - **Claude Code** — 이 폴더를 `.claude/skills/wiki-ingest/`(프로젝트) 또는 `~/.claude/skills/wiki-ingest/`(전역)에 둔다. frontmatter의 `name`/`description`으로 자동 발견되고 `/wiki-ingest`로 호출된다.
+- **Hermes Agent** — 이 폴더를 Hermes의 스킬 디렉터리(`~/.hermes/skills/wiki-ingest/`)에 복사한다. Hermes는 `SKILL.md` 형식을 그대로 읽는다. 위임형 편입만 쓸 거라면 스킬 없이 MCP 도구 설명만으로도 동작한다 — 직접 큐레이션을 시킬 때 스킬이 필요하다.
 - **Codex 등 invoke 도구 없는 하네스** — invoke 개념이 없다. 에이전트에게 `SKILL.md` 경로를 알려주고 "이 SKILL.md를 읽고 그 워크플로우를 따르라"고 지시하면 된다. frontmatter는 무시돼도 무방하다.
 - **그 외** — SKILL.md는 순수 마크다운 지침이다. 어떤 에이전트든 이 파일과 `references/`를 읽을 수 있으면 사용 가능하다.
 

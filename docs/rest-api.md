@@ -28,7 +28,7 @@ Authorization: Bearer <API_KEY>
 
 인증 성공 후 **키 단위**(키 없으면 사용자 단위)로 토큰버킷을 적용한다.
 
-- 분당 60회, 시간당 1000회.
+- 분당 120회, 시간당 3000회.
 - 초과 시 `429 { "error": "rate_limited" }` + `Retry-After: <초>` 헤더. 이 값만큼 대기 후 재시도.
 - (단일 인스턴스 인메모리 구현 — 수평 확장 시 공유 스토어로 교체 필요.)
 
@@ -38,12 +38,13 @@ Authorization: Bearer <API_KEY>
 
 | 라우트 | 비고 |
 |---|---|
-| `POST /ingest` | 내부 AI ingest 에이전트. Bearer면 `401`(세션 없음) |
 | `POST /query` | 검색+합성 답변 |
 | `POST /reindex` | 임베딩 대량 backfill |
 | `POST /lint` `{deep:true}` | agentic deep lint. Bearer면 `403 forbidden_deep_requires_session` |
 
-> API 키 경로에서는 이들 대신 **primitive**(`POST /sources` + `POST /pages`)로 직접 작성하고, 얕은 점검은 `POST /lint`(deep 없이)를 쓴다.
+> API 키 경로에서는 `/query` 대신 `GET /search`로 근거를 받아 호출자가 직접 종합하고, 얕은 점검은 `POST /lint`(deep 없이)를 쓴다.
+
+**예외 — `POST /ingest`**: 외부 에이전트도 앱의 ingest 파이프라인을 쓸 수 있도록 API 키에 열려 있다. 대신 비용 경계를 지키기 위해 API 키 경로에도 세션과 동일한 **일일 생성 토큰 쿼터**(`DAILY_TOKEN_LIMIT`, 키 소유 사용자 기준)가 적용된다.
 
 ## 라우트 (API 키 접근 가능)
 
@@ -91,8 +92,10 @@ Authorization: Bearer <API_KEY>
 
 ### 검색 · 온톨로지
 
-#### `GET /search?q=&k=` — 하이브리드 검색 (viewer)
+#### `GET /search?q=&k=&graph=&depth=` — 하이브리드 검색 (viewer)
 `q` 질의(빈 값이면 `{ hits: [] }`), `k` 결과 수(1–50, 기본값 서버 상수). `200`: `{ hits: [...] }`
+
+`graph=1`을 주면 히트한 페이지를 시드로 지식그래프(`ConceptRelation`)를 순회해 이웃 페이지를 함께 반환한다 — `200`: `{ hits, neighbors: [{ pageId, slug, title, snippet, depth }] }`. `depth`는 홉수(기본 1)이며 서버 상한 `KG_MAX_HOP`으로 clamp된다(`KG_MAX_HOP=0`이면 확장이 꺼져 `neighbors: []`). `graph`를 주지 않으면 응답에 `neighbors` 키가 없다(하위호환).
 
 #### `GET /ontology` — 분류 인스턴스 (viewer)
 `200`: `{ ontology: { categories, relations, ... } }`
@@ -116,10 +119,34 @@ Authorization: Bearer <API_KEY>
 요청 `{}` 또는 생략. 내부 LLM 없이 고아 페이지·깨진 링크·index 불일치 등을 점검. `200`: 리포트 JSON.
 `{deep:true}`는 세션 전용(위 표) — Bearer면 `403 forbidden_deep_requires_session`.
 
+### 편입(ingest)
+
+#### `POST /ingest` — 위임형 편입 (editor)
+앱의 ingest 파이프라인에 맡긴다(웹 본문추출·유튜브 자막·불변 원문 저장·초안 검토). 비동기 — `202`: `{ runId, status: "pending" }`.
+
+- body: `{ url }` 또는 `{ text, title? }` (JSON).
+- 파일 업로드(`multipart/form-data`의 `file[]`)는 **세션 전용**이다 — 한 요청이 파일 수만큼 잡을 만들어 요청당 1회인 비용 검사와 어긋나므로, Bearer로 호출하면 `403 file_upload_requires_session`.
+- 내부 AI를 쓰므로 일일 생성 쿼터를 소모한다. 초과 시 `429 { error: "daily_quota_exceeded", used, limit }` (`Retry-After` 없음 — 재시도해도 소용없다).
+- 완료는 `GET /runs/{runId}` 폴링으로 확인한다.
+
+### 읽을거리(read-later)
+
+읽을거리는 위키 콘텐츠가 아니라 **키 소유 사용자의 개인 리스트**다. 정식 편입(promote)은 웹 UI에서 사람이 수행한다.
+
+#### `GET /saved-links` — 목록 (viewer)
+`200`: `{ links: [{ id, url, title, description, promotedAt, createdAt }] }` (최신순). `promotedAt`이 있으면 이미 위키로 편입된 링크.
+
+#### `POST /saved-links` — 담기 (viewer)
+body `{ url, note? }`. 제목·설명은 자동 추출하며(LLM 미사용), `note`를 주면 설명 대신 그 값을 저장한다.
+`201`: `{ link }` · 같은 URL이 이미 있으면 새로 만들지 않고 `200`: `{ link, existing: true }` · 잘못된 URL은 `400 invalid_url`.
+중복 방지는 조회-후-쓰기다 — 동시 요청이 겹치거나 URL 문자열이 다르면(끝슬래시·`utm_*` 등) 중복 행이 생길 수 있다(유니크 제약 없음).
+
 ### 비동기 잡 폴링
 
 #### `GET /runs/{runId}` — 잡 상태 (viewer)
-내부 AI 잡(ingest 등)은 즉시 `{ runId }`를 반환하고 백그라운드로 돈다. 상태를 폴링한다.
+ingest 잡은 즉시 `{ runId }`를 반환하고 백그라운드(worker)로 돈다. 상태를 폴링한다.
+
+`status: "error"`에 `published: true`가 함께 오면 **콘텐츠는 발행됐고 파생 색인만 미완**인 상태다(`publishedDegraded` 빌드). 이 경우 `output`도 함께 반환되며, 재편입하면 중복이 된다 — 재색인은 웹 UI에서 재시도한다.
 `200`: `{ runId, status: "pending"|"running"|"done"|"error", output?, error? }` · 다른 위키/없는 잡 `404`.
 
 ## 에러 코드 규약

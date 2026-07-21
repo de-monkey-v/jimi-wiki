@@ -674,6 +674,24 @@ export function plannedDepth(sig: DepthSignal, cfg: KgConfig = kgConfig()): numb
   return Math.min(d, cfg.maxHop);
 }
 
+const GRAPH_TRUTHY = new Set(["1", "true", "yes"]);
+
+/**
+ * 외부 호출자(REST/MCP)가 명시한 KG 확장 홉수. graph 파라미터가 없으면 0(확장 없음).
+ * depth 생략 시 1홉이며 상한은 cfg.maxHop — KG_MAX_HOP=0 킬스위치면 0이 되어 확장이 꺼진다.
+ * plannedDepth 의 질의 휴리스틱은 쓰지 않는다: 외부 에이전트에는 결정적 동작이 낫고,
+ * 확장 여부 판단은 호출자(에이전트)가 스스로 한다.
+ */
+export function requestedGraphDepth(
+  params: { graph?: string | null; depth?: string | null },
+  cfg: KgConfig = kgConfig(),
+): number {
+  if (!GRAPH_TRUTHY.has((params.graph ?? "").toLowerCase())) return 0;
+  const raw = parseInt(params.depth ?? "", 10);
+  const requested = Number.isFinite(raw) ? Math.max(raw, 1) : 1;
+  return Math.min(requested, Math.max(cfg.maxHop, 0));
+}
+
 export interface GraphNeighbor {
   pageId: string;
   slug: string;

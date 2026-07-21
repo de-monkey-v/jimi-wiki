@@ -18,6 +18,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
     "apikey:issue": "tsx scripts/issue-api-key.ts",
+    "reindex": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/reindex-embeddings.ts",
     "telegram:seed": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/telegram-seed.ts",
     "telegram:webhook": "tsx scripts/telegram-setup-webhook.ts",
     "telegram:simulate": "tsx scripts/telegram-simulate.ts",

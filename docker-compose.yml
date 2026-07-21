@@ -29,7 +29,10 @@ services:
     image: ghcr.io/huggingface/text-embeddings-inference:86-1.9
     container_name: jimi-wiki-embeddings
     restart: unless-stopped
-    command: ["--model-id", "BAAI/bge-m3", "--auto-truncate"]
+    # 서빙 모델은 .env 의 EMBED_MODEL 이 정한다(앱이 계측에 쓰는 라벨과 같은 값 — 단일 소스).
+    # 한국어 위주면 nlpai-lab/KURE-v1(bge-m3 한국어 파인튜닝, 1024차원 동일) 을 권장한다.
+    # ⚠️ EMBED_PROVIDER=gemini 로 쓸 때는 이 서비스를 띄우지 말 것(EMBED_MODEL 이 gemini 모델명이 된다).
+    command: ["--model-id", "${EMBED_MODEL:-BAAI/bge-m3}", "--auto-truncate"]
     environment:
       HUGGINGFACE_HUB_CACHE: /data
     ports:

@@ -83,7 +83,7 @@ Afterwards the admin creates users at **`/admin/users`** or issues **invite link
 | `OPENAI_BASE_URL` | (optional, personal-local only) OpenAI-compatible proxy URL. ⚠️ Do not use in public deployments |
 | `OPENAI_OAUTH_PERSONAL` | (optional, personal-local only) `1` uses your ChatGPT-subscription OAuth via `pnpm openai:login`. ⚠️ Personal self-host only; don't open it as a service to multiple people (ToS). See [`docs/openai-oauth.md`](docs/openai-oauth.md) |
 | `EMBED_PROVIDER` / `EMBED_BASE_URL` | embedding provider: `local` (self-hosted bge-m3 via the `embeddings` compose service) \| `gemini`. Defaults to local when `EMBED_BASE_URL` is set. With `local`, embeddings need no external API key |
-| `EMBED_MODEL` / `EMBED_DIM` | embedding model/dim (default local=`BAAI/bge-m3`, gemini=`gemini-embedding-001`; dim `1024`). ⚠️ Changing the dim requires a DB migration + reindex; switching providers only requires a reindex |
+| `EMBED_MODEL` / `EMBED_DIM` | embedding model/dim (default local=`BAAI/bge-m3`, gemini=`gemini-embedding-001`; dim `1024`). For Korean-first wikis prefer `nlpai-lab/KURE-v1` (bge-m3 fine-tuned on Korean; same dim and license). ⚠️ Changing the dim requires a DB migration + reindex; changing model/provider only needs `pnpm reindex` |
 | `INGEST_MODEL` / `GEN_MODEL` / `CHAT_MODEL` | ingest / query·lint / chat models. `gemini-*` \| `claude-*` \| `gpt-*` can be mixed (default Gemini) |
 | `DAILY_TOKEN_LIMIT` | per-user daily generative-token ceiling |
 | `WORKER_POLL_MS` | ingest worker polling interval |
@@ -168,9 +168,11 @@ session (cookie); programmatic calls authenticate with an API key (Bearer).**
      -- node <repo>/mcp/server.mjs
    ```
 
-> Routes that consume the built-in AI (`/ingest`, `/query`, `/reindex`, `/lint?deep`) are
-> **session-only**. With an API key you author the wiki directly using primitives like `create_source` +
-> `write_page`, and run the built-in AI ingest from the web UI. See `docs/rest-api.md` for the full policy.
+> Routes that consume the built-in AI (`/query`, `/reindex`, `/lint?deep`) are **session-only**.
+> `POST /ingest` is the one exception — it is open to API keys so external agents can use the ingest
+> pipeline (file uploads stay session-only), and it enforces the same daily token quota as sessions.
+> To curate directly with an API key, use the `create_source` + `write_page` primitives.
+> See `docs/rest-api.md` for the full policy.
 
 ## Contributing
 

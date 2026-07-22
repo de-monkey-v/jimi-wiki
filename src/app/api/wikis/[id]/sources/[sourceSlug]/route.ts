@@ -3,7 +3,8 @@ import { apiWikiGate, sessionWikiGate } from "@/lib/api-gate";
 import { prisma } from "@/lib/db";
 import { purgeSource } from "@/lib/content-store";
 import { processBlobPurgeLog } from "@/lib/blob-purge";
-import { archiveSourceWithPropagation, changeSourceModelAccess } from "@/lib/model-policy";
+import { changeSourceModelAccess } from "@/lib/model-policy";
+import { trashSource } from "@/lib/trash";
 import {
   contentMutationErrorResponse,
   optionalExpectedVersionFromRequest,
@@ -64,8 +65,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!modelAccess) return NextResponse.json({ error: "invalid_model_access" }, { status: 400 });
   if (!expectedVersion) return NextResponse.json({ error: "expected_version_required" }, { status: 400 });
 
-  const source = await prisma.source.findUnique({
-    where: { wikiId_slug: { wikiId: gate.wiki.id, slug: sourceSlug } },
+  const source = await prisma.source.findFirst({
+    where: { wikiId: gate.wiki.id, slug: sourceSlug, trashedAt: null },
     select: { id: true, modelAccess: true, curationState: true },
   });
   if (!source || (requestsExternalModelScope(req) && source.modelAccess !== "external")) {
@@ -98,7 +99,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 }
 
-/** 기본 DELETE는 archive, permanent=1은 owner 세션과 slug 확인 헤더가 필요한 purge다. */
+/** 기본 DELETE는 14일 휴지통 이동, permanent=1은 휴지통 항목에 대한 owner 세션 purge다. */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string; sourceSlug: string }> }) {
   const { id, sourceSlug } = await params;
   const permanent = new URL(req.url).searchParams.get("permanent") === "1";
@@ -119,9 +120,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         id: true,
         slug: true,
         currentVersion: true,
+        trashedAt: true,
       },
     });
     if (!source) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    if (!source.trashedAt) return NextResponse.json({ error: "must_trash_first" }, { status: 409 });
     try {
       const purged = await purgeSource({
         wikiId: gate.wiki.id,
@@ -151,31 +154,29 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     where: {
       wikiId: gate.wiki.id,
       slug: sourceSlug,
-      archivedAt: null,
+      trashedAt: null,
       ...(requestsExternalModelScope(req) ? { modelAccess: "external" as const } : {}),
     },
     select: { id: true, slug: true, currentVersion: true },
   });
   if (!source) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const noteSlugs = await prisma.page.findMany({
-    where: { wikiId: gate.wiki.id, sourceId: source.id, kind: "note", archivedAt: null },
+    where: { wikiId: gate.wiki.id, sourceId: source.id, kind: "note", trashedAt: null },
     select: { slug: true },
   });
   try {
-    const result = await archiveSourceWithPropagation({
+    await trashSource({
       wikiId: gate.wiki.id,
       sourceId: source.id,
       expectedVersion: requestedVersion.state === "valid" ? requestedVersion.value : source.currentVersion,
       userId: gate.user.id,
-      reason: "source archived through REST",
     });
     return NextResponse.json(
       {
         deleted: true,
-        archived: true,
+        trashed: true,
         slug: source.slug,
-        deletedNotes: noteSlugs.map((note) => note.slug),
-        signals: result.signals,
+        affectedNotes: noteSlugs.map((note) => note.slug),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

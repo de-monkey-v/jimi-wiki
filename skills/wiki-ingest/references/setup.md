@@ -43,7 +43,7 @@ claude mcp add --scope local jimi-wiki \
 }
 ```
 
-**Hermes Agent** — 개인 위키 전용 키를 `wiki scope + maxRole=editor + 90일 만료`로 발급하고 `~/.hermes/.env`에 `JIMI_WIKI_PERSONAL_KEY=...`로 보관한다. `config.yaml`에는 원문 키 대신 placeholder를 쓴다. `JIMI_MCP_ALLOW_DESTRUCTIVE`는 설정하지 않는다:
+**Hermes Agent** — 개인 위키 전용 키를 `wiki scope + maxRole=editor + 90일 만료`로 발급하고 개인 프로필의 `~/.hermes/profiles/personal/.env`에 `JIMI_WIKI_PERSONAL_KEY=...`로 보관한다. 개인 프로필 `config.yaml`에는 원문 키 대신 placeholder를 쓰고, production에서는 release의 `mcp/server.mjs` 절대 경로를 가리킨다:
 ```yaml
 mcp_servers:
   jimi-wiki:
@@ -55,12 +55,12 @@ mcp_servers:
       JIMI_WIKI_SLUG: "<대상-위키-slug>"
     tools:
       # 비서 프로필 — 찾고·넣고·담아두는 일상 사용
-      include: [search_wiki, search_documents, read_page, list_pages, list_sources, read_source, create_source, write_page, get_ontology, match_category, preserve_url, preserve_text, curate_url, curate_text, curate_source, get_run_status, record_document, record_worklog, append_document, save_link, list_saved_links, promote_saved_link]
+      include: [search_wiki, search_documents, read_page, list_pages, list_sources, read_source, create_source, write_page, get_ontology, match_category, preserve_url, preserve_text, curate_url, curate_text, curate_source, get_run_status, record_document, record_worklog, append_document, save_link, list_saved_links, promote_saved_link, trash_saved_link, restore_saved_link, list_trash, trash_page, restore_page, trash_source, restore_source]
 ```
 
 - **개인 위키 프로필**(위 `include`): 검색·원문 보존·직접/위임 정리·문서 기록·읽을거리 관리를 허용한다. 보호 메모(`personal/internalOnly`)는 MCP에서 보이지 않는다.
 - **유지보수 프로필**: `include`를 지우면 `run_lint`를 포함한 전체 비파괴 도구가 추가로 노출된다.
-- `delete_page`는 어느 프로필에서도 기본 미노출이다. 필요하면 `env`에 `JIMI_MCP_ALLOW_DESTRUCTIVE: "1"`을 추가한다(자율 에이전트에는 권장하지 않음).
+- 휴지통 도구는 14일 복구 가능하므로 개인 프로필에도 노출한다. 영구 purge와 위키 전체 삭제 도구는 MCP 서버 자체에 없다.
 - Claude Code 프로젝트 위키는 프로젝트 전용 키와 slug로 위 명령을 `--scope local` 등록한다. 그 키로 개인/다른 프로젝트 위키를 요청하면 `404`가 정상이다.
 
 ### 2-b) REST로 연결 (MCP 없는 하네스)
@@ -80,7 +80,7 @@ curl -sH "Authorization: Bearer $KEY" "$BASE/pages"   # 연결 확인
 스킬 본체는 `SKILL.md` + `references/`다. 폴더째로 옮겨야 참조(ontology-rules·tools·setup)가 유지된다.
 
 - **Claude Code** — 이 폴더를 `.claude/skills/wiki-ingest/`(프로젝트) 또는 `~/.claude/skills/wiki-ingest/`(전역)에 둔다. frontmatter의 `name`/`description`으로 자동 발견되고 `/wiki-ingest`로 호출된다.
-- **Hermes Agent** — 이 폴더를 Hermes의 스킬 디렉터리(`~/.hermes/skills/wiki-ingest/`)에 복사한다. Hermes는 `SKILL.md` 형식을 그대로 읽는다. 위임형 편입만 쓸 거라면 스킬 없이 MCP 도구 설명만으로도 동작한다 — 직접 큐레이션을 시킬 때 스킬이 필요하다.
+- **Hermes Agent** — 기본 프로필은 `~/.hermes/skills/wiki-ingest/`, 개인 프로필은 `~/.hermes/profiles/personal/skills/wiki-ingest/`에 복사한다. Hermes는 `SKILL.md` 형식을 그대로 읽는다. 위임형 편입만 쓸 거라면 스킬 없이 MCP 도구 설명만으로도 동작한다 — 직접 큐레이션을 시킬 때 스킬이 필요하다.
 - **Codex 등 invoke 도구 없는 하네스** — invoke 개념이 없다. 에이전트에게 `SKILL.md` 경로를 알려주고 "이 SKILL.md를 읽고 그 워크플로우를 따르라"고 지시하면 된다. frontmatter는 무시돼도 무방하다.
 - **그 외** — SKILL.md는 순수 마크다운 지침이다. 어떤 에이전트든 이 파일과 `references/`를 읽을 수 있으면 사용 가능하다.
 

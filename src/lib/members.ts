@@ -70,6 +70,7 @@ export async function revokeShareLink(wikiId: string, id: string) {
 export async function resolveShareLink(token: string) {
   const link = await prisma.shareLink.findUnique({ where: { token }, include: { wiki: true } });
   if (!link) return null;
+  if (link.wiki.trashedAt) return null;
   if (link.expiresAt && link.expiresAt.getTime() < Date.now()) return null;
   return link;
 }

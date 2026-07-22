@@ -6,11 +6,14 @@ import { signIn, signOut } from "@/auth";
 import { hashPassword } from "@/lib/password";
 import { findValidInvite } from "@/lib/invite";
 import type { ActionState } from "./types";
+import { authMode } from "@/lib/auth-mode";
+import { redirect } from "next/navigation";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /** 이메일+비밀번호 로그인. 성공 시 signIn이 NEXT_REDIRECT를 throw하므로 AuthError만 잡고 나머지는 rethrow. */
 export async function credentialsLoginAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  if (authMode() === "tailscale") redirect("/claim");
   const t = await getTranslations("LoginActions");
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
@@ -26,6 +29,7 @@ export async function credentialsLoginAction(_prev: ActionState, fd: FormData): 
 
 /** 초대 토큰으로 계정 생성(공개가입 대체). 초대 소진은 트랜잭션 내에서 재확인해 1회성 보장. */
 export async function registerWithInviteAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  if (authMode() === "tailscale") redirect("/claim");
   const t = await getTranslations("LoginActions");
   const token = String(fd.get("token") ?? "");
   const password = String(fd.get("password") ?? "");
@@ -66,5 +70,6 @@ export async function registerWithInviteAction(_prev: ActionState, fd: FormData)
 
 /** 시그니처 유지: WikiToc/Sidebar/wikis 의 <form action={logoutAction}> 호출부 불변. */
 export async function logoutAction() {
+  if (authMode() === "tailscale") redirect("/wikis");
   await signOut({ redirectTo: "/login" });
 }

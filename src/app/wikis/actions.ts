@@ -5,7 +5,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { createWiki, getWikiForUser, getPage, createPage, updatePage, setPageCategory, listPages } from "@/lib/wiki";
 import { MANUAL_KINDS } from "@/lib/kinds";
 import { hasRole } from "@/lib/api-gate";
-import { createIngestRun, createFileIngestRun, reapStaleRuns, fetchLinkMeta } from "@/lib/ingest";
+import { createIngestRun, createFileIngestRun, reapStaleRuns } from "@/lib/ingest";
 import { classifyUpload, MAX_UPLOAD_BYTES, MAX_REQUEST_BYTES } from "@/lib/file-types";
 import { getOntology, ONTOLOGY_SLUG, isReservedSlug } from "@/lib/ontology";
 import { normalizeSlug } from "@/lib/markdown";
@@ -16,6 +16,7 @@ import { prisma } from "@/lib/db";
 import type { ModelAccess, PageKind, WikiKind } from "@/generated/prisma/client";
 import { promoteSavedLink } from "@/lib/saved-link-promotion";
 import { parseDocumentDate, parseDocumentType, writeDocument } from "@/lib/documents";
+import { saveSavedLink, trashSavedLink } from "@/lib/saved-links";
 
 function formModelAccess(formData: FormData): ModelAccess {
   return String(formData.get("modelAccess") ?? "external") === "internalOnly" ? "internalOnly" : "external";
@@ -142,10 +143,9 @@ function firstLineTitle(body: string): string {
 const BARE_URL = /^https?:\/\/\S+$/i;
 const isBareUrl = (s: string) => BARE_URL.test(s.trim());
 
-/** 링크 저장(개인·자동 라벨). fetchLinkMeta는 LLM 없이 제목·설명 추출(잘못된/사설 URL이면 throw). */
+/** 링크 저장(개인·자동 라벨). 메타데이터만 읽으며 LLM은 호출하지 않는다. */
 async function saveLink(wikiId: string, userId: string, url: string): Promise<void> {
-  const meta = await fetchLinkMeta(url);
-  await prisma.savedLink.create({ data: { userId, wikiId, url, title: meta.title, description: meta.description } });
+  await saveSavedLink({ wikiId, userId, url });
 }
 
 /** ⌘⇧N 빠른 캡처: 단일 URL이면 읽을거리로, 아니면 미분류(Inbox) 개인 노트로. */
@@ -184,12 +184,12 @@ export async function saveLinkAction(wikiSlug: string, url: string): Promise<voi
   revalidatePath(`/wikis/${wikiSlug}/reading`);
 }
 
-/** 읽을거리 항목 삭제(소유 검증). */
+/** 읽을거리 항목을 14일 복구 가능한 휴지통으로 이동(소유 검증). */
 export async function deleteSavedLinkAction(wikiSlug: string, id: string): Promise<void> {
   const userId = await getCurrentUserId();
   const wiki = await getWikiForUser(userId, wikiSlug);
   if (!wiki) throw new Error("접근 권한이 없습니다");
-  await prisma.savedLink.deleteMany({ where: { id, userId, wikiId: wiki.id } });
+  await trashSavedLink(wiki.id, userId, id);
   revalidatePath(`/wikis/${wikiSlug}/reading`);
 }
 
@@ -197,7 +197,7 @@ export async function deleteSavedLinkAction(wikiSlug: string, id: string): Promi
 export async function promoteSavedLinkAction(wikiSlug: string, id: string): Promise<string> {
   const userId = await getCurrentUserId();
   const wiki = await requireWriteAccess(userId, wikiSlug); // 공유 지식에 씀 → editor+
-  const link = await prisma.savedLink.findFirst({ where: { id, userId, wikiId: wiki.id } });
+  const link = await prisma.savedLink.findFirst({ where: { id, userId, wikiId: wiki.id, trashedAt: null } });
   if (!link) throw new Error("링크를 찾을 수 없습니다");
   if (!link.promotedRunId && !link.promotedAt) await requireQuota(userId);
   const promotion = await promoteSavedLink(wiki.id, userId, id);

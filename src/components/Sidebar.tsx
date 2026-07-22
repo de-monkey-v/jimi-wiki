@@ -12,7 +12,7 @@ function itemCls(active: boolean) {
   }`;
 }
 
-export function Sidebar({ email, owned, shared }: { email: string; owned: Wiki[]; shared: Wiki[] }) {
+export function Sidebar({ email, owned, shared, showLogout = true }: { email: string; owned: Wiki[]; shared: Wiki[]; showLogout?: boolean }) {
   const t = useTranslations("Sidebar");
   const pathname = decodeURIComponent(usePathname());
   const seg = pathname.split("/"); // ["", "wikis", "<slug>", ...]
@@ -72,9 +72,11 @@ export function Sidebar({ email, owned, shared }: { email: string; owned: Wiki[]
 
       <div className="border-t border-gray-200 px-3 py-3">
         <div className="mb-1 truncate px-1 text-xs text-gray-500">{email}</div>
-        <form action={logoutAction}>
-          <button className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-gray-600 hover:bg-gray-100">{t("logout")}</button>
-        </form>
+        {showLogout ? (
+          <form action={logoutAction}>
+            <button className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("logout")}</button>
+          </form>
+        ) : null}
       </div>
     </aside>
   );

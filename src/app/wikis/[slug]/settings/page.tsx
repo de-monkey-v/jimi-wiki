@@ -129,7 +129,19 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
         <h2 className="font-semibold text-red-700">{t("dangerZone")}</h2>
         <form action={deleteWikiAction}>
           <input type="hidden" name="wikiSlug" value={slug} />
-          <button className="bg-red-600 text-white rounded px-4 py-2 text-sm">{t("deleteWiki")}</button>
+          <p className="mb-2 text-sm text-stone-600">{t("trashDescription")}</p>
+          <label className="block text-sm text-stone-700">
+            {t("trashConfirm", { slug })}
+            <input
+              name="confirmSlug"
+              required
+              pattern={slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}
+              autoComplete="off"
+              spellCheck={false}
+              className="mb-2 mt-1 w-full rounded border border-red-200 px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            />
+          </label>
+          <button className="rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">{t("deleteWiki")}</button>
         </form>
       </section>
     </main>

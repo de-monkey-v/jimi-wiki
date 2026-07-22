@@ -11,6 +11,7 @@ export function ReadingRow({
   url,
   title,
   description,
+  summary,
   savedAt,
   promoted,
   canPromote,
@@ -20,6 +21,7 @@ export function ReadingRow({
   url: string;
   title: string;
   description: string | null;
+  summary: string | null;
   savedAt: string;
   promoted: boolean;
   canPromote: boolean;
@@ -53,6 +55,12 @@ export function ReadingRow({
           {promoted && <span className="mt-0.5 shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">✓ {t("promoted")}</span>}
         </div>
         {description && <p className="mt-1.5 line-clamp-3 text-sm leading-5 text-stone-500 lg:line-clamp-2">{description}</p>}
+        {summary && (
+          <details className="mt-2 rounded-md bg-stone-50 px-3 py-2 text-sm text-stone-700">
+            <summary className="cursor-pointer font-medium">{t("summary")}</summary>
+            <p className="mt-2 break-words whitespace-pre-wrap leading-6">{summary}</p>
+          </details>
+        )}
         <p className="mt-2 truncate text-xs text-stone-400">{host} · {savedAt}</p>
       </div>
       <div className="flex w-full shrink-0 items-center gap-2 border-t border-stone-100 pt-3 lg:w-auto lg:gap-1 lg:border-t-0 lg:pt-0">

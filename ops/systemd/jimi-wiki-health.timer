@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Jimi Wiki readiness monitor every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=jimi-wiki-health.service
+
+[Install]
+WantedBy=timers.target

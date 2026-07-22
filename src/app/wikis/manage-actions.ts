@@ -2,10 +2,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/session";
-import { getWikiForUser, updateWikiSettings, deleteWiki } from "@/lib/wiki";
+import { getWikiForUser, updateWikiSettings } from "@/lib/wiki";
 import { hasRole } from "@/lib/api-gate";
 import { inviteMember, updateMemberRole, removeMember, createShareLink, revokeShareLink } from "@/lib/members";
 import type { Role, Visibility } from "@/generated/prisma/client";
+import { prisma } from "@/lib/db";
+import { purgeTrashedWiki, restoreTrashedWiki, trashWiki } from "@/lib/trash";
 
 async function requireOwner(userId: string, wikiSlug: string) {
   const wiki = await getWikiForUser(userId, wikiSlug);
@@ -33,8 +35,38 @@ export async function deleteWikiAction(formData: FormData) {
   const userId = await getCurrentUserId();
   const wikiSlug = String(formData.get("wikiSlug"));
   const wiki = await requireOwner(userId, wikiSlug);
-  await deleteWiki(wiki.id);
+  if (String(formData.get("confirmSlug") ?? "") !== wikiSlug) {
+    throw new Error("위키 slug를 정확히 입력해야 합니다");
+  }
+  await trashWiki({ wikiId: wiki.id, slug: wikiSlug, userId });
   redirect("/wikis");
+}
+
+async function requireTrashedOwner(userId: string, wikiSlug: string) {
+  const wiki = await prisma.wiki.findFirst({
+    where: { slug: wikiSlug, trashedAt: { not: null }, memberships: { some: { userId, role: "owner" } } },
+  });
+  if (!wiki) throw new Error("휴지통에서 위키를 찾을 수 없습니다");
+  return wiki;
+}
+
+export async function restoreWikiAction(formData: FormData) {
+  const userId = await getCurrentUserId();
+  const wikiSlug = String(formData.get("wikiSlug"));
+  const wiki = await requireTrashedOwner(userId, wikiSlug);
+  await restoreTrashedWiki(wiki.id);
+  redirect(`/wikis/${encodeURIComponent(wiki.slug)}`);
+}
+
+export async function purgeWikiAction(formData: FormData) {
+  const userId = await getCurrentUserId();
+  const wikiSlug = String(formData.get("wikiSlug"));
+  if (String(formData.get("confirmSlug") ?? "") !== wikiSlug) {
+    throw new Error("위키 slug를 정확히 입력해야 합니다");
+  }
+  const wiki = await requireTrashedOwner(userId, wikiSlug);
+  await purgeTrashedWiki(wiki.id, new Date(), true);
+  redirect("/wikis?view=trash");
 }
 
 export async function inviteMemberAction(formData: FormData) {

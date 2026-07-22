@@ -615,7 +615,7 @@ export type ClaimedAgentRun =
 /** generic worker용: ingest/rebuild 중 가장 오래된 pending run을 원자적으로 claim한다. */
 export async function claimNextAgentRun(): Promise<ClaimedAgentRun | null> {
   const run = await prisma.agentRun.findFirst({
-    where: { type: { in: ["ingest", "rebuild"] }, status: "pending" },
+    where: { type: { in: ["ingest", "rebuild"] }, status: "pending", wiki: { trashedAt: null } },
     orderBy: { createdAt: "asc" },
     select: { id: true, wikiId: true, type: true, input: true, userId: true },
   });
@@ -634,7 +634,7 @@ export async function claimNextAgentRun(): Promise<ClaimedAgentRun | null> {
 /** worker용: 가장 오래된 pending ingest run 1건을 running으로 원자적으로 claim한다. */
 export async function claimNextIngestRun(): Promise<ClaimedIngestRun | null> {
   const run = await prisma.agentRun.findFirst({
-    where: { type: "ingest", status: "pending" },
+    where: { type: "ingest", status: "pending", wiki: { trashedAt: null } },
     orderBy: { createdAt: "asc" },
     select: { id: true, wikiId: true, input: true, userId: true },
   });

@@ -40,6 +40,24 @@ export function embeddingStatus(): { provider: string; model: string; dim: numbe
   return { provider, model: embedModelName(provider), dim: EMBED_DIM, enabled: embeddingEnabled() };
 }
 
+/** production에서 필수인 self-hosted TEI가 실제 요청을 받을 수 있는지 확인한다. */
+export async function embeddingReadiness(): Promise<ReturnType<typeof embeddingStatus> & { ready: boolean }> {
+  const status = embeddingStatus();
+  // Gemini는 선택 기능이며 readiness probe가 외부 API 호출이나 과금을 만들면 안 된다.
+  if (status.provider !== "local") return { ...status, ready: true };
+  const base = localEmbedBaseUrl();
+  if (!base) return { ...status, ready: false };
+  try {
+    const response = await fetch(`${base}/health`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+    return { ...status, ready: response.ok };
+  } catch {
+    return { ...status, ready: false };
+  }
+}
+
 async function localEmbedBatch(texts: string[], signal: AbortSignal | undefined, timeoutMs: number): Promise<number[][]> {
   const base = localEmbedBaseUrl();
   if (!base) throw new Error("EMBED_BASE_URL 미설정 — 로컬 임베딩 서버 주소가 필요합니다");

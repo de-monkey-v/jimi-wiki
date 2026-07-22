@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { authMode } from "@/lib/auth-mode";
+import { getTailscaleRequestState } from "@/lib/tailscale-auth";
 import type { User } from "@/generated/prisma/client";
 
 /**
@@ -22,7 +23,12 @@ async function getSingleOwner(): Promise<User | null> {
 
 // React cache로 요청당 1회로 메모이즈 — layout·page·i18n/request.ts가 각각 호출해도 세션/DB 조회는 한 번.
 export const getCurrentUser = cache(async (): Promise<User | null> => {
-  if (authMode() === "single") return getSingleOwner();
+  const mode = authMode();
+  if (mode === "single") return getSingleOwner();
+  if (mode === "tailscale") {
+    const state = await getTailscaleRequestState();
+    return state.status === "authenticated" ? state.user : null;
+  }
   const session = await auth();
   const uid = session?.user?.id;
   if (uid) return prisma.user.findUnique({ where: { id: uid } });
@@ -35,6 +41,7 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
 export async function getCurrentUserId(): Promise<string> {
   const user = await getCurrentUser();
   if (user) return user.id;
+  if (authMode() === "tailscale") redirect("/claim");
   // loop-free: 비밀번호를 가진 관리자가 아직 없으면 최초 셋업으로, 있으면 로그인으로.
   const bootstrapped = await prisma.user.count({ where: { passwordHash: { not: null } } });
   redirect(bootstrapped === 0 ? "/setup" : "/login");

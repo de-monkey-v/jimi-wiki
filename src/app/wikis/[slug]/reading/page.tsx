@@ -21,15 +21,15 @@ export default async function ReadingPage({ params }: { params: Promise<{ slug: 
   const canWrite = hasRole(wiki.role, "editor");
 
   const links = await prisma.savedLink.findMany({
-    where: { userId, wikiId: wiki.id },
+    where: { userId, wikiId: wiki.id, trashedAt: null },
     orderBy: [{ promotedAt: { sort: "asc", nulls: "first" } }, { createdAt: "desc" }], // 미편입 먼저, 편입됨은 아래로
-    select: { id: true, url: true, title: true, description: true, createdAt: true, promotedAt: true },
+    select: { id: true, url: true, title: true, description: true, summary: true, createdAt: true, promotedAt: true },
   });
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
       <Link href={`/wikis/${slug}`} className="text-xs text-stone-400 hover:text-stone-600">← {wiki.title}</Link>
-      <h1 className="mb-1 mt-1 text-2xl font-bold">{t("title")}</h1>
+      <div className="flex items-center justify-between"><h1 className="mb-1 mt-1 text-2xl font-bold">{t("title")}</h1><Link href={`/wikis/${encodeURIComponent(slug)}/settings/trash`} className="rounded-sm text-sm text-stone-500 hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("trash")}</Link></div>
       <p className="mb-4 text-sm text-stone-400">{t("subtitle")}</p>
 
       <AddLinkForm wikiSlug={slug} />
@@ -46,6 +46,7 @@ export default async function ReadingPage({ params }: { params: Promise<{ slug: 
               url={l.url}
               title={l.title}
               description={l.description}
+              summary={l.summary}
               savedAt={l.createdAt.toISOString().slice(0, 10)}
               promoted={!!l.promotedAt}
               canPromote={canWrite}

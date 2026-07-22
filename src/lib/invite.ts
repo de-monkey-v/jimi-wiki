@@ -40,8 +40,9 @@ export async function revokeInvite(id: string) {
 
 /** 가입 흐름에서 소비: 유효 초대 조회. 만료/사용됨이면 null. */
 export async function findValidInvite(token: string) {
-  const inv = await prisma.invite.findUnique({ where: { token } });
+  const inv = await prisma.invite.findUnique({ where: { token }, include: { wiki: { select: { trashedAt: true } } } });
   if (!inv || inv.usedAt) return null;
   if (inv.expiresAt && inv.expiresAt < new Date()) return null;
+  if (inv.wiki?.trashedAt) return null;
   return inv;
 }

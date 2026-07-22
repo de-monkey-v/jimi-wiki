@@ -15,8 +15,10 @@ import { refreshPreferredGptModel } from "../src/lib/model-resolver";
 import { storeExists } from "../src/lib/openai-oauth";
 import { notifyIngestComplete } from "../src/lib/telegram-notify";
 import { processPendingBlobPurges } from "../src/lib/blob-purge";
+import { purgeExpiredTrash } from "../src/lib/trash";
 
 const pollMs = Number(process.env.WORKER_POLL_MS ?? 3000);
+const trashSweepMs = 60 * 60 * 1000;
 let stopping = false;
 
 async function shutdown() {
@@ -121,11 +123,17 @@ async function main() {
   await refreshPreferredGptModel(true).catch(() => {});
   await refreshConfig().catch(() => {}); // 프로브 결과를 캐시에 즉시 반영
   logProviderStatus();
+  let nextTrashSweepAt = 0;
   while (!stopping) {
     // 폴링 루프는 일시적 DB/스키마 오류(예: 마이그레이션 진행 중)에 크래시하지 않고 재시도한다.
     try {
       await processPendingBlobPurges();
       await reapStaleRuns();
+      if (Date.now() >= nextTrashSweepAt) {
+        const purged = await purgeExpiredTrash();
+        if (Object.values(purged).some((count) => count > 0)) console.log("[worker] trash purge", purged);
+        nextTrashSweepAt = Date.now() + trashSweepMs;
+      }
       const run = await claimNextAgentRun();
       if (!run) {
         await sleep(pollMs);

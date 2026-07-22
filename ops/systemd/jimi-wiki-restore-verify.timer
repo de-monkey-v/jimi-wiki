@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly Jimi Wiki restore verification
+
+[Timer]
+OnCalendar=Sun *-*-* 05:00:00
+Persistent=true
+Unit=jimi-wiki-restore-verify.service
+
+[Install]
+WantedBy=timers.target

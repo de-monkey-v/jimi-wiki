@@ -84,6 +84,54 @@ export class ContentProvenanceError extends Error {
   }
 }
 
+/**
+ * 휴지통 시각은 archive revision과 별개의 복구 보존기간 메타데이터다. Page/Source projection
+ * direct write 경계는 유지하되, 콘텐츠 snapshot hash/revision에는 포함하지 않는다.
+ */
+export async function setPageTrashStateTx(
+  tx: ContentTransaction,
+  input: {
+    wikiId: string;
+    pageId: string;
+    trashedAt: Date | null;
+    purgeAt: Date | null;
+    archivedBeforeTrash: boolean;
+  },
+) {
+  const updated = await tx.page.updateMany({
+    where: { id: input.pageId, wikiId: input.wikiId },
+    data: {
+      trashedAt: input.trashedAt,
+      purgeAt: input.purgeAt,
+      archivedBeforeTrash: input.archivedBeforeTrash,
+    },
+  });
+  if (updated.count !== 1) throw new ContentNotFoundError("page");
+  return tx.page.findUniqueOrThrow({ where: { id: input.pageId } });
+}
+
+export async function setSourceTrashStateTx(
+  tx: ContentTransaction,
+  input: {
+    wikiId: string;
+    sourceId: string;
+    trashedAt: Date | null;
+    purgeAt: Date | null;
+    archivedBeforeTrash: boolean;
+  },
+) {
+  const updated = await tx.source.updateMany({
+    where: { id: input.sourceId, wikiId: input.wikiId },
+    data: {
+      trashedAt: input.trashedAt,
+      purgeAt: input.purgeAt,
+      archivedBeforeTrash: input.archivedBeforeTrash,
+    },
+  });
+  if (updated.count !== 1) throw new ContentNotFoundError("source");
+  return tx.source.findUniqueOrThrow({ where: { id: input.sourceId } });
+}
+
 export interface SnapshotWriteResult<TProjection, TRevision> {
   projection: TProjection;
   revision: TRevision;

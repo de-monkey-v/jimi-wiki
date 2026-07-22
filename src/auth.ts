@@ -12,7 +12,7 @@ import { authMode } from "@/lib/auth-mode";
  * - oidc  : phase-2(미배선). 켜려면 여기에 generic OIDC provider를 추가한다(어댑터가 이미 있어 그대로 동작).
  */
 function buildProviders() {
-  if (authMode() === "single") return [];
+  if (authMode() === "single" || authMode() === "tailscale") return [];
   return [
     Credentials({
       credentials: { email: {}, password: {} },

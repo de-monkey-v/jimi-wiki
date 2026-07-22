@@ -4,10 +4,8 @@ import { prisma } from "@/lib/db";
 import { isReservedSlug } from "@/lib/ontology";
 import { purgePage } from "@/lib/content-store";
 import { changePageModelAccess } from "@/lib/model-policy";
-import { refreshPageDerivedState } from "@/lib/page-projections";
 import { ONTOLOGY_PAGE_SLUG } from "@/lib/wiki-routes";
-import { withModelPolicyWriteLock } from "@/lib/model-access";
-import { archivePageSnapshotTx } from "@/lib/content-store";
+import { trashPage } from "@/lib/trash";
 import {
   contentMutationErrorResponse,
   optionalExpectedVersionFromRequest,
@@ -77,8 +75,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!modelAccess) return NextResponse.json({ error: "invalid_model_access" }, { status: 400 });
   if (!expectedVersion) return NextResponse.json({ error: "expected_version_required" }, { status: 400 });
 
-  const page = await prisma.page.findUnique({
-    where: { wikiId_slug: { wikiId: gate.wiki.id, slug: pageSlug } },
+  const page = await prisma.page.findFirst({
+    where: { wikiId: gate.wiki.id, slug: pageSlug, trashedAt: null },
     select: { id: true, modelAccess: true },
   });
   if (!page || (requestsExternalModelScope(req) && page.modelAccess !== "external")) {
@@ -113,8 +111,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /**
- * DELETE는 기본적으로 suppression archive다. 영구 삭제는 owner 세션·쿼리·slug 확인 헤더를
- * 모두 요구해, 복원 가능성을 포기하는 동작이 API key나 실수로 실행되지 않게 한다.
+ * DELETE는 기본적으로 14일 복구 가능한 휴지통 이동이다. 영구 삭제는 이미 휴지통에 있는
+ * 항목에 한해 owner 세션·쿼리·slug 확인 헤더를 모두 요구한다.
  */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string; pageSlug: string }> }) {
   const { id, pageSlug } = await params;
@@ -132,11 +130,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }
     const page = await prisma.page.findUnique({
       where: { wikiId_slug: { wikiId: gate.wiki.id, slug: pageSlug } },
-      select: { id: true, slug: true, currentVersion: true },
+      select: { id: true, slug: true, currentVersion: true, trashedAt: true },
     });
     if (!page) return NextResponse.json({ error: "not_found" }, { status: 404 });
     if (isReservedSlug(page.slug)) {
       return NextResponse.json({ error: "cannot_delete_system_page" }, { status: 403 });
+    }
+    if (!page.trashedAt) {
+      return NextResponse.json({ error: "must_trash_first" }, { status: 409 });
     }
     try {
       await purgePage({
@@ -163,39 +164,36 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     where: {
       wikiId: gate.wiki.id,
       slug: pageSlug,
-      archivedAt: null,
-      ...(requestsExternalModelScope(req) ? { modelAccess: "external" as const } : {}),
+      trashedAt: null,
+      origin: { not: "system" },
+      ...(requestsExternalModelScope(req)
+        ? { modelAccess: "external" as const, kind: { not: "personal" as const } }
+        : {}),
     },
-    select: { id: true, slug: true, currentVersion: true, origin: true, kind: true },
+    select: { id: true, slug: true, currentVersion: true, kind: true, sourceId: true },
   });
   if (!page) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (isReservedSlug(page.slug)) {
     return NextResponse.json({ error: "cannot_delete_system_page" }, { status: 403 });
   }
-  if (
-    requestsExternalModelScope(req) &&
-    (page.origin !== "generated" || !["concept", "entity", "meta"].includes(page.kind))
-  ) {
-    return NextResponse.json({ error: "human_page_requires_review" }, { status: 409 });
-  }
   try {
-    await withModelPolicyWriteLock(gate.wiki.id, (tx) => archivePageSnapshotTx(tx, {
+    await trashPage({
       wikiId: gate.wiki.id,
       pageId: page.id,
       expectedVersion: requestedVersion.state === "valid" ? requestedVersion.value : page.currentVersion,
-      suppression: true,
-      context: {
-        actor: requestsExternalModelScope(req) ? "agent" : "human",
-        userId: gate.user.id,
-        reason: "page archived through REST",
-      },
-    }));
-    await refreshPageDerivedState(gate.wiki.id, page.id);
+      userId: gate.user.id,
+    });
     return NextResponse.json(
-      { deleted: true, archived: true, slug: page.slug },
+      { deleted: true, trashed: true, slug: page.slug },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "source_note_requires_source_trash") {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "system_page_cannot_be_trashed") {
+      return NextResponse.json({ error: "cannot_delete_system_page" }, { status: 403 });
+    }
     return contentMutationErrorResponse(error);
   }
 }

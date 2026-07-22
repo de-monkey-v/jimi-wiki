@@ -36,3 +36,4 @@ self-host 애플리케이션이라 중앙에서 패치할 호스팅 서비스가
 - 시크릿(`AUTH_SECRET`, `GEMINI_API_KEY`, `DATABASE_URL`, `.openai-oauth.json`)은 git에 올리지 마세요
   (이미 `.gitignore` 처리됨). 유출 시 `AUTH_SECRET`을 교체하세요.
 - API 키는 발급 시 한 번만 노출되고 해시로 저장됩니다. 스코프(읽기전용/편집)와 만료를 지정하세요.
+- `AUTH_MODE=tailscale`에서 identity header를 인증으로 쓰면 앱을 반드시 loopback에만 bind하고 Tailscale Serve만 앞단에 둡니다. 원본 포트를 LAN/tailnet에 열면 헤더 위조가 가능합니다.

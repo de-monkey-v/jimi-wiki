@@ -3,13 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hasRole } from "@/lib/api-gate";
-import { processBlobPurgeLog } from "@/lib/blob-purge";
 import { queueIncrementalKnowledgeBuild } from "@/lib/builds";
 import {
   ContentVersionConflictError,
   archivePageSnapshotTx,
-  purgePage,
-  purgeSource,
   restoreArchivedPageTx,
   restoreArchivedSourceTx,
 } from "@/lib/content-store";
@@ -26,6 +23,7 @@ import { reindexEmbeddings } from "@/lib/search";
 import { getCurrentUser } from "@/lib/session";
 import { getWikiForUser } from "@/lib/wiki";
 import type { ModelAccess, Role } from "@/generated/prisma/client";
+import { trashPage, trashSource } from "@/lib/trash";
 
 export type KnowledgeControlState = {
   status: "idle" | "success" | "error";
@@ -170,9 +168,9 @@ export async function archivePageAction(
     const { user, wiki } = await requireRole(wikiSlug, "editor");
     const page = await prisma.page.findUnique({
       where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } },
-      select: { id: true, archivedAt: true, origin: true },
+      select: { id: true, archivedAt: true, trashedAt: true, origin: true },
     });
-    if (!page || page.archivedAt || page.origin === "system" || isReservedSlug(pageSlug)) throw new Error("page not active");
+    if (!page || page.archivedAt || page.trashedAt || page.origin === "system" || isReservedSlug(pageSlug)) throw new Error("page not active");
     const saved = await withModelPolicyWriteLock(wiki.id, (tx) => archivePageSnapshotTx(tx, {
       wikiId: wiki.id,
       pageId: page.id,
@@ -188,6 +186,32 @@ export async function archivePageAction(
   }
 }
 
+export async function trashPageAction(
+  _previous: KnowledgeControlState,
+  formData: FormData,
+): Promise<KnowledgeControlState> {
+  const wikiSlug = String(formData.get("wikiSlug") ?? "");
+  const pageSlug = String(formData.get("resourceSlug") ?? "");
+  try {
+    const { user, wiki } = await requireRole(wikiSlug, "editor");
+    const page = await prisma.page.findUnique({
+      where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } },
+      select: { id: true, origin: true },
+    });
+    if (!page || page.origin === "system" || isReservedSlug(pageSlug)) throw new Error("page not eligible");
+    await trashPage({
+      wikiId: wiki.id,
+      pageId: page.id,
+      expectedVersion: expectedVersion(formData),
+      userId: user.id,
+    });
+  } catch (error) {
+    return failure(error);
+  }
+  revalidatePath(`/wikis/${wikiSlug}`, "layout");
+  redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
+}
+
 export async function restorePageAction(
   _previous: KnowledgeControlState,
   formData: FormData,
@@ -198,9 +222,9 @@ export async function restorePageAction(
     const { user, wiki } = await requireRole(wikiSlug, "editor");
     const page = await prisma.page.findUnique({
       where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } },
-      select: { id: true, archivedAt: true, origin: true },
+      select: { id: true, archivedAt: true, trashedAt: true, origin: true },
     });
-    if (!page?.archivedAt || page.origin === "system" || isReservedSlug(pageSlug)) throw new Error("page not archived");
+    if (!page?.archivedAt || page.trashedAt || page.origin === "system" || isReservedSlug(pageSlug)) throw new Error("page not archived");
     const saved = await withModelPolicyWriteLock(wiki.id, (tx) => restoreArchivedPageTx(tx, {
       wikiId: wiki.id,
       pageId: page.id,
@@ -228,9 +252,9 @@ export async function archiveSourceAction(
     const { user, wiki } = await requireRole(wikiSlug, "editor");
     const source = await prisma.source.findUnique({
       where: { wikiId_slug: { wikiId: wiki.id, slug: sourceSlug } },
-      select: { id: true, archivedAt: true },
+      select: { id: true, archivedAt: true, trashedAt: true },
     });
-    if (!source || source.archivedAt) throw new Error("source not active");
+    if (!source || source.archivedAt || source.trashedAt) throw new Error("source not active");
     const result = await archiveSourceWithPropagation({
       wikiId: wiki.id,
       sourceId: source.id,
@@ -245,6 +269,32 @@ export async function archiveSourceAction(
   }
 }
 
+export async function trashSourceAction(
+  _previous: KnowledgeControlState,
+  formData: FormData,
+): Promise<KnowledgeControlState> {
+  const wikiSlug = String(formData.get("wikiSlug") ?? "");
+  const sourceSlug = String(formData.get("resourceSlug") ?? "");
+  try {
+    const { user, wiki } = await requireRole(wikiSlug, "editor");
+    const source = await prisma.source.findUnique({
+      where: { wikiId_slug: { wikiId: wiki.id, slug: sourceSlug } },
+      select: { id: true },
+    });
+    if (!source) throw new Error("source not found");
+    await trashSource({
+      wikiId: wiki.id,
+      sourceId: source.id,
+      expectedVersion: expectedVersion(formData),
+      userId: user.id,
+    });
+  } catch (error) {
+    return failure(error);
+  }
+  revalidatePath(`/wikis/${wikiSlug}`, "layout");
+  redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
+}
+
 export async function restoreSourceAction(
   _previous: KnowledgeControlState,
   formData: FormData,
@@ -256,9 +306,9 @@ export async function restoreSourceAction(
     const result = await withModelPolicyWriteLock(wiki.id, async (tx) => {
       const source = await tx.source.findUnique({
         where: { wikiId_slug: { wikiId: wiki.id, slug: sourceSlug } },
-        select: { id: true, archivedAt: true },
+        select: { id: true, archivedAt: true, trashedAt: true },
       });
-      if (!source?.archivedAt) throw new Error("source not archived");
+      if (!source?.archivedAt || source.trashedAt) throw new Error("source not archived");
       const restoredSource = await restoreArchivedSourceTx(tx, {
         wikiId: wiki.id,
         sourceId: source.id,
@@ -294,54 +344,4 @@ export async function restoreSourceAction(
   } catch (error) {
     return failure(error);
   }
-}
-
-export async function purgePageAction(
-  _previous: KnowledgeControlState,
-  formData: FormData,
-): Promise<KnowledgeControlState> {
-  const wikiSlug = String(formData.get("wikiSlug") ?? "");
-  const pageSlug = String(formData.get("resourceSlug") ?? "");
-  try {
-    const { wiki } = await requireRole(wikiSlug, "owner");
-    if (String(formData.get("confirmSlug") ?? "") !== pageSlug) {
-      return { status: "error", code: "confirmationRequired" };
-    }
-    if (isReservedSlug(pageSlug)) throw new Error("system page cannot be purged");
-    const page = await prisma.page.findUnique({
-      where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } },
-      select: { id: true, origin: true },
-    });
-    if (!page || page.origin === "system") throw new Error("page not found");
-    await purgePage({ wikiId: wiki.id, pageId: page.id, expectedVersion: expectedVersion(formData) });
-  } catch (error) {
-    return failure(error);
-  }
-  revalidatePath(`/wikis/${wikiSlug}`, "layout");
-  redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
-}
-
-export async function purgeSourceAction(
-  _previous: KnowledgeControlState,
-  formData: FormData,
-): Promise<KnowledgeControlState> {
-  const wikiSlug = String(formData.get("wikiSlug") ?? "");
-  const sourceSlug = String(formData.get("resourceSlug") ?? "");
-  try {
-    const { wiki } = await requireRole(wikiSlug, "owner");
-    if (String(formData.get("confirmSlug") ?? "") !== sourceSlug) {
-      return { status: "error", code: "confirmationRequired" };
-    }
-    const source = await prisma.source.findUnique({
-      where: { wikiId_slug: { wikiId: wiki.id, slug: sourceSlug } },
-      select: { id: true },
-    });
-    if (!source) throw new Error("source not found");
-    const purged = await purgeSource({ wikiId: wiki.id, sourceId: source.id, expectedVersion: expectedVersion(formData) });
-    if (purged.cleanupLogId) await processBlobPurgeLog(purged.cleanupLogId).catch(() => null);
-  } catch (error) {
-    return failure(error);
-  }
-  revalidatePath(`/wikis/${wikiSlug}`, "layout");
-  redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
 }

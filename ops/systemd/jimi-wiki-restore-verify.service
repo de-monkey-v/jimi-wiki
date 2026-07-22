@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify latest Jimi Wiki backup by real PostgreSQL restore
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/jimi-wiki/current
+ExecStart=%h/.local/share/jimi-wiki/current/ops/restore-verify.sh
+TimeoutStartSec=3h
+UMask=0077
+StandardOutput=journal
+StandardError=journal

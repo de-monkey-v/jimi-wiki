@@ -1,0 +1,13 @@
+[Unit]
+Description=Jimi Wiki production readiness monitor
+After=jimi-wiki-web.service jimi-wiki-worker.service jimi-wiki-codex-proxy.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/jimi-wiki/current
+EnvironmentFile=%h/.config/jimi-wiki/app.env
+Environment=NODE_ENV=production
+ExecStart=%h/.local/share/jimi-wiki/current/ops/health-check.sh
+UMask=0077
+StandardOutput=journal
+StandardError=journal

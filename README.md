@@ -49,6 +49,7 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 |---|---|---|---|
 | `single` | 없음 | 나 혼자 (localhost 전용 권장) | 암묵적 owner 1명 |
 | `local` (기본) | 이메일+비밀번호(argon2id) | 소팀 내부 서버 | 관리자 생성 / 초대 링크 |
+| `tailscale` | Tailscale Serve 신원 | 개인 tailnet 서버 | 기존 owner 1회 claim |
 | `oidc` | 외부 OIDC | 사내 IdP 보유 | *phase-2 (미배선)* |
 
 **first-run 관리자 만들기 (`local`):** 둘 중 하나.
@@ -63,9 +64,10 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 
 | 변수 | 용도 |
 |---|---|
-| `DATABASE_URL` | Postgres 접속 (docker compose 기본값: `postgresql://jimi:jimi@localhost:5433/jimi`) |
+| `DATABASE_URL` / `POSTGRES_PASSWORD` | Postgres 접속 URL과 Compose 비밀번호(같은 랜덤 값) |
 | `AUTH_SECRET` | 세션/JWT 서명 키 (`openssl rand -base64 32`) |
-| `AUTH_MODE` | 인증 모드: `single` \| `local`(기본) \| `oidc` |
+| `AUTH_MODE` | 인증 모드: `single` \| `local`(기본) \| `tailscale` \| `oidc` |
+| `TAILSCALE_ALLOWED_LOGIN` | `tailscale` 모드의 Serve login exact allowlist |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | (선택) `pnpm db:seed` 시 first-run 관리자 부트스트랩. 웹 `/setup`을 쓰면 비워둠 |
 | `APP_URL` | 앱 공개 URL — 초대/공유 링크 절대경로 조립용 |
 | `GEMINI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini 생성 + 임베딩 키 (동일 값) |
@@ -118,7 +120,7 @@ self-host를 전제로 한다 — 내부 서버(또는 자체 호스트)에 올�
 
 `web`·`worker`는 같은 `DATABASE_URL`, `AUTH_SECRET`, `GEMINI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `AUTH_MODE`를 공유한다. 첫 배포 시 `ADMIN_EMAIL`/`ADMIN_PASSWORD`로 관리자를 부트스트랩하거나 `web`의 `/setup`에서 만든다. 인터넷에 노출한다면 리버스 프록시로 HTTPS를 두거나 Tailscale 같은 사설 네트워크 뒤에 둔다.
 
-**Docker 로 한 번에**: `docker compose up --build` 하면 `db`·`web`(3007)·`worker`가 함께 뜬다. `web`·`worker`는 같은 이미지(command 로 역할 구분)이고, `.env`를 `env_file`로 읽되 `DATABASE_URL`은 컨테이너용(`db:5432`)으로 덮어쓴다. ChatGPT OAuth 토큰은 `jimi-oauth` 볼륨(`/data`)에 두어 web·worker가 공유한다. 개발 중이면 `pnpm dev:all`(web+worker 동시)로 충분하다.
+production에서 Docker Compose는 PostgreSQL과 embedding만 담당하며 두 포트는 loopback에만 bind한다. web·worker·Codex proxy는 atomic release + `systemd --user`로 실행한다. 개인 Tailscale 운영, 계정 claim, 암호화 backup/restore 절차는 [`docs/personal-production.md`](docs/personal-production.md)를 따른다. 개발 중이면 `pnpm dev:all`(web+worker 동시)로 충분하다.
 
 **모델 선택 · ChatGPT 로그인**: 관리자는 **`/admin/settings`**에서 채팅·ingest·query/lint 모델을 provider별 목록에서 골라 저장하고(재시작 없이 반영), ChatGPT 구독 OAuth를 브라우저 없이 device-code 로 로그인/로그아웃할 수 있다. env(`CHAT_MODEL` 등)는 미설정 시 폴백. 자세한 OAuth 흐름은 [`docs/openai-oauth.md`](docs/openai-oauth.md).
 
@@ -129,7 +131,7 @@ Health check:
 
 ## 프로그램적 접근 (REST / MCP)
 
-외부 에이전트가 앱 내부 AI 없이 위키를 유지보수할 수 있다. **웹 UI는 세션(쿠키)으로, 프로그램 호출은 API 키(Bearer)로 인증**한다.
+외부 에이전트가 앱 내부 AI 없이 위키를 유지보수할 수 있다. **웹 UI는 선택한 인증 모드의 세션 또는 Tailscale Serve 신원으로, 프로그램 호출은 API 키(Bearer)로 인증**한다.
 
 1. **API 키 발급**: 로그인 후 `/keys`에서 발급. 위키 스코프·상한 역할(읽기전용/편집)·만료를 지정할 수 있다. 발급 시 원문 키는 한 번만 노출된다.
 2. **REST**: `Authorization: Bearer <KEY>` 헤더로 `/api/wikis/{slug}/*` 호출. 전체 레퍼런스는 [`docs/rest-api.md`](docs/rest-api.md).

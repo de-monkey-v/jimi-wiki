@@ -23,7 +23,7 @@ export async function promoteSavedLink(
       userId,
     );
     const link = await tx.savedLink.findFirst({
-      where: { id: linkId, wikiId, userId },
+      where: { id: linkId, wikiId, userId, trashedAt: null },
       select: { id: true, url: true, title: true, promotedAt: true, promotedRunId: true },
     });
     if (!link) throw new Error("saved_link_not_found");

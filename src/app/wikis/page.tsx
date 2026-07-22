@@ -6,10 +6,21 @@ import { listOwnedWikis, listSharedWikis } from "@/lib/wiki";
 import { EmptyState } from "@/components/EmptyState";
 import { createWikiAction } from "./actions";
 import { logoutAction } from "../login/actions";
+import { WikiTrashView } from "./WikiTrashView";
+import { authMode, unauthenticatedPath } from "@/lib/auth-mode";
 
-export default async function WikisPage() {
+export const dynamic = "force-dynamic";
+
+export default async function WikisPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const { view } = await searchParams;
+  if (view === "trash") return <WikiTrashView />;
+
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(unauthenticatedPath());
   const t = await getTranslations("WikisPage");
   const [owned, shared] = await Promise.all([listOwnedWikis(user.id), listSharedWikis(user.id)]);
   const hasAnyWikis = owned.length > 0 || shared.length > 0;
@@ -23,11 +34,14 @@ export default async function WikisPage() {
         <div className="flex items-center gap-3 text-sm text-stone-500">
           <Link href="/keys" className="hover:text-stone-800">{t("apiKeys")}</Link>
           <Link href="/docs" className="hover:text-stone-800">{t("integrationGuide")}</Link>
+          <Link href="/wikis?view=trash" className="hover:text-stone-800">{t("trash")}</Link>
           <span className="text-stone-300">·</span>
           <span className="text-xs text-stone-400">{user.email}</span>
-          <form action={logoutAction}>
-            <button className="hover:text-stone-800">{t("logout")}</button>
-          </form>
+          {authMode() !== "tailscale" ? (
+            <form action={logoutAction}>
+              <button className="hover:text-stone-800">{t("logout")}</button>
+            </form>
+          ) : null}
         </div>
       </div>
       <h2 className="text-sm font-semibold text-stone-500 mb-2">{t("myWikis")}</h2>

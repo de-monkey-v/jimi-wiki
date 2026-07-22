@@ -60,7 +60,7 @@ async function reindexPageEmbeddingIfEligible(
 // ---------- 위키 ----------
 export function listWikisForUser(userId: string) {
   return prisma.wiki.findMany({
-    where: { memberships: { some: { userId } } },
+    where: { memberships: { some: { userId } }, trashedAt: null },
     orderBy: { updatedAt: "desc" },
     include: { _count: { select: { pages: true } } },
   });
@@ -69,7 +69,7 @@ export function listWikisForUser(userId: string) {
 /** 내가 만든 위키. */
 export function listOwnedWikis(userId: string) {
   return prisma.wiki.findMany({
-    where: { createdById: userId },
+    where: { createdById: userId, trashedAt: null },
     orderBy: { updatedAt: "desc" },
     include: { _count: { select: { pages: true } } },
   });
@@ -78,7 +78,7 @@ export function listOwnedWikis(userId: string) {
 /** 남이 나를 초대한 위키(내가 만들지 않았지만 멤버인 것) + 내 역할. */
 export async function listSharedWikis(userId: string) {
   const rows = await prisma.wiki.findMany({
-    where: { memberships: { some: { userId } }, NOT: { createdById: userId } },
+    where: { memberships: { some: { userId } }, NOT: { createdById: userId }, trashedAt: null },
     orderBy: { updatedAt: "desc" },
     include: {
       _count: { select: { pages: true } },
@@ -113,12 +113,21 @@ export async function createWiki(userId: string, input: { title: string; kind: W
 
 /** 접근 권한 확인과 함께 위키 조회. 멤버가 아니면 null */
 export async function getWikiForUser(userId: string, slug: string) {
-  const wiki = await prisma.wiki.findUnique({
-    where: { slug },
+  const wiki = await prisma.wiki.findFirst({
+    where: { slug, trashedAt: null },
     include: { memberships: { where: { userId }, take: 1 } },
   });
   if (!wiki || wiki.memberships.length === 0) return null;
   return { ...wiki, role: wiki.memberships[0].role };
+}
+
+/** 소유자가 휴지통 화면에서만 조회하는 삭제 대기 위키. 일반 접근 게이트에는 절대 사용하지 않는다. */
+export function listTrashedOwnedWikis(userId: string) {
+  return prisma.wiki.findMany({
+    where: { memberships: { some: { userId, role: "owner" } }, trashedAt: { not: null } },
+    orderBy: { trashedAt: "desc" },
+    include: { _count: { select: { pages: true, sources: true } } },
+  });
 }
 
 export function listPages(wikiId: string) {
@@ -265,13 +274,6 @@ export function updateWikiSettings(
       ...(input.kind !== undefined ? { kind: input.kind } : {}),
     },
   });
-}
-
-export async function deleteWiki(wikiId: string) {
-  const res = await prisma.wiki.delete({ where: { id: wikiId } }); // cascade로 pages/sources/chunks/members 등 삭제
-  // DB cascade는 blob 원본을 지우지 않으므로 이 위키의 blob 접두사를 통째 정리(고아 방지, 비치명적)
-  await import("@/lib/blob").then((m) => m.getBlobStore().deletePrefix(`${wikiId}/`)).catch(() => {});
-  return res;
 }
 
 // ---------- 페이지 생성/수정 ----------

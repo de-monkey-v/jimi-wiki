@@ -135,6 +135,7 @@ export function WikiToc({
   role,
   sections,
   pinned,
+  showLogout,
 }: {
   slug: string;
   title: string;
@@ -142,11 +143,13 @@ export function WikiToc({
   role: "viewer" | "editor" | "owner";
   sections: TocSection[];
   pinned: PinnedItem[];
+  showLogout: boolean;
 }) {
   const t = useTranslations("WikiToc");
   const pathname = decodeURIComponent(usePathname());
   const seg = pathname.split("/"); // ["", "wikis", "<slug>", "<sub>", ...]
   const sub = seg[3];
+  const inTrash = sub === "settings" && seg[4] === "trash";
   const current = sub && !isReservedWikiPageSlug(sub) ? sub : undefined;
   const chatModal = useChatModal();
   const actions = useWikiActions();
@@ -182,13 +185,19 @@ export function WikiToc({
         onClick={() => setOpen((v) => !v)}
         aria-label={t("toggleToc")}
         aria-expanded={open}
-        className="fixed left-2 top-2 z-50 rounded-md border border-stone-200 bg-white/90 px-2.5 py-1.5 text-lg leading-none text-stone-700 shadow-sm backdrop-blur md:hidden"
+        className="fixed left-2 top-2 z-50 rounded-md border border-stone-200 bg-white/90 px-2.5 py-1.5 text-lg leading-none text-stone-700 shadow-sm backdrop-blur focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 md:hidden"
       >
         {open ? "✕" : "☰"}
       </button>
       {/* 열렸을 때 배경(탭하면 닫힘) */}
       {open && (
-        <div onClick={() => setOpen(false)} aria-hidden className="fixed inset-0 z-30 bg-black/30 md:hidden" />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={t("toggleToc")}
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-30 bg-black/30 md:hidden"
+        />
       )}
       <aside
         ref={drawerRef}
@@ -378,9 +387,12 @@ export function WikiToc({
           <li>
             <Link href={`/wikis/${encodeURIComponent(slug)}/docs`} className={`px-2 ${linkCls(sub === "docs")}`}>{t("integrationGuide")}</Link>
           </li>
+          <li>
+            <Link href={`/wikis/${encodeURIComponent(slug)}/settings/trash`} className={`px-2 ${linkCls(inTrash)}`}>{t("trash")}</Link>
+          </li>
           {role === "owner" && (
             <li>
-              <Link href={`/wikis/${slug}/settings`} className={`px-2 ${linkCls(sub === "settings")}`}>{t("settings")}</Link>
+              <Link href={`/wikis/${slug}/settings`} className={`px-2 ${linkCls(sub === "settings" && !inTrash)}`}>{t("settings")}</Link>
             </li>
           )}
         </ul>
@@ -388,9 +400,11 @@ export function WikiToc({
 
       <div className="border-t border-stone-200 px-3 py-2">
         <div className="mb-1 truncate px-1 text-xs text-stone-500">{email}</div>
-        <form action={logoutAction}>
-          <button className="w-full rounded-md px-2 py-1 text-left text-sm text-stone-600 hover:bg-stone-100">{t("logout")}</button>
-        </form>
+        {showLogout ? (
+          <form action={logoutAction}>
+            <button className="w-full rounded-md px-2 py-1 text-left text-sm text-stone-600 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("logout")}</button>
+          </form>
+        ) : null}
       </div>
       </aside>
     </>

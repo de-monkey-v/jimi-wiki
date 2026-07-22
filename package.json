@@ -1,6 +1,6 @@
 {
   "name": "jimi-wiki-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "scripts": {
@@ -32,6 +32,11 @@
     "check:rules": "node scripts/check-rules-parity.mjs",
     "check:content-writes": "node scripts/check-content-writes.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
+    "content:manifest": "tsx scripts/content-manifest.ts",
+    "auth:reset-personal": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/reset-personal-auth.ts",
+    "tailscale:recover": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/recover-tailscale-account.ts",
+    "apikey:issue-hermes": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/issue-hermes-key.ts",
+    "apikey:check-hermes-expiry": "NODE_OPTIONS='-r ./scripts/server-only-shim.cjs' tsx scripts/check-hermes-key-expiry.ts",
     "mcp": "node mcp/server.mjs"
   },
   "dependencies": {

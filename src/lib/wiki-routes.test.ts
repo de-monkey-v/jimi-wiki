@@ -20,6 +20,11 @@ test("기존 누락 라우트와 build/history를 예약한다", () => {
   }
 });
 
+test("휴지통은 기존 Wiki·Page slug와 충돌하지 않는다", () => {
+  assert.equal(isStaticWikiRouteSlug("trash"), false);
+  assert.equal(isReservedWikiPageSlug("trash"), false);
+});
+
 test("온톨로지는 system slug지만 정적 라우트는 아니다", () => {
   assert.equal(isReservedWikiPageSlug(ONTOLOGY_PAGE_SLUG), true);
   assert.equal(isStaticWikiRouteSlug(ONTOLOGY_PAGE_SLUG), false);

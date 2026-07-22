@@ -327,6 +327,7 @@
     "builds": "지식 빌드",
     "healthCheck": "건강검진",
     "integrationGuide": "연동 가이드",
+    "trash": "휴지통",
     "settings": "설정",
     "logout": "로그아웃",
     "pinnedHeading": "고정됨",
@@ -349,6 +350,7 @@
   "WikisPage": {
     "apiKeys": "API 키",
     "integrationGuide": "연동 가이드",
+    "trash": "휴지통",
     "logout": "로그아웃",
     "myWikis": "내 위키",
     "noOwnedWikis": "아직 만든 위키가 없습니다. 아래에서 만들어보세요.",
@@ -370,6 +372,22 @@
     "kindPersonalDescription": "개인 지식·참고자료·읽을거리를 한곳에 정리합니다.",
     "kindProjectDescription": "작업 기록·결정·문제 해결·스펙·참고자료를 프로젝트별로 보존합니다.",
     "create": "만들기"
+  },
+  "ClaimPage": {
+    "title": "Tailscale 신원 연결",
+    "description": "비밀번호 대신 Tailscale Serve가 확인한 본인 신원을 기존 위키 owner에 1회 연결합니다.",
+    "blockedTitle": "연결할 수 없습니다",
+    "errors": {
+      "invalid-config": "TAILSCALE_ALLOWED_LOGIN이 비어 있거나 잘못되었습니다.",
+      "missing-header": "Tailscale 신원 헤더가 없습니다. localhost가 아닌 MagicDNS HTTPS 주소로 접속하세요.",
+      "forbidden-login": "이 Tailscale login은 허용 목록과 일치하지 않습니다.",
+      "recovery-required": "기존 owner 후보가 정확히 1명이 아니어서 자동 연결을 거부했습니다.",
+      "mapping-conflict": "다른 Tailscale 계정 매핑이 있어서 자동으로 교체하지 않습니다."
+    },
+    "recoveryHelp": "서버에서 기존 User ID를 명시한 recovery 명령을 실행하세요.",
+    "candidateTitle": "기존 owner 확인",
+    "candidate": "{email} 계정을 Tailscale login {login}에 연결합니다. User·위키·멤버십 ID는 바뀌지 않습니다.",
+    "claim": "이 owner를 내 신원에 연결"
   },
   "WikisSlugCategoryPathPage": {
     "myWikis": "내 위키",
@@ -618,7 +636,9 @@
     "revoke": "폐기",
     "createShareLink": "+ 공유 링크 생성",
     "dangerZone": "위험 구역",
-    "deleteWiki": "이 위키 삭제 (되돌릴 수 없음)"
+    "trashDescription": "휴지통으로 옮기면 14일 동안 복원할 수 있습니다.",
+    "trashConfirm": "계속하려면 {slug}를 정확히 입력하세요.",
+    "deleteWiki": "위키를 휴지통으로 이동"
   },
   "WikisSlugSourcesSourceSlugDeleteSourceButton": {
     "confirmIrreversible": "이 원문을 삭제하면 되돌릴 수 없습니다.",
@@ -679,7 +699,9 @@
     "open": "열기",
     "promote": "정식 편입",
     "promoteHint": "이 링크를 AI가 읽어 지식으로 정리합니다",
-    "delete": "삭제",
+    "summary": "저장된 요약",
+    "trash": "휴지통",
+    "delete": "휴지통",
     "promoted": "편입됨"
   },
   "FolderPinButton": {
@@ -905,11 +927,36 @@
     "restore": "복원",
     "restoring": "복원 중…",
     "restoreConfirm": "문서를 다시 활성화할까요? 현재의 더 엄격한 외부 AI 제외 정책은 완화되지 않습니다.",
+    "trash": "휴지통으로 이동",
+    "trashing": "이동 중…",
+    "trashConfirm": "14일 동안 복원 가능한 휴지통으로 이동할까요?",
     "purgeHeading": "영구 삭제",
     "purgeWarning": "모든 revision과 원본 blob을 제거하고 관련 과거 build를 복원 불가로 만듭니다. 이 작업은 되돌릴 수 없습니다.",
     "purgeFinalConfirm": "복원 가능성을 영구히 포기하고 삭제할까요?",
     "purgeType": "계속하려면 {slug}를 정확히 입력하세요.",
     "purge": "영구 삭제",
     "purging": "영구 삭제 중…"
+  },
+  "WikisTrashPage": {
+    "back": "위키 목록",
+    "title": "위키 휴지통",
+    "subtitle": "삭제한 위키는 14일 뒤 자동으로 영구 삭제됩니다.",
+    "empty": "휴지통이 비어 있습니다.",
+    "details": "{slug} · 페이지 {pages}개 · 원문 {sources}개 · 자동 삭제 {purgeAt}",
+    "restore": "복원",
+    "purgeConfirm": "영구 삭제 확인: {slug}",
+    "purge": "영구 삭제"
+  },
+  "WikiContentTrashPage": {
+    "title": "휴지통",
+    "subtitle": "14일 안에는 복원할 수 있습니다. 영구 삭제는 owner만 가능합니다.",
+    "empty": "휴지통이 비어 있습니다.",
+    "savedLinks": "읽을거리",
+    "pages": "문서와 페이지",
+    "sources": "원문",
+    "autoDelete": "자동 삭제 {date}",
+    "restore": "복원",
+    "purgeConfirm": "영구 삭제 확인: {identity}",
+    "purge": "영구 삭제"
   }
 }

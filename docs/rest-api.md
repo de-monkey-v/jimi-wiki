@@ -77,10 +77,8 @@ Authorization: Bearer <API_KEY>
 응답: 생성 `201` / 수정 `200` — `{ slug, created, embedded, currentVersion }`
 오류: `400 invalid_json | title_and_body_required | invalid_kind | source_not_found`
 
-#### `DELETE /pages/{pageSlug}` — 삭제 (editor)
-파생 페이지(`concept`/`entity`/`meta`)만 삭제. 관련 검색 청크도 정리된다. 상호참조 깨짐은 lint로 이연.
-- 응답 `200`: `{ deleted: true, slug }`
-- `404 not_found` · `409 cannot_delete_source_note`(note는 불변) · `403 cannot_delete_system_page`(ontology 등 예약 슬러그)
+#### `DELETE /pages/{pageSlug}` / `POST /pages/{pageSlug}/restore` — 휴지통/복원 (editor)
+페이지를 14일 복구 가능한 휴지통으로 옮기거나 복원한다. `expectedVersion` query 또는 `X-Jimi-Expected-Version` 헤더를 권장한다. source 연결 note는 Source 단위로 처리해야 하며 보호 메모·예약 페이지는 외부 모델에서 보이지 않는다. 영구 삭제는 휴지통 항목에 한해 웹 owner 세션 + `permanent=1` + `X-Jimi-Confirm-Purge: <slug>`로만 가능하다.
 
 ### 원문(Source) — 불변
 
@@ -96,6 +94,9 @@ Authorization: Bearer <API_KEY>
 
 #### `POST /sources/{sourceSlug}/curate` — 보존 원문 정리 (editor)
 `curationState=preserved`인 Source를 비동기 KnowledgeBuild에 넣는다. `202 { runId, status:"pending", reused }`. 동시에 재호출하면 같은 pending/running run을 반환한다. preserve 시 외부 OCR을 생략한 blob-only 파일은 이때 원본 blob을 다시 추출하고, 추출 본문을 새 불변 SourceRevision으로 저장해 build 근거로 쓴다. 발행 성공 뒤에만 Source가 `curated`로 전환된다. 이미 curated면 `200 { alreadyCurated:true }`.
+
+#### `DELETE /sources/{sourceSlug}` / `POST /sources/{sourceSlug}/restore` — 휴지통/복원 (editor)
+Source와 연결 source note를 함께 14일 휴지통으로 이동하거나 복원한다. 영구 삭제는 페이지와 동일하게 이미 휴지통인 항목에 대한 웹 owner 세션 확인이 필요하다.
 
 ### 독립 문서(document)
 
@@ -164,13 +165,18 @@ body `{ "content":"추가할 마크다운", "expectedVersion":3 }`. document 전
 
 읽을거리는 위키 콘텐츠가 아니라 **키 소유 사용자의 개인 리스트**다.
 
-#### `GET /saved-links` — 목록 (viewer)
-`200`: `{ links: [{ id, url, title, description, promotedAt, promotedRunId, promotedRun:{status,error}?, createdAt }] }` (최신순). `promotedAt`이 있으면 편입 완료이고, 실패·진행 중이면 연결된 run 상태를 확인한다.
+#### `GET /saved-links?state=active|trash|all` — 목록 (viewer)
+기본은 active. `200`: `{ links: [{ id, url, title, description, summary, trashedAt, purgeAt, promotedAt, promotedRunId, promotedRun:{status,error}?, createdAt }] }`. `promotedAt`이 있으면 편입 완료이고, 실패·진행 중이면 연결된 run 상태를 확인한다.
 
 #### `POST /saved-links` — 담기 (viewer)
-body `{ url, note? }`. 제목·설명은 자동 추출하며(LLM 미사용), `note`를 주면 설명 대신 그 값을 저장한다.
-`201`: `{ link }` · 같은 URL이 이미 있으면 새로 만들지 않고 `200`: `{ link, existing: true }` · 잘못된 URL은 `400 invalid_url`.
-중복 방지는 조회-후-쓰기다 — 동시 요청이 겹치거나 URL 문자열이 다르면(끝슬래시·`utm_*` 등) 중복 행이 생길 수 있다(유니크 제약 없음).
+body `{ url, summary? }`. REST primitive 자체는 LLM을 호출하지 않으며 `summary`가 없으면 제목·사이트 설명만 추출한다. Hermes/MCP의 `save_link`는 호출 전에 항상 본문을 읽어 **핵심 bullet 3~5개 + ‘볼 가치’ 한 문장**을 전달해야 하고, 본문 추출 실패 때만 구체적 실패 사유와 함께 메타데이터 저장으로 폴백한다. `summary`는 최대 2,000자다. 서버는 `utm_*`, `fbclid`, `gclid` 등 추적 파라미터를 제거하되 의미 있는 query·fragment는 보존한다.
+`201`: 신규 · 동일 정규화 URL은 `200 { existing:true }` · 휴지통에 있던 동일 URL은 복원한다. 오류는 `400 invalid_url|invalid_summary|summary_too_large`.
+
+#### `DELETE /saved-links/{id}` / `POST /saved-links/{id}/restore` — 휴지통/복원 (viewer)
+키 소유 사용자의 읽을거리를 14일 휴지통으로 옮기거나 복원한다.
+
+#### `GET /trash` — 외부 에이전트 휴지통 (viewer)
+`{ savedLinks, pages, sources }`. 외부 AI가 복원할 수 있는 항목만 노출하며, `personal/internalOnly`·system·위키 전체와 영구 purge는 포함하지 않는다.
 
 #### `POST /saved-links/{id}/promote` — 정식 편입 (editor)
 SavedLink를 `mode=curate` ingest로 승격한다. 최초 호출은 `202 { runId, status:"pending", reused:false }`. `promotedRunId`를 저장하므로 동시 호출과 네트워크 재시도는 같은 run을 반환한다. run 실패는 `promotedAt`을 세우지 않으며 응답/목록에서 해당 run의 `error` 상태를 그대로 보여준다.
@@ -221,7 +227,7 @@ curl -sX POST "$BASE/pages" -H "Authorization: Bearer $KEY" \
 # 검색
 curl -sH "Authorization: Bearer $KEY" "$BASE/search?q=attention&k=8"
 
-# 파생 페이지 삭제
+# 페이지를 14일 휴지통으로 이동
 curl -sX DELETE "$BASE/pages/self-attention" -H "Authorization: Bearer $KEY"
 
 # 기계 점검

@@ -27,6 +27,8 @@ ontology_rules_version: 3
 ## 의도에 따른 저장 위치
 
 - “나중에 볼게” → `save_link`
+- URL만 보내도 본문을 읽어 **핵심 bullet 3~5개 + ‘볼 가치’ 한 문장**으로 요약한 뒤 `save_link(summary=…)`에 넣는다. 본문 추출이 실패한 경우에만 `summaryUnavailableReason`에 구체적 사유를 넣어 메타데이터만 저장하고 요약 실패를 알린다.
+- URL이 여러 개면 각각 본문을 읽고 별도 저장하며 성공·기존·실패를 구분해 보고한다. 한 URL의 추출 실패가 나머지 URL의 요약을 막아서는 안 된다.
 - “원문만 그대로 보관해” → `preserve_url` / `preserve_text`
 - “정리해서 지식으로 저장해” → `curate_url` / `curate_text`
 - “이 내용을 기록해” → `record_document` (`document/general`)
@@ -34,6 +36,8 @@ ontology_rules_version: 3
 - “저장한 링크를 정식 편입해” → `promote_saved_link`
 
 비밀번호·API key·token은 저장하지 않고 비밀번호 관리자를 안내한다. 민감 메모는 MCP가 볼 수 없는 웹 UI의 `personal/internalOnly`에만 둔다.
+
+삭제는 `trash_saved_link`·`trash_page`·`trash_source`로 14일 휴지통에 보낸다. `list_trash`에서 확인하고 대응하는 `restore_*`로 복원한다. 영구 삭제와 위키 전체 삭제는 MCP로 하지 않으며, 삭제 의도가 애매하면 먼저 확인한다.
 
 ## Ingest — 원문 편입 (핵심 워크플로우)
 

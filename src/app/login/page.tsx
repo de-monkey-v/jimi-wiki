@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 
 export default async function Login() {
   const t = await getTranslations("LoginPage");
-  if (authMode() === "single") redirect("/wikis"); // 로그인 없음
+  const mode = authMode();
+  if (mode === "single") redirect("/wikis"); // 로그인 없음
+  if (mode === "tailscale") redirect("/claim");
   const bootstrapped = await prisma.user.count({ where: { passwordHash: { not: null } } });
   if (bootstrapped === 0) redirect("/setup"); // 최초 관리자 미생성 → 셋업으로
 

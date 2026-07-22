@@ -327,6 +327,7 @@
     "builds": "知识构建",
     "healthCheck": "健康检查",
     "integrationGuide": "集成指南",
+    "trash": "回收站",
     "settings": "设置",
     "logout": "退出登录",
     "pinnedHeading": "已固定",
@@ -349,6 +350,7 @@
   "WikisPage": {
     "apiKeys": "API 密钥",
     "integrationGuide": "集成指南",
+    "trash": "回收站",
     "logout": "退出登录",
     "myWikis": "我的维基",
     "noOwnedWikis": "你还没有创建任何维基。在下方创建一个吧。",
@@ -370,6 +372,22 @@
     "kindPersonalDescription": "集中整理个人知识、参考资料与阅读内容。",
     "kindProjectDescription": "按项目保存工作记录、决策、问题解决、规格与参考资料。",
     "create": "创建"
+  },
+  "ClaimPage": {
+    "title": "关联 Tailscale 身份",
+    "description": "不使用密码，将 Tailscale Serve 验证的身份一次性关联到现有 Wiki owner。",
+    "blockedTitle": "无法关联",
+    "errors": {
+      "invalid-config": "TAILSCALE_ALLOWED_LOGIN 未设置或无效。",
+      "missing-header": "缺少 Tailscale 身份请求头。请使用 MagicDNS HTTPS 地址，而不是 localhost。",
+      "forbidden-login": "此 Tailscale login 与允许列表不完全匹配。",
+      "recovery-required": "现有 owner 候选人不是恰好一人，因此已拒绝自动关联。",
+      "mapping-conflict": "已存在其他 Tailscale 账户映射，不会自动替换。"
+    },
+    "recoveryHelp": "请在服务器上显式指定现有 User ID 后运行 recovery 命令。",
+    "candidateTitle": "确认现有 owner",
+    "candidate": "将 {email} 关联到 Tailscale login {login}。User、Wiki 和 membership ID 不会改变。",
+    "claim": "将此 owner 关联到我的身份"
   },
   "WikisSlugCategoryPathPage": {
     "myWikis": "我的维基",
@@ -618,7 +636,9 @@
     "revoke": "撤销",
     "createShareLink": "+ 创建共享链接",
     "dangerZone": "危险区域",
-    "deleteWiki": "删除此 wiki（不可撤销）"
+    "trashDescription": "移到回收站后可在14天内恢复。",
+    "trashConfirm": "请输入准确的 {slug} 以继续。",
+    "deleteWiki": "将 Wiki 移到回收站"
   },
   "WikisSlugSourcesSourceSlugDeleteSourceButton": {
     "confirmIrreversible": "删除该原文后将无法恢复。",
@@ -679,7 +699,9 @@
     "open": "打开",
     "promote": "正式收录",
     "promoteHint": "让 AI 阅读此链接并归入知识库",
-    "delete": "删除",
+    "summary": "已保存摘要",
+    "trash": "回收站",
+    "delete": "移到回收站",
     "promoted": "已收录"
   },
   "FolderPinButton": {
@@ -905,11 +927,36 @@
     "restore": "恢复",
     "restoring": "正在恢复…",
     "restoreConfirm": "重新启用此文档吗？当前更严格的外部 AI 排除策略不会被放宽。",
+    "trash": "移到回收站",
+    "trashing": "正在移动…",
+    "trashConfirm": "将此项移到可恢复14天的回收站吗？",
     "purgeHeading": "永久删除",
     "purgeWarning": "这会删除所有修订和原始 blob，并使受影响的历史构建无法恢复。此操作不可撤销。",
     "purgeFinalConfirm": "永久放弃恢复并删除此文档吗？",
     "purgeType": "请输入准确的 {slug} 以继续。",
     "purge": "永久删除",
     "purging": "正在永久删除…"
+  },
+  "WikisTrashPage": {
+    "back": "Wiki 列表",
+    "title": "Wiki 回收站",
+    "subtitle": "删除的 Wiki 会在14天后永久删除。",
+    "empty": "回收站为空。",
+    "details": "{slug} · {pages} 个页面 · {sources} 个来源 · 自动删除 {purgeAt}",
+    "restore": "恢复",
+    "purgeConfirm": "确认永久删除: {slug}",
+    "purge": "永久删除"
+  },
+  "WikiContentTrashPage": {
+    "title": "回收站",
+    "subtitle": "14天内可以恢复。只有所有者可以永久删除。",
+    "empty": "回收站为空。",
+    "savedLinks": "稍后阅读",
+    "pages": "文档和页面",
+    "sources": "来源",
+    "autoDelete": "自动删除 {date}",
+    "restore": "恢复",
+    "purgeConfirm": "确认永久删除: {identity}",
+    "purge": "永久删除"
   }
 }

@@ -32,7 +32,7 @@ test("MCP personal/project profiles expose the intended tools and route payloads
   if (!address || typeof address === "string") throw new Error("mock server did not bind");
   const base = `http://127.0.0.1:${address.port}`;
 
-  async function connect(slug: string, destructive: boolean) {
+  async function connect(slug: string) {
     const client = new Client({ name: "jimi-wiki-integration", version: "1.0.0" });
     const transport = new StdioClientTransport({
       command: process.execPath,
@@ -42,7 +42,6 @@ test("MCP personal/project profiles expose the intended tools and route payloads
         JIMI_WIKI_URL: base,
         JIMI_WIKI_API_KEY: "integration-key",
         JIMI_WIKI_SLUG: slug,
-        ...(destructive ? { JIMI_MCP_ALLOW_DESTRUCTIVE: "1" } : {}),
       },
       stderr: "pipe",
     });
@@ -51,17 +50,28 @@ test("MCP personal/project profiles expose the intended tools and route payloads
   }
 
   try {
-    const personal = await connect("personal-profile", true);
+    const personal = await connect("personal-profile");
     const personalTools = (await personal.client.listTools()).tools.map((tool) => tool.name);
     for (const expected of [
       "preserve_url", "preserve_text", "curate_url", "curate_text", "curate_source",
       "record_document", "record_worklog", "search_documents", "append_document",
       "save_link", "list_saved_links", "promote_saved_link",
+      "trash_saved_link", "restore_saved_link", "list_trash", "trash_page", "restore_page", "trash_source", "restore_source",
     ]) {
       assert.ok(personalTools.includes(expected), `personal profile missing ${expected}`);
     }
-    assert.equal(personalTools.includes("delete_page"), false, "personal profile must hide destructive tools even when env is set");
+    assert.equal(personalTools.includes("delete_page"), false, "permanent delete tool must not be exposed");
     assert.match(personal.client.getInstructions() ?? "", /비밀번호·API key·token/);
+    assert.match(personal.client.getInstructions() ?? "", /읽을거리는 항상 요약을 시도한다/);
+
+    const missingSummary = await personal.client.callTool({
+      name: "save_link",
+      arguments: { url: "https://example.com/missing-summary" },
+    });
+    assert.equal(missingSummary.isError, true);
+    const missingSummaryContent = missingSummary.content as { type: string; text?: string }[];
+    assert.match(String(missingSummaryContent[0]?.type === "text" ? missingSummaryContent[0].text : ""), /summary_required/);
+    assert.equal(seen.some((request) => request.url.endsWith("/saved-links") && (request.body as { url?: string })?.url?.includes("missing-summary")), false);
 
     await personal.client.callTool({ name: "preserve_url", arguments: { url: "https://example.com/raw" } });
     await personal.client.callTool({
@@ -79,6 +89,13 @@ test("MCP personal/project profiles expose the intended tools and route payloads
     });
     await personal.client.callTool({ name: "search_documents", arguments: { query: "worklog", k: 4 } });
     await personal.client.callTool({ name: "promote_saved_link", arguments: { id: "saved-1" } });
+    await personal.client.callTool({ name: "save_link", arguments: { url: "https://example.com/?utm_source=test", summary: "- 핵심\n\n볼 가치: 있음" } });
+    await personal.client.callTool({
+      name: "save_link",
+      arguments: { url: "https://example.com/extract-failed", summary: "   ", summaryUnavailableReason: "사이트가 본문 요청을 차단함" },
+    });
+    await personal.client.callTool({ name: "trash_saved_link", arguments: { id: "saved-1" } });
+    await personal.client.callTool({ name: "restore_saved_link", arguments: { id: "saved-1" } });
     await personal.transport.close();
 
     const preserve = seen.find((request) => request.url.endsWith("/api/wikis/personal-profile/ingest") && (request.body as { mode?: string })?.mode === "preserve");
@@ -92,10 +109,17 @@ test("MCP personal/project profiles expose the intended tools and route payloads
     ]);
     assert.ok(seen.some((request) => request.url.includes("/search?") && request.url.includes("scope=documents")));
     assert.ok(seen.some((request) => request.url.endsWith("/saved-links/saved-1/promote")));
+    assert.ok(seen.some((request) => request.method === "DELETE" && request.url.endsWith("/saved-links/saved-1")));
+    assert.ok(seen.some((request) => request.url.endsWith("/saved-links/saved-1/restore")));
+    const summarized = seen.find((request) => request.url.endsWith("/saved-links") && (request.body as { summary?: string })?.summary);
+    assert.deepEqual(summarized?.body, { url: "https://example.com/?utm_source=test", summary: "- 핵심\n\n볼 가치: 있음" });
+    const fallback = seen.find((request) => request.url.endsWith("/saved-links") && (request.body as { url?: string })?.url?.includes("extract-failed"));
+    assert.deepEqual(fallback?.body, { url: "https://example.com/extract-failed" });
 
-    const project = await connect("project-profile", true);
+    const project = await connect("project-profile");
     const projectTools = (await project.client.listTools()).tools.map((tool) => tool.name);
-    assert.equal(projectTools.includes("delete_page"), true);
+    assert.equal(projectTools.includes("trash_page"), true);
+    assert.equal(projectTools.includes("delete_page"), false);
     assert.match(project.client.getInstructions() ?? "", /최종 응답 직전에 record_worklog를 정확히 1회/);
     assert.match(project.client.getInstructions() ?? "", /단순 질문·상태 확인/);
     await project.transport.close();

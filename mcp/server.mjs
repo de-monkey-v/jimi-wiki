@@ -7,8 +7,6 @@
  *   JIMI_WIKI_URL      — 앱 베이스 URL (기본 http://localhost:3007)
  *   JIMI_WIKI_API_KEY  — Bearer API 키 (위키 화면 > API 키에서 발급, editor 이상)
  *   JIMI_WIKI_SLUG     — 대상 위키 slug (예: ai-스터디)
- *   JIMI_MCP_ALLOW_DESTRUCTIVE — 1/true 일 때만 파괴적 도구(delete_page)를 노출한다.
- *                                기본은 비노출 — 자율 에이전트(Hermes 등)에 무방비로 삭제 권한을 주지 않는다.
  *
  * 등록 예 (Claude Code):
  *   claude mcp add jimi-wiki \
@@ -29,9 +27,6 @@ if (!KEY || !WIKI) {
   console.error("JIMI_WIKI_API_KEY와 JIMI_WIKI_SLUG 환경변수가 필요합니다.");
   process.exit(1);
 }
-
-// 파괴적 도구는 opt-in(fail-closed). 자율 에이전트가 실수로 페이지를 지우는 사고를 기본값에서 차단한다.
-const ALLOW_DESTRUCTIVE = ["1", "true", "yes"].includes(String(process.env.JIMI_MCP_ALLOW_DESTRUCTIVE ?? "").toLowerCase());
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -110,11 +105,12 @@ const profileInstructions = IS_PERSONAL
     : [];
 
 const server = new McpServer(
-  { name: "jimi-wiki", version: "0.3.0" },
+  { name: "jimi-wiki", version: "0.5.0" },
   {
     instructions: [
       `jimi-wiki 위키("${WIKI}", kind=${WIKI_KIND})의 유지보수 도구다. 이 API 키의 위키 스코프 밖 리소스에는 접근하지 않는다.`,
-      "의도 라우팅: ‘나중에 볼게’→save_link, ‘원문만 그대로 보관해’→preserve_*, ‘정리해서 지식으로 저장해’→curate_*, ‘이 내용을 기록해’→record_document, ‘기존 문서에 추가해’→append_document, ‘저장한 링크를 정식 편입해’→promote_saved_link.",
+      "의도 라우팅: URL만 보냄/‘나중에 볼게’→본문을 읽고 3~5개 핵심 bullet과 ‘볼 가치’ 한 문장으로 요약한 뒤 save_link(summary), ‘원문만 그대로 보관해’→preserve_*, ‘정리해서 지식으로 저장해’→curate_*, ‘이 내용을 기록해’→record_document, ‘기존 문서에 추가해’→append_document, ‘저장한 링크를 정식 편입해’→promote_saved_link.",
+      "읽을거리는 항상 요약을 시도한다. 본문 추출이 실패한 경우에만 save_link(summaryUnavailableReason=구체적 사유)로 메타데이터를 저장하고 요약이 없음을 명시한다. URL이 여러 개면 각각 본문을 읽고 별도 SavedLink로 저장하며 성공/기존/실패를 나눠 보고한다. 삭제 의도가 명확하면 trash_*를 쓰고, 애매하면 먼저 확인한다. 휴지통은 14일간 복원할 수 있으며 영구 삭제와 위키 전체 삭제는 MCP에 없다.",
       "편입에는 두 방식이 있다. preserve는 불변 원문과 pointer note만 저장하고 생성형 큐레이션을 실행하지 않는다. curate는 원문→note→concept/entity 합성을 수행하며 비동기이므로 get_run_status로 완료를 확인한다.",
       "직접 큐레이션 절차: (1) create_source로 원문을 불변 저장 → (2) search_wiki/list_pages로 기존 페이지 확인 → (3) write_page로 kind=note 소스 노트 작성(sourceSlug 연결, 원문 복붙 금지·네 말로 요약) → (4) 영향받는 concept/entity 페이지 갱신·신설(sourceSlug로 기여 기록, 내부 링크 [[slug]] 적극 사용, category 재사용 우선) → (5) 모순 점검(필수): 원문 핵심 주장마다 search_wiki→read_page로 관련 기존 페이지 본문을 받아 상충 여부를 대조하고, 상충 시 '> [!warning] 상충' 콜아웃으로 양쪽 주장·출처를 병기(기존 내용 삭제 금지).",
       "관계·비교·주변 맥락을 묻는 질의에는 search_wiki 에 graph=true 를 줘서 지식그래프 이웃까지 받아라.",
@@ -251,15 +247,51 @@ server.registerTool(
   "save_link",
   {
     description:
-      "링크를 '읽을거리'로 담아둔다(위키 편입 아님 — 제목·설명만 자동 추출해 개인 리스트에 저장). 나중에 읽자/일단 저장해두자는 요청에 사용. 저장된 항목을 정식 지식으로 편입할 때는 promote_saved_link를 쓴다.",
+      "링크를 '읽을거리'로 담아둔다(위키 편입 아님). 호출 전에 반드시 본문을 읽고 3~5개 핵심 bullet + ‘볼 가치’ 한 문장을 summary에 넣는다. 본문 추출이 실패한 경우에만 summaryUnavailableReason에 구체적 사유를 넣어 메타데이터만 저장하고 사용자에게 요약 실패를 알린다. summary와 summaryUnavailableReason을 모두 생략하면 거부된다.",
     inputSchema: {
       url: z.string().describe("저장할 URL(http/https)"),
-      note: z.string().optional().describe("메모(주면 자동 추출 설명 대신 이 값을 저장)"),
+      summary: z.string().max(2000).optional().describe("본문에서 만든 한국어 3~5개 핵심 bullet + ‘볼 가치’ 한 문장(최대 2,000자)"),
+      summaryUnavailableReason: z.string().max(500).optional().describe("본문 추출 실패로 요약할 수 없을 때만 쓰는 구체적 사유"),
     },
   },
-  async ({ url, note }) => {
+  async ({ url, summary, summaryUnavailableReason }) => {
     try {
-      return asResult(await api("POST", "/saved-links", { url, ...(note ? { note } : {}) }));
+      const hasSummary = typeof summary === "string" && summary.trim().length > 0;
+      const hasFailureReason = typeof summaryUnavailableReason === "string" && summaryUnavailableReason.trim().length > 0;
+      if (!hasSummary && !hasFailureReason) {
+        throw new Error("summary_required: 본문을 요약하거나 summaryUnavailableReason에 추출 실패 사유를 넣어야 합니다");
+      }
+      return asResult(await api("POST", "/saved-links", { url, ...(hasSummary ? { summary } : {}) }));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "trash_saved_link",
+  {
+    description: "읽을거리 한 항목을 14일 복구 가능한 휴지통으로 이동한다. 영구 삭제가 아니다.",
+    inputSchema: { id: z.string().describe("list_saved_links가 반환한 SavedLink id") },
+  },
+  async ({ id }) => {
+    try {
+      return asResult(await api("DELETE", `/saved-links/${encodeURIComponent(id)}`));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "restore_saved_link",
+  {
+    description: "휴지통의 읽을거리를 복원한다.",
+    inputSchema: { id: z.string().describe("list_trash가 반환한 SavedLink id") },
+  },
+  async ({ id }) => {
+    try {
+      return asResult(await api("POST", `/saved-links/${encodeURIComponent(id)}/restore`, {}));
     } catch (e) {
       return asError(e);
     }
@@ -543,29 +575,92 @@ server.registerTool(
   },
 );
 
-// 파괴적 도구 — personal 프로필에서는 env 설정과 무관하게 비노출한다.
-if (ALLOW_DESTRUCTIVE && !IS_PERSONAL) {
-  server.registerTool(
-    "delete_page",
-    {
-      description:
-        "파생 페이지(concept/entity/meta)를 삭제한다. 소스노트(note)와 원문(source)은 불변이라 삭제 불가. 상호참조가 깨질 수 있으니 이후 run_lint로 정리. editor 이상.",
-      inputSchema: {
-        slug: z.string().describe("삭제할 페이지 slug"),
-        expectedVersion: z.number().int().min(1).describe("read_page에서 읽은 currentVersion"),
-      },
+// 복구 가능한 휴지통 도구. 영구 purge와 위키 전체 삭제는 의도적으로 MCP에 노출하지 않는다.
+server.registerTool(
+  "list_trash",
+  { description: "14일 휴지통에서 이 에이전트가 복원할 수 있는 읽을거리·페이지·원문을 조회한다.", inputSchema: {} },
+  async () => {
+    try {
+      return asResult(await api("GET", "/trash"));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "trash_page",
+  {
+    description: "외부 AI 허용 페이지/문서를 14일 휴지통으로 이동한다. source 연결 note·보호 메모·시스템 페이지는 거부된다.",
+    inputSchema: {
+      slug: z.string().describe("페이지 slug"),
+      expectedVersion: z.number().int().min(1).describe("read_page에서 읽은 currentVersion"),
     },
-    async ({ slug, expectedVersion }) => {
-      try {
-        return asResult(await api("DELETE", `/pages/${encodeURIComponent(slug)}?expectedVersion=${expectedVersion}`));
-      } catch (e) {
-        return asError(e);
-      }
+  },
+  async ({ slug, expectedVersion }) => {
+    try {
+      return asResult(await api("DELETE", `/pages/${encodeURIComponent(slug)}?expectedVersion=${expectedVersion}`));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "restore_page",
+  {
+    description: "휴지통의 외부 AI 허용 페이지/문서를 복원한다.",
+    inputSchema: {
+      slug: z.string().describe("list_trash가 반환한 페이지 slug"),
+      expectedVersion: z.number().int().min(1).describe("list_trash가 반환한 currentVersion"),
     },
-  );
-}
+  },
+  async ({ slug, expectedVersion }) => {
+    try {
+      return asResult(await api("POST", `/pages/${encodeURIComponent(slug)}/restore?expectedVersion=${expectedVersion}`, {}));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "trash_source",
+  {
+    description: "외부 AI 허용 원문과 그 source note를 함께 14일 휴지통으로 이동한다.",
+    inputSchema: {
+      slug: z.string().describe("원문 slug"),
+      expectedVersion: z.number().int().min(1).describe("read_source에서 읽은 currentVersion"),
+    },
+  },
+  async ({ slug, expectedVersion }) => {
+    try {
+      return asResult(await api("DELETE", `/sources/${encodeURIComponent(slug)}?expectedVersion=${expectedVersion}`));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "restore_source",
+  {
+    description: "휴지통의 외부 AI 허용 원문과 source note를 함께 복원한다.",
+    inputSchema: {
+      slug: z.string().describe("list_trash가 반환한 원문 slug"),
+      expectedVersion: z.number().int().min(1).describe("list_trash가 반환한 currentVersion"),
+    },
+  },
+  async ({ slug, expectedVersion }) => {
+    try {
+      return asResult(await api("POST", `/sources/${encodeURIComponent(slug)}/restore?expectedVersion=${expectedVersion}`, {}));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
 
 await server.connect(new StdioServerTransport());
 console.error(
-  `jimi-wiki MCP 서버 시작 — wiki="${WIKI}" kind=${WIKI_KIND} base=${BASE} destructive=${ALLOW_DESTRUCTIVE && !IS_PERSONAL ? "on" : "off"}`,
+  `jimi-wiki MCP 서버 시작 — wiki="${WIKI}" kind=${WIKI_KIND} base=${BASE} recoverable-trash=on permanent-purge=off`,
 );

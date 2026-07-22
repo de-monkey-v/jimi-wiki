@@ -9,11 +9,11 @@ import {
   archiveSourceAction,
   changePagePolicyAction,
   changeSourcePolicyAction,
-  purgePageAction,
-  purgeSourceAction,
   promotePageToSourceAction,
   restorePageAction,
   restoreSourceAction,
+  trashPageAction,
+  trashSourceAction,
   type KnowledgeControlState,
 } from "@/app/wikis/[slug]/knowledge-controls-actions";
 import type { ModelAccess } from "@/generated/prisma/client";
@@ -59,7 +59,6 @@ export function KnowledgeControls({
   modelAccess,
   archived,
   personal = false,
-  owner,
   canLifecycle = true,
   canPromote = false,
   sourceImpact,
@@ -82,15 +81,14 @@ export function KnowledgeControls({
     base: modelAccess,
     value: personal ? "internalOnly" : modelAccess,
   });
-  const [confirmSlug, setConfirmSlug] = useState("");
   const policyServerAction = resourceType === "page" ? changePagePolicyAction : changeSourcePolicyAction;
   const archiveServerAction = resourceType === "page" ? archivePageAction : archiveSourceAction;
   const restoreServerAction = resourceType === "page" ? restorePageAction : restoreSourceAction;
-  const purgeServerAction = resourceType === "page" ? purgePageAction : purgeSourceAction;
+  const trashServerAction = resourceType === "page" ? trashPageAction : trashSourceAction;
   const [policyState, policyAction, policyPending] = useActionState(policyServerAction, INITIAL_STATE);
   const [lifecycleState, archiveAction, archivePending] = useActionState(archiveServerAction, INITIAL_STATE);
   const [restoreState, restoreAction, restorePending] = useActionState(restoreServerAction, INITIAL_STATE);
-  const [purgeState, purgeAction, purgePending] = useActionState(purgeServerAction, INITIAL_STATE);
+  const [trashState, trashAction, trashPending] = useActionState(trashServerAction, INITIAL_STATE);
   const [promotionState, promotionAction, promotionPending] = useActionState(
     promotePageToSourceAction,
     INITIAL_STATE,
@@ -239,47 +237,26 @@ export function KnowledgeControls({
             )}
             <Feedback state={archived ? restoreState : lifecycleState} />
           </div>
+          <form
+            action={trashAction}
+            className="mt-4 border-t border-rose-100 pt-4"
+            onSubmit={(event) => {
+              if (!window.confirm(t("trashConfirm"))) event.preventDefault();
+            }}
+          >
+            <HiddenIdentity wikiSlug={wikiSlug} resourceSlug={resourceSlug} currentVersion={currentVersion} />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={trashPending}
+                className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2 disabled:opacity-50"
+              >
+                {trashPending ? t("trashing") : t("trash")}
+              </button>
+              <Feedback state={trashState} />
+            </div>
+          </form>
         </div>
-      ) : null}
-
-      {owner && canLifecycle ? (
-        <details className="mt-5 border-t border-rose-100 pt-5">
-          <summary className="cursor-pointer rounded-sm text-sm font-semibold text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
-            {t("purgeHeading")}
-          </summary>
-          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50/60 p-3">
-            <p className="text-xs leading-5 text-rose-900">{t("purgeWarning")}</p>
-            <form
-              action={purgeAction}
-              className="mt-3 space-y-2"
-              onSubmit={(event) => {
-                if (!window.confirm(t("purgeFinalConfirm"))) event.preventDefault();
-              }}
-            >
-              <HiddenIdentity wikiSlug={wikiSlug} resourceSlug={resourceSlug} currentVersion={currentVersion} />
-              <label className="block text-xs font-medium text-rose-900">
-                {t("purgeType", { slug: resourceSlug })}
-                <input
-                  name="confirmSlug"
-                  value={confirmSlug}
-                  onChange={(event) => setConfirmSlug(event.target.value)}
-                  autoComplete="off"
-                  className="mt-1.5 w-full rounded-lg border border-rose-300 bg-white px-3 py-2 font-mono text-sm text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-                />
-              </label>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={purgePending || confirmSlug !== resourceSlug}
-                  className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {purgePending ? t("purging") : t("purge")}
-                </button>
-                <Feedback state={purgeState} />
-              </div>
-            </form>
-          </div>
-        </details>
       ) : null}
     </section>
   );

@@ -55,6 +55,7 @@ The app manages accounts directly, with no external OAuth. Pick a mode via `AUTH
 |---|---|---|---|
 | `single` | none | just me (localhost only recommended) | one implicit owner |
 | `local` (default) | email + password (argon2id) | small internal team | admin-created / invite links |
+| `tailscale` | Tailscale Serve identity | private personal tailnet | one-time claim of an existing owner |
 | `oidc` | external OIDC | orgs with an IdP | *phase-2 (not wired yet)* |
 
 **Create the first admin (`local`):** one of two ways.
@@ -72,9 +73,10 @@ Afterwards the admin creates users at **`/admin/users`** or issues **invite link
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Postgres connection (docker compose default: `postgresql://jimi:jimi@localhost:5433/jimi`) |
+| `DATABASE_URL` / `POSTGRES_PASSWORD` | Postgres connection URL and matching random Compose password |
 | `AUTH_SECRET` | session/JWT signing key (`openssl rand -base64 32`) |
-| `AUTH_MODE` | auth mode: `single` \| `local` (default) \| `oidc` |
+| `AUTH_MODE` | auth mode: `single` \| `local` (default) \| `tailscale` \| `oidc` |
+| `TAILSCALE_ALLOWED_LOGIN` | exact Serve login allowlist in `tailscale` mode |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | (optional) first-run admin bootstrap for `pnpm db:seed`. Leave blank if using web `/setup` |
 | `APP_URL` | public app URL — used to build absolute invite/share links |
 | `GEMINI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini generation + embedding key (same value) |
@@ -132,11 +134,10 @@ directly with `AUTH_MODE=local`. Split into three processes (same repo):
 `ADMIN_EMAIL`/`ADMIN_PASSWORD` or create it at `web`'s `/setup`. If exposed to the internet, front it
 with a reverse proxy for HTTPS or place it behind a private network like Tailscale.
 
-**All-in-one with Docker**: `docker compose up --build` brings up `db`, `web` (3007), and `worker`
-together. `web` and `worker` share one image (role selected via `command`) and read `.env` via
-`env_file`, but `DATABASE_URL` is overridden for the container (`db:5432`). ChatGPT OAuth tokens live in
-the `jimi-oauth` volume (`/data`) so web and worker can share them. For development, `pnpm dev:all`
-(web + worker) is enough.
+In production, Docker Compose runs only PostgreSQL and the embedding server, both bound to loopback.
+The web, worker, and Codex proxy run from atomic releases under `systemd --user`. See
+[`docs/personal-production.md`](docs/personal-production.md) for the private Tailscale deployment,
+owner claim, encrypted backup, and real restore workflow. For development, `pnpm dev:all` is enough.
 
 **Model selection · ChatGPT login**: admins pick the chat/ingest/query-lint models per provider at
 **`/admin/settings`** (applied without a restart) and can log in/out of ChatGPT-subscription OAuth via
@@ -150,8 +151,8 @@ Health checks:
 
 ## Programmatic access (REST / MCP)
 
-External agents can maintain the wiki without the app's built-in AI. **The web UI authenticates with a
-session (cookie); programmatic calls authenticate with an API key (Bearer).**
+External agents can maintain the wiki without the app's built-in AI. **The web UI authenticates with
+the selected mode's session or Tailscale Serve identity; programmatic calls use an API key (Bearer).**
 
 1. **Issue an API key**: after login, at `/keys`. You can set wiki scope, a ceiling role (read-only /
    edit), and expiry. The raw key is shown only once at issue time.
@@ -161,7 +162,7 @@ session (cookie); programmatic calls authenticate with an API key (Bearer).**
    tools. Detailed workflow in [`skills/wiki-ingest/SKILL.md`](skills/wiki-ingest/SKILL.md).
 
    ```bash
-   claude mcp add jimi-wiki \
+   claude mcp add --scope local jimi-wiki \
      -e JIMI_WIKI_URL=http://localhost:3007 \
      -e JIMI_WIKI_API_KEY=<key> \
      -e JIMI_WIKI_SLUG=<wiki-slug> \

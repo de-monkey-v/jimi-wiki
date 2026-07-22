@@ -78,7 +78,7 @@ async function handleCommand(msg: TgMessage, cmd: string, args: string): Promise
     case "status": {
       const b = await getBinding(msg.chatId);
       if (!b) return void (await sendMessage(msg.chatId, "아직 연결된 위키가 없어요. /bind <위키-slug>"));
-      const wiki = await prisma.wiki.findUnique({ where: { id: b.wikiId }, select: { slug: true, title: true } });
+      const wiki = await prisma.wiki.findFirst({ where: { id: b.wikiId, trashedAt: null }, select: { slug: true, title: true } });
       return void (await sendMessage(msg.chatId, wiki ? `연결됨: "${wiki.title}" (${wiki.slug})` : "연결된 위키를 찾을 수 없어요. /unbind 후 다시 /bind 해주세요."));
     }
     case "unbind":

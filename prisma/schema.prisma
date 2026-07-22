@@ -266,6 +266,8 @@ model Wiki {
   kind             WikiKind          @default(personal)
   createdById      String
   createdBy        User              @relation("WikiCreatedBy", fields: [createdById], references: [id])
+  trashedAt        DateTime?
+  purgeAt          DateTime?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   memberships      Membership[]
@@ -284,6 +286,9 @@ model Wiki {
   savedLinks       SavedLink[]
   telegramBindings TelegramBinding[]
   knowledgeBuilds  KnowledgeBuild[]
+
+  @@index([trashedAt])
+  @@index([purgeAt])
 }
 
 model Membership {
@@ -329,6 +334,9 @@ model Page {
   currentVersion       Int                          @default(1)
   policyVersion        Int                          @default(1)
   archivedAt           DateTime?
+  trashedAt            DateTime?
+  purgeAt              DateTime?
+  archivedBeforeTrash  Boolean                      @default(false)
   suppressedAt         DateTime?
   staleAt              DateTime?
   createdAt            DateTime                     @default(now())
@@ -354,6 +362,8 @@ model Page {
   @@index([wikiId, parentId, sortOrder])
   @@index([wikiId, category])
   @@index([wikiId, archivedAt])
+  @@index([wikiId, trashedAt])
+  @@index([purgeAt])
   @@index([wikiId, modelAccess, archivedAt])
 }
 
@@ -446,6 +456,9 @@ model Source {
   currentVersion Int                 @default(1)
   policyVersion  Int                 @default(1)
   archivedAt     DateTime?
+  trashedAt      DateTime?
+  purgeAt        DateTime?
+  archivedBeforeTrash Boolean            @default(false)
   ingestedAt     DateTime            @default(now())
   wiki           Wiki                @relation(fields: [wikiId], references: [id], onDelete: Cascade)
   pages          Page[]              @relation("PageSource")
@@ -455,6 +468,8 @@ model Source {
 
   @@unique([wikiId, slug])
   @@index([wikiId, archivedAt])
+  @@index([wikiId, trashedAt])
+  @@index([purgeAt])
   @@index([wikiId, modelAccess, archivedAt])
   @@index([wikiId, curationState, archivedAt])
 }
@@ -751,6 +766,9 @@ model SavedLink {
   url           String
   title         String
   description   String?
+  summary       String?
+  trashedAt     DateTime?
+  purgeAt       DateTime?
   promotedAt    DateTime? // 정식 편입(ingest) 시각. null=미편입. 편입해도 삭제하지 않고 이 값으로 "편입됨" 표시
   promotedRunId String?   @unique // promotion 재시도·동시 호출이 재사용하는 ingest run
   createdAt     DateTime  @default(now())
@@ -759,6 +777,8 @@ model SavedLink {
   promotedRun   AgentRun? @relation("SavedLinkPromotion", fields: [promotedRunId], references: [id], onDelete: SetNull)
 
   @@index([userId, wikiId, createdAt])
+  @@index([userId, wikiId, trashedAt])
+  @@index([purgeAt])
 }
 
 // ---------- 텔레그램 봇 ----------

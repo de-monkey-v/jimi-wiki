@@ -327,6 +327,7 @@
     "builds": "Knowledge builds",
     "healthCheck": "Health check",
     "integrationGuide": "Integration guide",
+    "trash": "Trash",
     "settings": "Settings",
     "logout": "Log out",
     "pinnedHeading": "Pinned",
@@ -349,6 +350,7 @@
   "WikisPage": {
     "apiKeys": "API keys",
     "integrationGuide": "Integration guide",
+    "trash": "Trash",
     "logout": "Log out",
     "myWikis": "My wikis",
     "noOwnedWikis": "You haven't created any wikis yet. Create one below.",
@@ -370,6 +372,22 @@
     "kindPersonalDescription": "Keep personal knowledge, references, and reading material together.",
     "kindProjectDescription": "Preserve work logs, decisions, troubleshooting, specs, and references per project.",
     "create": "Create"
+  },
+  "ClaimPage": {
+    "title": "Connect your Tailscale identity",
+    "description": "Instead of a password, connect the identity verified by Tailscale Serve to the existing wiki owner once.",
+    "blockedTitle": "Unable to connect",
+    "errors": {
+      "invalid-config": "TAILSCALE_ALLOWED_LOGIN is missing or invalid.",
+      "missing-header": "The Tailscale identity header is missing. Use the MagicDNS HTTPS address instead of localhost.",
+      "forbidden-login": "This Tailscale login does not exactly match the allowlist.",
+      "recovery-required": "Automatic linking was refused because there is not exactly one existing owner candidate.",
+      "mapping-conflict": "A different Tailscale account mapping exists and will not be replaced automatically."
+    },
+    "recoveryHelp": "Run the recovery command on the server with the existing User ID specified explicitly.",
+    "candidateTitle": "Confirm the existing owner",
+    "candidate": "Connect {email} to Tailscale login {login}. User, wiki, and membership IDs will not change.",
+    "claim": "Connect this owner to my identity"
   },
   "WikisSlugCategoryPathPage": {
     "myWikis": "My Wikis",
@@ -618,7 +636,9 @@
     "revoke": "Revoke",
     "createShareLink": "+ Create share link",
     "dangerZone": "Danger Zone",
-    "deleteWiki": "Delete this wiki (cannot be undone)"
+    "trashDescription": "Moving this wiki to trash keeps it recoverable for 14 days.",
+    "trashConfirm": "Type {slug} exactly to continue.",
+    "deleteWiki": "Move wiki to trash"
   },
   "WikisSlugSourcesSourceSlugDeleteSourceButton": {
     "confirmIrreversible": "Deleting this source cannot be undone.",
@@ -679,7 +699,9 @@
     "open": "Open",
     "promote": "Promote",
     "promoteHint": "Let AI read this link and file it into knowledge",
-    "delete": "Delete",
+    "summary": "Saved summary",
+    "trash": "Trash",
+    "delete": "Trash",
     "promoted": "Promoted to knowledge"
   },
   "FolderPinButton": {
@@ -905,11 +927,36 @@
     "restore": "Restore",
     "restoring": "Restoring…",
     "restoreConfirm": "Reactivate this document? A stricter current external-AI exclusion policy will not be relaxed.",
+    "trash": "Move to trash",
+    "trashing": "Moving…",
+    "trashConfirm": "Move this item to the recoverable 14-day trash?",
     "purgeHeading": "Permanent deletion",
     "purgeWarning": "This removes every revision and original blob and makes affected past builds unrestorable. It cannot be undone.",
     "purgeFinalConfirm": "Permanently give up recovery and delete this document?",
     "purgeType": "Type {slug} exactly to continue.",
     "purge": "Delete permanently",
     "purging": "Deleting permanently…"
+  },
+  "WikisTrashPage": {
+    "back": "Wiki list",
+    "title": "Wiki Trash",
+    "subtitle": "Deleted wikis are permanently removed after 14 days.",
+    "empty": "Trash is empty.",
+    "details": "{slug} · {pages} pages · {sources} sources · auto-delete {purgeAt}",
+    "restore": "Restore",
+    "purgeConfirm": "Confirm permanent deletion: {slug}",
+    "purge": "Delete permanently"
+  },
+  "WikiContentTrashPage": {
+    "title": "Trash",
+    "subtitle": "Items can be restored for 14 days. Only owners can delete permanently.",
+    "empty": "Trash is empty.",
+    "savedLinks": "Reading list",
+    "pages": "Documents and pages",
+    "sources": "Sources",
+    "autoDelete": "Auto-delete {date}",
+    "restore": "Restore",
+    "purgeConfirm": "Confirm permanent deletion: {identity}",
+    "purge": "Delete permanently"
   }
 }

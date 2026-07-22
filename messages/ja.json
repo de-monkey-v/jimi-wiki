@@ -327,6 +327,7 @@
     "builds": "ナレッジビルド",
     "healthCheck": "ヘルスチェック",
     "integrationGuide": "連携ガイド",
+    "trash": "ゴミ箱",
     "settings": "設定",
     "logout": "ログアウト",
     "pinnedHeading": "ピン留め",
@@ -349,6 +350,7 @@
   "WikisPage": {
     "apiKeys": "API キー",
     "integrationGuide": "連携ガイド",
+    "trash": "ゴミ箱",
     "logout": "ログアウト",
     "myWikis": "マイウィキ",
     "noOwnedWikis": "まだ作成したウィキがありません。下から作成してください。",
@@ -370,6 +372,22 @@
     "kindPersonalDescription": "個人知識・参考資料・読み物を一か所に整理します。",
     "kindProjectDescription": "作業記録・決定・問題解決・仕様・参考資料をプロジェクトごとに保存します。",
     "create": "作成"
+  },
+  "ClaimPage": {
+    "title": "Tailscale ID の連携",
+    "description": "パスワードの代わりに、Tailscale Serve が確認した ID を既存の Wiki owner に一度だけ連携します。",
+    "blockedTitle": "連携できません",
+    "errors": {
+      "invalid-config": "TAILSCALE_ALLOWED_LOGIN が未設定または不正です。",
+      "missing-header": "Tailscale ID ヘッダーがありません。localhost ではなく MagicDNS の HTTPS アドレスを使用してください。",
+      "forbidden-login": "この Tailscale login は allowlist と完全に一致しません。",
+      "recovery-required": "既存 owner 候補が正確に1人ではないため、自動連携を拒否しました。",
+      "mapping-conflict": "別の Tailscale アカウント連携があるため、自動置換は行いません。"
+    },
+    "recoveryHelp": "既存の User ID を明示して、サーバー上で recovery コマンドを実行してください。",
+    "candidateTitle": "既存 owner の確認",
+    "candidate": "{email} を Tailscale login {login} に連携します。User・Wiki・membership ID は変更されません。",
+    "claim": "この owner を自分の ID に連携"
   },
   "WikisSlugCategoryPathPage": {
     "myWikis": "マイウィキ",
@@ -618,7 +636,9 @@
     "revoke": "無効化",
     "createShareLink": "+ 共有リンクを作成",
     "dangerZone": "危険な操作",
-    "deleteWiki": "このウィキを削除（取り消せません）"
+    "trashDescription": "ゴミ箱へ移動したウィキは14日間復元できます。",
+    "trashConfirm": "続けるには {slug} を正確に入力してください。",
+    "deleteWiki": "ウィキをゴミ箱へ移動"
   },
   "WikisSlugSourcesSourceSlugDeleteSourceButton": {
     "confirmIrreversible": "この原文を削除すると元に戻せません。",
@@ -679,7 +699,9 @@
     "open": "開く",
     "promote": "正式に取り込む",
     "promoteHint": "AIがこのリンクを読み、知識に整理します",
-    "delete": "削除",
+    "summary": "保存した要約",
+    "trash": "ゴミ箱",
+    "delete": "ゴミ箱へ",
     "promoted": "取り込み済み"
   },
   "FolderPinButton": {
@@ -905,11 +927,36 @@
     "restore": "復元",
     "restoring": "復元中…",
     "restoreConfirm": "この文書を再び有効にしますか？現在のより厳しい外部AI除外ポリシーは緩和されません。",
+    "trash": "ゴミ箱へ移動",
+    "trashing": "移動中…",
+    "trashConfirm": "14日間復元できるゴミ箱へ移動しますか？",
     "purgeHeading": "完全削除",
     "purgeWarning": "すべてのリビジョンと元blobを削除し、関連する過去のbuildを復元不能にします。元に戻せません。",
     "purgeFinalConfirm": "復元可能性を永久に放棄して削除しますか？",
     "purgeType": "続けるには {slug} を正確に入力してください。",
     "purge": "完全に削除",
     "purging": "完全削除中…"
+  },
+  "WikisTrashPage": {
+    "back": "ウィキ一覧",
+    "title": "ウィキのゴミ箱",
+    "subtitle": "削除したウィキは14日後に完全削除されます。",
+    "empty": "ゴミ箱は空です。",
+    "details": "{slug} · ページ {pages}件 · 原文 {sources}件 · 自動削除 {purgeAt}",
+    "restore": "復元",
+    "purgeConfirm": "完全削除の確認: {slug}",
+    "purge": "完全削除"
+  },
+  "WikiContentTrashPage": {
+    "title": "ゴミ箱",
+    "subtitle": "14日以内は復元できます。完全削除はownerのみ可能です。",
+    "empty": "ゴミ箱は空です。",
+    "savedLinks": "リーディングリスト",
+    "pages": "文書とページ",
+    "sources": "原文",
+    "autoDelete": "自動削除 {date}",
+    "restore": "復元",
+    "purgeConfirm": "完全削除の確認: {identity}",
+    "purge": "完全削除"
   }
 }

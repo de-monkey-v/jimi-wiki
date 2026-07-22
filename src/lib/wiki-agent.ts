@@ -50,7 +50,8 @@ export async function runWikiAgent(opts: {
     if (!quota.ok) return { answer: "오늘의 대화 한도를 다 썼어요. 내일 다시 시도해 주세요." };
   }
 
-  const wiki = await prisma.wiki.findUnique({ where: { id: opts.wikiId }, select: { title: true } });
+  const wiki = await prisma.wiki.findFirst({ where: { id: opts.wikiId, trashedAt: null }, select: { title: true } });
+  if (!wiki) return { answer: "이 위키는 존재하지 않거나 휴지통에 있습니다." };
   const langName = detectLang(opts.userMessage).name;
   const loop = await withExternalModelDispatchLock(opts.wikiId, async (tx) => {
     // tool handler는 AsyncLocalStorage로 이 tx를 재사용한다. 모델 루프 안에서 별도 Prisma
@@ -62,7 +63,7 @@ export async function runWikiAgent(opts: {
       ...buildIngestActionTools(opts.wikiId, opts.chatId, opts.userId), // 넣기: URL/텍스트 편입(비동기)
     ];
     return generateWithTools({
-      system: botSystem(wiki?.title ?? "위키", langName),
+      system: botSystem(wiki.title, langName),
       userPrompt: opts.userMessage,
       history: opts.history,
       tools,

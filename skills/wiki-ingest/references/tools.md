@@ -16,10 +16,11 @@
 | 페이지 목록 | `list_pages()` | `GET /pages` | slug·title·kind·category |
 | 페이지 조회 | `read_page(slug)` | `GET /pages/{slug}` | 본문 포함 |
 | 페이지 생성/수정 | `write_page({slug?, title, kind, body, category?, sourceSlug?, embed?})` | `POST /pages` | slug 생략=신규, 주면 수정 |
-| 페이지 삭제 | `delete_page(slug)` — **기본 미노출** | `DELETE /pages/{slug}` | MCP는 `JIMI_MCP_ALLOW_DESTRUCTIVE=1`일 때만 노출(자율 에이전트 보호). 파생(concept/entity/meta)·출처 없는 정크 note는 삭제 가능. 원문 연결된 note=409, system=403 |
+| 페이지 휴지통/복원 | `trash_page` / `restore_page` | `DELETE /pages/{slug}` / `POST /pages/{slug}/restore` | 14일 복구 가능. source note·보호 메모·system은 외부 AI에서 거부 |
 | 원문 목록 | `list_sources()` | `GET /sources` | 본문 제외 |
 | 원문 조회 | `read_source(slug)` | `GET /sources/{slug}` | 불변 |
 | 원문 저장 | `create_source({title, body, url?})` | `POST /sources` | → `{slug}` 반환. ingest 1단계 |
+| 원문 휴지통/복원 | `trash_source` / `restore_source` | `DELETE /sources/{slug}` / `POST /sources/{slug}/restore` | 연결 source note와 함께 처리, 14일 복구 가능 |
 | 원문만 보존 | `preserve_url` / `preserve_text` | `POST /ingest {mode:"preserve",...}` | Source+pointer note, 생성형 큐레이션 없음 |
 | 정리 편입 | `curate_url` / `curate_text` | `POST /ingest {mode:"curate",...}` | 기존 `ingest_*`도 curate 별칭 |
 | 보존 원문 정리 | `curate_source(sourceSlug)` | `POST /sources/{slug}/curate` | blob-only 파일은 이때 추출/OCR 후 새 SourceRevision을 만들며, 게시 성공 뒤에만 curated 전환 |
@@ -32,9 +33,11 @@
 | 잡 상태 폴링 | `get_run_status(runId)` | `GET /runs/{runId}` | `pending`\|`running`\|`done`\|`error`. 위임형 ingest 완료 확인 |
 | 위임형 편입(URL) | `ingest_url(url)` | `POST /ingest {url}` | `curate_url` 호환 별칭 |
 | 위임형 편입(텍스트) | `ingest_text(text, title?)` | `POST /ingest {text,title}` | `curate_text` 호환 별칭 |
-| 읽을거리 담기 | `save_link(url, note?)` | `POST /saved-links` | read-later 개인 리스트(위키 편입 아님). 같은 URL 재요청은 기존 항목 반환 |
+| 읽을거리 담기 | `save_link(url, summary?, summaryUnavailableReason?)` | `POST /saved-links` | 기본 3~5 bullet+볼 가치 요약. 추출 실패 때만 사유와 함께 메타데이터 폴백. 추적 파라미터 정규화 |
 | 읽을거리 목록 | `list_saved_links()` | `GET /saved-links` | 최신순. `promotedAt`이 있으면 편입 완료 |
+| 읽을거리 휴지통/복원 | `trash_saved_link` / `restore_saved_link` | `DELETE /saved-links/{id}` / `POST /saved-links/{id}/restore` | 14일 복구 가능 |
 | 읽을거리 승격 | `promote_saved_link(id)` | `POST /saved-links/{id}/promote` | 재시도·동시 호출은 같은 runId |
+| 휴지통 목록 | `list_trash()` | `GET /trash` | MCP로 복원 가능한 항목만. 위키 전체·영구 purge는 미노출 |
 
 ## write_page 필드
 
@@ -49,7 +52,7 @@
 
 > "인증 경계 = 비용 경계." 내부 AI를 대량 소비하는 라우트는 원칙적으로 웹 UI 세션 전용이다. `POST /ingest`는 API 키에도 열려 있고, 그중 `mode=curate`에만 세션과 동일한 일일 생성 쿼터가 걸린다.
 
-- **API 키/MCP로 가능**: 위 표의 모든 도구 — 조회·작성·삭제, 원문 저장/조회, 하이브리드 검색(+graph), 온톨로지, 기계 lint, 읽을거리, **위임형 ingest와 잡 폴링**.
+- **API 키/MCP로 가능**: 위 표의 모든 도구 — 조회·작성·복구 가능한 휴지통/복원, 원문 저장/조회, 하이브리드 검색(+graph), 온톨로지, 기계 lint, 읽을거리, **위임형 ingest와 잡 폴링**. 영구 purge와 위키 전체 삭제는 불가다.
 - **세션 전용(API 키 불가)**: `POST /query`, `POST /reindex`, `POST /lint {deep:true}`. 외부 에이전트는 자기 LLM이 있으므로 `/query` 대신 `search_wiki`로 근거를 받아 스스로 종합한다.
 - **ingest 쿼터**: `curate`만 위키 소유자의 일일 생성 토큰 상한(`DAILY_TOKEN_LIMIT`)을 소비한다. `preserve`는 생성형 쿼터를 소비하지 않는다. 초과 시 `429 daily_quota_exceeded`이며 임의 재시도하지 않는다.
 

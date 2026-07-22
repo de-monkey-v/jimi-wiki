@@ -4,6 +4,7 @@ import {
   ContentPolicyRelaxationError,
   archiveSourceSnapshotTx,
   restoreSourceRevisionTx,
+  setSourceTrashStateTx,
   updatePageSnapshotTx,
   updateSourceSnapshotTx,
   type ContentTransaction,
@@ -661,6 +662,11 @@ export interface ArchiveSourceWithPropagationInput extends PolicyActorInput {
   wikiId: string;
   sourceId: string;
   expectedVersion: number;
+  trash?: {
+    trashedAt: Date;
+    purgeAt: Date;
+    archivedBeforeTrash: boolean;
+  };
 }
 
 export async function archiveSourceWithPropagation(input: ArchiveSourceWithPropagationInput): Promise<{
@@ -676,7 +682,7 @@ export async function archiveSourceWithPropagation(input: ArchiveSourceWithPropa
       select: { id: true, curationState: true },
     });
     if (!current) throw new ContentNotFoundError("source");
-    const saved = await archiveSourceSnapshotTx(tx, {
+    let saved = await archiveSourceSnapshotTx(tx, {
       wikiId: input.wikiId,
       sourceId: current.id,
       expectedVersion: input.expectedVersion,
@@ -687,6 +693,14 @@ export async function archiveSourceWithPropagation(input: ArchiveSourceWithPropa
         reason: input.reason ?? SOURCE_ARCHIVE_REASON,
       },
     });
+    if (input.trash) {
+      const projection = await setSourceTrashStateTx(tx, {
+        wikiId: input.wikiId,
+        sourceId: saved.projection.id,
+        ...input.trash,
+      });
+      saved = { ...saved, projection };
+    }
     const propagated = await propagateSourcePages({
       tx,
       wikiId: input.wikiId,

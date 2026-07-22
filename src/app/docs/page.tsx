@@ -122,14 +122,14 @@ mcp_servers:
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">record_document/worklog</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">search_documents</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">append_document</code>,{" "}
-          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">promote_saved_link</code>,{" "}
+          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">save/list/promote_saved_link</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">create_source</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">list_sources</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">read_source</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">get_ontology</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">match_category</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">run_lint</code>,{" "}
-          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">delete_page</code>
+          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">list_trash / trash_* / restore_*</code>
         </p>
       </Section>
 

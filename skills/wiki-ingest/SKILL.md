@@ -1,7 +1,7 @@
 ---
 name: wiki-ingest
 description: jimi-wiki 위키를 앱 내부 AI 없이 외부에서 유지보수한다 — MCP 도구 또는 REST로 원문을 편입(ingest)하고, 소스 노트·개념/개체 페이지를 작성하며, 온톨로지 재사용·모순 점검·기계 lint로 일관성을 관리한다. 내부 ingest 에이전트와 동일한 분류 규칙을 따른다. 사용자가 원문(URL·파일·붙여넣은 텍스트)을 "위키에 정리/추가"해 달라거나, 개념·개체 페이지 갱신, 위키 건강 점검을 요청할 때 사용한다.
-ontology_rules_version: 2
+ontology_rules_version: 3
 ---
 
 # wiki-ingest — 외부 위키 유지보수자 스킬
@@ -22,7 +22,18 @@ ontology_rules_version: 2
 2. **도구 확인** — 능력 ↔ MCP 도구 ↔ REST 매핑과 인증 경계: [`references/tools.md`](./references/tools.md).
 3. **분류 규칙 로드** — 페이지에 category를 부여하기 **전에** 반드시 [`references/ontology-rules.md`](./references/ontology-rules.md)를 읽는다.
 
-> **내부 AI를 부르지 않는다.** `POST /ingest`·`/query`·`/reindex`·`/lint {deep:true}`는 세션 전용(API 키 403)이다. 대량 LLM을 쓰는 이 라우트들 대신, 아래 절차대로 `create_source` + `write_page` **primitive로 직접** 작성한다. 요약·통합·모순 판단은 네가 한다.
+> `POST /ingest`는 API 키로 호출할 수 있다. `mode=preserve`는 생성형 큐레이션 없이 원문만 보존하고, `mode=curate`는 앱의 생성형 파이프라인을 사용해 일일 쿼터를 소비한다. `/query`·`/reindex`·`/lint {deep:true}`는 세션 전용이다.
+
+## 의도에 따른 저장 위치
+
+- “나중에 볼게” → `save_link`
+- “원문만 그대로 보관해” → `preserve_url` / `preserve_text`
+- “정리해서 지식으로 저장해” → `curate_url` / `curate_text`
+- “이 내용을 기록해” → `record_document` (`document/general`)
+- “기존 문서에 추가해” → `append_document` (`expectedVersion` 필수)
+- “저장한 링크를 정식 편입해” → `promote_saved_link`
+
+비밀번호·API key·token은 저장하지 않고 비밀번호 관리자를 안내한다. 민감 메모는 MCP가 볼 수 없는 웹 UI의 `personal/internalOnly`에만 둔다.
 
 ## Ingest — 원문 편입 (핵심 워크플로우)
 
@@ -45,9 +56,16 @@ ontology_rules_version: 2
 - 발견 사항을 심각도 순으로 보고하고, 명백한 것은 primitive로 직접 고친다: 정크 노트(출처 없음) 삭제, 원문 복붙 페이지를 요약으로 교정, category 재사용 정정 등.
 - 모순·누락 개념까지 보는 심층(deep) lint는 세션 전용이다 — 웹 UI에서만.
 
+## Document — 작업 기록과 일반 문서
+
+- `document`는 Source와 독립적이다. `sourceSlug`를 붙이지 않는다.
+- `record_document`는 기본 create-only다. 기존 slug 수정과 `append_document`는 읽은 `currentVersion`을 `expectedVersion`으로 보낸다.
+- 외부 에이전트가 만든 문서는 CAS 성공 시 직접 갱신한다. 사람이 작성했거나 혼합된 문서는 `{staged:true}` 검토 초안을 반환하므로 직접 덮어썼다고 보고하지 않는다.
+- 프로젝트 worklog는 `목표 / 변경 사항 / 결정 / 문제와 해결 / 검증 / 남은 작업 / 참고 자료` 순서를 고정한다.
+
 ## Query — 조회 답변
 
-위키 지식으로 질문에 답할 때는 `search_wiki` → `read_page`로 근거를 모아 종합하고, 근거 페이지를 인용한다. 세션 전용인 내부 `/query`는 쓰지 않는다. 재사용 가치가 있는 비교·분석은 `write_page(kind=answer)`로 남긴다.
+위키 지식으로 질문에 답할 때는 `search_wiki` → `read_page`로 근거를 모아 종합하고, 근거 페이지를 인용한다. 세션 전용인 내부 `/query`는 쓰지 않는다. 저장할 가치가 있는 답변은 `record_document(type=general)`로 남긴다.
 
 ## 작업 원칙
 

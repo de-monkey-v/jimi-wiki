@@ -92,17 +92,37 @@ export default async function DocsPage({
 
       <Section title={t("section2Title")}>
         <p className="text-sm text-stone-600">{t.rich("section2.intro", { code })}</p>
-        <CodeBlock>{`claude mcp add jimi-wiki \\
+        <p className="text-xs font-semibold text-stone-500">{t("section2.claudeLabel")}</p>
+        <CodeBlock>{`claude mcp add --scope local jimi-wiki \\
   -e JIMI_WIKI_URL=${BASE} \\
   -e JIMI_WIKI_API_KEY=<발급받은-키> \\
   -e JIMI_WIKI_SLUG=${SLUG} \\
   -- node <repo>/mcp/server.mjs`}</CodeBlock>
+        <p className="text-xs font-semibold text-stone-500">{t("section2.hermesLabel")}</p>
+        <CodeBlock>{`# ~/.hermes/.env
+JIMI_WIKI_PERSONAL_KEY=jw_...
+
+# ~/.hermes/config.yaml
+mcp_servers:
+  jimi-wiki:
+    command: "node"
+    args: ["<repo>/mcp/server.mjs"]
+    env:
+      JIMI_WIKI_URL: "${BASE}"
+      JIMI_WIKI_API_KEY: "\${JIMI_WIKI_PERSONAL_KEY}"
+      JIMI_WIKI_SLUG: "${SLUG}"`}</CodeBlock>
         <p className="text-sm text-stone-600">{t("section2.toolsLabel")}</p>
         <p className="text-sm text-stone-600">
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">search_wiki</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">list_pages</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">read_page</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">write_page</code>,{" "}
+          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">preserve_url/text</code>,{" "}
+          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">curate_url/text/source</code>,{" "}
+          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">record_document/worklog</code>,{" "}
+          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">search_documents</code>,{" "}
+          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">append_document</code>,{" "}
+          <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">promote_saved_link</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">create_source</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">list_sources</code>,{" "}
           <code className="rounded bg-stone-100 px-1 py-0.5 text-xs">read_source</code>,{" "}
@@ -149,8 +169,17 @@ curl -sX POST "$BASE/pages" -H "Authorization: Bearer $KEY" \\
   -H 'content-type: application/json' \\
   -d '{"title":"Self-Attention","kind":"concept","category":"ai/architectures","body":"[[노트]] 참조...","embed":true}'
 
-# 하이브리드 검색
-curl -sH "Authorization: Bearer $KEY" "$BASE/search?q=attention&k=8"`}</CodeBlock>
+# 원문만 보존(생성형 큐레이션 없음)
+curl -sX POST "$BASE/ingest" -H "Authorization: Bearer $KEY" \\
+  -H 'content-type: application/json' -d '{"url":"https://...","mode":"preserve"}'
+
+# 독립 작업 문서 기록
+curl -sX POST "$BASE/documents" -H "Authorization: Bearer $KEY" \\
+  -H 'content-type: application/json' \\
+  -d '{"title":"작업 기록","body":"...","type":"worklog","documentAt":"2026-07-21T12:30:00+09:00"}'
+
+# 전체 검색은 지식/문서를 그룹으로 반환
+curl -sH "Authorization: Bearer $KEY" "$BASE/search?q=attention&scope=all&k=8"`}</CodeBlock>
         <p className="text-xs text-stone-500">{t.rich("section4.fullRef", { code })}</p>
       </Section>
 

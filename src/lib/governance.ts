@@ -249,7 +249,7 @@ export async function detectCategoryIssues(
       where: {
         wikiId,
         archivedAt: null,
-        kind: externalOnly ? { notIn: ["note", "meta", "personal"] } : { notIn: ["note", "meta"] },
+        kind: { in: ["concept", "entity"] },
         ...(externalOnly ? { modelAccess: "external" as const } : {}),
       },
       select: { slug: true, title: true, category: true },

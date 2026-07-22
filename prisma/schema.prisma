@@ -33,8 +33,24 @@ enum PageKind {
   note
   concept
   entity
+  document // 작업 기록·결정·문제 해결·계획 등 독립 문서. Source provenance와 KnowledgeBuild 자동 재작성에서 제외
   meta
   personal // 개인 수동 메모. 폴더 트리에 참여하되 AI(임베딩·검색·ingest·query·chat·lint·번역)에서 완전 제외
+}
+
+enum DocumentType {
+  general
+  worklog
+  troubleshooting
+  decision
+  reference
+  plan
+  spec
+}
+
+enum SourceCurationState {
+  preserved
+  curated
 }
 
 enum LogKind {
@@ -305,6 +321,8 @@ model Page {
   sortOrder            Int                          @default(0) // 형제 페이지 간 순서(책 목차)
   parentId             String? // 상위 페이지(챕터). 루트는 null
   category             String? // 자유형 폴더 경로(예: "ai/architectures"). 온톨로지 조직 축
+  documentType         DocumentType? // kind=document일 때 필수
+  documentAt           DateTime? // 문서의 의미상 기록 시각. kind=document일 때 필수
   sourceId             String? // 이 페이지가 파생된 원문(provenance). note에 주로 연결
   origin               PageOrigin                   @default(human)
   modelAccess          ModelAccess                  @default(external)
@@ -332,6 +350,7 @@ model Page {
 
   @@unique([wikiId, slug])
   @@index([wikiId, kind])
+  @@index([wikiId, kind, documentType, documentAt])
   @@index([wikiId, parentId, sortOrder])
   @@index([wikiId, category])
   @@index([wikiId, archivedAt])
@@ -347,6 +366,8 @@ model PageRevision {
   kind                 PageKind
   frontmatter          Json                         @default("{}")
   category             String?
+  documentType         DocumentType?
+  documentAt           DateTime?
   parentId             String?
   sortOrder            Int
   sourceId             String?
@@ -413,27 +434,29 @@ model PageLink {
 }
 
 model Source {
-  id             String             @id @default(cuid())
+  id             String              @id @default(cuid())
   wikiId         String
   slug           String
   title          String
   url            String?
   body           String?
   storageKey     String?
-  modelAccess    ModelAccess        @default(external)
-  currentVersion Int                @default(1)
-  policyVersion  Int                @default(1)
+  modelAccess    ModelAccess         @default(external)
+  curationState  SourceCurationState @default(curated)
+  currentVersion Int                 @default(1)
+  policyVersion  Int                 @default(1)
   archivedAt     DateTime?
-  ingestedAt     DateTime           @default(now())
-  wiki           Wiki               @relation(fields: [wikiId], references: [id], onDelete: Cascade)
-  pages          Page[]             @relation("PageSource")
-  contributions  PageContribution[] @relation("SourceContribs") // 이 원본이 기여한 파생 페이지들
-  relations      ConceptRelation[]  @relation("SourceRelations") // 이 원본이 근거로 만든 개념 관계(접지)
+  ingestedAt     DateTime            @default(now())
+  wiki           Wiki                @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  pages          Page[]              @relation("PageSource")
+  contributions  PageContribution[]  @relation("SourceContribs") // 이 원본이 기여한 파생 페이지들
+  relations      ConceptRelation[]   @relation("SourceRelations") // 이 원본이 근거로 만든 개념 관계(접지)
   revisions      SourceRevision[]
 
   @@unique([wikiId, slug])
   @@index([wikiId, archivedAt])
   @@index([wikiId, modelAccess, archivedAt])
+  @@index([wikiId, curationState, archivedAt])
 }
 
 model SourceRevision {
@@ -513,16 +536,16 @@ model ConceptRelation {
 }
 
 model SearchChunk {
-  id          String                      @id @default(cuid())
+  id          String                       @id @default(cuid())
   wikiId      String
   refType     String // 'page' | 'source'
   refId       String
-  heading     String                      @default("")
+  heading     String                       @default("")
   text        String
   hash        String
-  modelAccess ModelAccess                 @default(external)
+  modelAccess ModelAccess                  @default(external)
   embedding   Unsupported("vector(1024)")?
-  wiki        Wiki                        @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  wiki        Wiki                         @relation(fields: [wikiId], references: [id], onDelete: Cascade)
 
   @@index([wikiId])
   @@index([wikiId, modelAccess])
@@ -542,20 +565,21 @@ model LogEntry {
 }
 
 model AgentRun {
-  id              String           @id @default(cuid())
-  wikiId          String
-  userId          String?
-  type            AgentType
-  status          AgentStatus      @default(pending)
-  stage           String? // running 중 현재 단계(fetch|curate|embed|lint). 단계 전이마다 갱신, 종료 시 null
-  input           Json             @default("{}")
-  output          Json?
-  error           String?
-  createdAt       DateTime         @default(now()) // 큐 진입(pending) 시각
-  startedAt       DateTime? // running 전이 시각 — 대기 시간과 실제 실행 시간을 구분(경과시간·정직한 진행표시)
-  finishedAt      DateTime?
-  wiki            Wiki             @relation(fields: [wikiId], references: [id], onDelete: Cascade)
-  knowledgeBuilds KnowledgeBuild[]
+  id                String           @id @default(cuid())
+  wikiId            String
+  userId            String?
+  type              AgentType
+  status            AgentStatus      @default(pending)
+  stage             String? // running 중 현재 단계(fetch|curate|embed|lint). 단계 전이마다 갱신, 종료 시 null
+  input             Json             @default("{}")
+  output            Json?
+  error             String?
+  createdAt         DateTime         @default(now()) // 큐 진입(pending) 시각
+  startedAt         DateTime? // running 전이 시각 — 대기 시간과 실제 실행 시간을 구분(경과시간·정직한 진행표시)
+  finishedAt        DateTime?
+  wiki              Wiki             @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  knowledgeBuilds   KnowledgeBuild[]
+  promotedSavedLink SavedLink?       @relation("SavedLinkPromotion")
 
   @@index([wikiId, createdAt])
 }
@@ -641,6 +665,8 @@ model KnowledgeDraft {
   kind         PageKind
   frontmatter  Json                   @default("{}")
   category     String?
+  documentType DocumentType?
+  documentAt   DateTime?
   parentId     String?
   sortOrder    Int                    @default(0)
   origin       PageOrigin             @default(generated)
@@ -719,16 +745,18 @@ model FolderPin {
 // 유저별 "읽을거리"(read-later) 링크. 개인·임시 트리아지 — 괜찮으면 정식 편입(ingest), 아니면 삭제.
 // AI 코퍼스와 무관(SavedLink는 페이지가 아님). title/description은 저장 시 OG/메타태그로 자동 라벨(LLM 없음).
 model SavedLink {
-  id          String    @id @default(cuid())
-  userId      String
-  wikiId      String
-  url         String
-  title       String
-  description String?
-  promotedAt  DateTime? // 정식 편입(ingest) 시각. null=미편입. 편입해도 삭제하지 않고 이 값으로 "편입됨" 표시
-  createdAt   DateTime  @default(now())
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  wiki        Wiki      @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  userId        String
+  wikiId        String
+  url           String
+  title         String
+  description   String?
+  promotedAt    DateTime? // 정식 편입(ingest) 시각. null=미편입. 편입해도 삭제하지 않고 이 값으로 "편입됨" 표시
+  promotedRunId String?   @unique // promotion 재시도·동시 호출이 재사용하는 ingest run
+  createdAt     DateTime  @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wiki          Wiki      @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+  promotedRun   AgentRun? @relation("SavedLinkPromotion", fields: [promotedRunId], references: [id], onDelete: SetNull)
 
   @@index([userId, wikiId, createdAt])
 }

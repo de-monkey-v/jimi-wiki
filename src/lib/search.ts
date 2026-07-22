@@ -18,6 +18,13 @@ export const MIN_CHUNK = 200;
 export const RRF_K = 60;
 export const POOL = 50;
 export const RESULT_N = 20;
+export type SearchScope = "knowledge" | "documents" | "all";
+type LocalSearchScope = SearchScope | "protected";
+
+export function parseSearchScope(value: unknown, fallback: SearchScope = "knowledge"): SearchScope | null {
+  if (value === undefined || value === null) return fallback;
+  return value === "knowledge" || value === "documents" || value === "all" ? value : null;
+}
 
 // 'category'는 온톨로지 재사용 매칭용 별도 코퍼스(일반 검색에는 노출 안 됨).
 export type RefType = "page" | "source" | "category";
@@ -443,30 +450,74 @@ export interface SearchHit {
 
 // category 코퍼스가 일반 검색에 오염되지 않게 refType을 page/source로 제한.
 // 로컬 FTS는 정책을 가리지 않으며 외부 API를 전혀 호출하지 않는다.
-const LOCAL_FTS_SQL = `
-  SELECT id FROM "SearchChunk"
-  WHERE "wikiId" = $1
-    AND "refType" IN ('page','source')
-    AND to_tsvector('simple', text) @@ websearch_to_tsquery('simple', $2)
-  ORDER BY ts_rank(to_tsvector('simple', text), websearch_to_tsquery('simple', $2)) DESC
+const scopeSql = (scope: LocalSearchScope): string => {
+  const knowledge = `(
+    (c."refType"='source' AND EXISTS (
+      SELECT 1 FROM "Source" s WHERE s.id=c."refId" AND s."wikiId"=c."wikiId"
+        AND s."archivedAt" IS NULL AND s."curationState"='curated'
+    ))
+    OR
+    (c."refType"='page' AND EXISTS (
+      SELECT 1 FROM "Page" p WHERE p.id=c."refId" AND p."wikiId"=c."wikiId"
+        AND p."archivedAt" IS NULL AND (
+          p.kind IN ('concept','entity')
+          OR (p.kind='note' AND (
+            p."sourceId" IS NULL
+            OR EXISTS (SELECT 1 FROM "Source" ps WHERE ps.id=p."sourceId" AND ps."curationState"='curated')
+          ))
+        )
+    ))
+  )`;
+  const documents = `(
+    (c."refType"='source' AND EXISTS (
+      SELECT 1 FROM "Source" s WHERE s.id=c."refId" AND s."wikiId"=c."wikiId"
+        AND s."archivedAt" IS NULL AND s."curationState"='preserved'
+    ))
+    OR
+    (c."refType"='page' AND EXISTS (
+      SELECT 1 FROM "Page" p WHERE p.id=c."refId" AND p."wikiId"=c."wikiId"
+        AND p."archivedAt" IS NULL AND p.kind='document'
+    ))
+  )`;
+  const protectedPages = `(
+    c."refType"='page' AND EXISTS (
+      SELECT 1 FROM "Page" p WHERE p.id=c."refId" AND p."wikiId"=c."wikiId"
+        AND p."archivedAt" IS NULL AND p.kind='personal'
+    )
+  )`;
+  if (scope === "knowledge") return knowledge;
+  if (scope === "documents") return documents;
+  if (scope === "protected") return protectedPages;
+  return `(${knowledge} OR ${documents})`;
+};
+
+const localFtsSql = (scope?: LocalSearchScope) => `
+  SELECT c.id FROM "SearchChunk" c
+  WHERE c."wikiId" = $1
+    AND c."refType" IN ('page','source')
+    ${scope ? `AND ${scopeSql(scope)}` : ""}
+    AND to_tsvector('simple', c.text) @@ websearch_to_tsquery('simple', $2)
+  ORDER BY ts_rank(to_tsvector('simple', c.text), websearch_to_tsquery('simple', $2)) DESC
   LIMIT $3`;
 
-const MODEL_FTS_SQL = `
-  SELECT id FROM "SearchChunk"
-  WHERE "wikiId" = $1
-    AND "refType" IN ('page','source')
-    AND "modelAccess" = 'external'
-    AND to_tsvector('simple', text) @@ websearch_to_tsquery('simple', $2)
-  ORDER BY ts_rank(to_tsvector('simple', text), websearch_to_tsquery('simple', $2)) DESC
+const modelFtsSql = (scope: SearchScope) => `
+  SELECT c.id FROM "SearchChunk" c
+  WHERE c."wikiId" = $1
+    AND c."refType" IN ('page','source')
+    AND c."modelAccess" = 'external'
+    AND ${scopeSql(scope)}
+    AND to_tsvector('simple', c.text) @@ websearch_to_tsquery('simple', $2)
+  ORDER BY ts_rank(to_tsvector('simple', c.text), websearch_to_tsquery('simple', $2)) DESC
   LIMIT $3`;
 
-const MODEL_VEC_SQL = `
-  SELECT id, 1 - (embedding <=> $2::vector) AS sim FROM "SearchChunk"
-  WHERE "wikiId" = $1
-    AND "refType" IN ('page','source')
-    AND "modelAccess" = 'external'
-    AND embedding IS NOT NULL
-  ORDER BY embedding <=> $2::vector ASC
+const modelVecSql = (scope: SearchScope) => `
+  SELECT c.id, 1 - (c.embedding <=> $2::vector) AS sim FROM "SearchChunk" c
+  WHERE c."wikiId" = $1
+    AND c."refType" IN ('page','source')
+    AND c."modelAccess" = 'external'
+    AND ${scopeSql(scope)}
+    AND c.embedding IS NOT NULL
+  ORDER BY c.embedding <=> $2::vector ASC
   LIMIT $3`;
 
 type IdRow = { id: string };
@@ -479,6 +530,7 @@ async function hydrateActiveHits(
   simById: Map<string, number>,
   k: number,
   access: "local" | "external",
+  scope?: LocalSearchScope,
 ): Promise<SearchHit[]> {
   if (candidates.length === 0) return [];
   const ids = candidates.map(([id]) => id);
@@ -504,7 +556,14 @@ async function hydrateActiveHits(
               }
             : {}),
         },
-        select: { id: true, slug: true, title: true },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          kind: true,
+          sourceId: true,
+          source: { select: { curationState: true } },
+        },
       })
     : [];
   const sources = sourceIds.length
@@ -515,11 +574,24 @@ async function hydrateActiveHits(
           archivedAt: null,
           ...(access === "external" ? { modelAccess: "external" as const } : {}),
         },
-        select: { id: true },
+        select: { id: true, curationState: true },
       })
     : [];
   const pageById = new Map(pages.map((p) => [p.id, p]));
-  const sourceSet = new Set(sources.map((s) => s.id));
+  const sourceById = new Map(sources.map((s) => [s.id, s]));
+  const pageAllowed = (page: (typeof pages)[number]): boolean => {
+    if (!scope) return true;
+    if (scope === "protected") return page.kind === "personal";
+    const knowledge = page.kind === "concept" || page.kind === "entity" ||
+      (page.kind === "note" && (!page.sourceId || page.source?.curationState === "curated"));
+    const documents = page.kind === "document";
+    return scope === "knowledge" ? knowledge : scope === "documents" ? documents : knowledge || documents;
+  };
+  const sourceAllowed = (source: (typeof sources)[number]): boolean => {
+    if (scope === "protected") return false;
+    if (!scope || scope === "all") return true;
+    return scope === "knowledge" ? source.curationState === "curated" : source.curationState === "preserved";
+  };
 
   const seenRefs = new Set<string>();
   const hits: SearchHit[] = [];
@@ -529,8 +601,9 @@ async function hydrateActiveHits(
     if (!c) continue;
     if (access === "external" && c.modelAccess !== "external") continue;
     const pg = c.refType === "page" ? pageById.get(c.refId) : undefined;
-    if (c.refType === "page" && !pg) continue;
-    if (c.refType === "source" && !sourceSet.has(c.refId)) continue;
+    if (c.refType === "page" && (!pg || !pageAllowed(pg))) continue;
+    const source = c.refType === "source" ? sourceById.get(c.refId) : undefined;
+    if (c.refType === "source" && (!source || !sourceAllowed(source))) continue;
     if (c.refType !== "page" && c.refType !== "source") continue;
     const refKey = `${c.refType}:${c.refId}`;
     if (seenRefs.has(refKey)) continue; // 같은 페이지/소스의 다른 청크 중복 제거
@@ -552,20 +625,31 @@ async function hydrateActiveHits(
 }
 
 /** 인증된 UI 전용 로컬 검색. Gemini query embedding을 포함해 외부 호출을 전혀 하지 않는다. */
-export async function localFtsSearch(wikiId: string, queryText: string, k = RESULT_N): Promise<SearchHit[]> {
+export async function localFtsSearch(
+  wikiId: string,
+  queryText: string,
+  k = RESULT_N,
+  scope?: LocalSearchScope,
+): Promise<SearchHit[]> {
   const q = queryText.trim();
   if (!q) return [];
-  const rows = await modelPolicyClient(wikiId).$queryRawUnsafe<IdRow[]>(LOCAL_FTS_SQL, wikiId, q, Math.max(POOL, k * 3));
+  const rows = await modelPolicyClient(wikiId).$queryRawUnsafe<IdRow[]>(
+    localFtsSql(scope),
+    wikiId,
+    q,
+    Math.max(POOL, k * 3),
+  );
   const candidates: [string, number][] = rows
     .slice(0, k * 3)
     .map((r, i) => [r.id, 1 / (RRF_K + i + 1)]);
-  return hydrateActiveHits(modelPolicyClient(wikiId), wikiId, candidates, new Map(), k, "local");
+  return hydrateActiveHits(modelPolicyClient(wikiId), wikiId, candidates, new Map(), k, "local", scope);
 }
 
 export interface ModelSearchOptions extends ExternalModelScope {
   wikiId: string;
   queryText: string;
   k?: number;
+  scope?: SearchScope;
 }
 
 /** 외부 모델용 검색. external active projection만 반환하고 query embedding도 이 경로에서만 수행한다. */
@@ -573,17 +657,18 @@ export async function modelSearch(opts: ModelSearchOptions): Promise<SearchHit[]
   assertExternalModelScope(opts);
   const { wikiId } = opts;
   const k = opts.k ?? RESULT_N;
+  const scope = opts.scope ?? "knowledge";
   const q = opts.queryText.trim();
   if (!q) return [];
 
   return withExternalModelDispatchLock(wikiId, async (tx) => {
-    const ftsRows = await tx.$queryRawUnsafe<IdRow[]>(MODEL_FTS_SQL, wikiId, q, POOL);
+    const ftsRows = await tx.$queryRawUnsafe<IdRow[]>(modelFtsSql(scope), wikiId, q, POOL);
     let vecRows: VecRow[] = [];
     if (embeddingEnabled()) {
       try {
         const [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "search" });
         if (qv?.length === EMBED_DIM) {
-          vecRows = await tx.$queryRawUnsafe<VecRow[]>(MODEL_VEC_SQL, wikiId, `[${qv.join(",")}]`, POOL);
+          vecRows = await tx.$queryRawUnsafe<VecRow[]>(modelVecSql(scope), wikiId, `[${qv.join(",")}]`, POOL);
         }
       } catch (e) {
         console.error(`[search] 쿼리 임베딩 실패, FTS 단독 폴백: ${(e as Error).message}`);
@@ -599,7 +684,7 @@ export async function modelSearch(opts: ModelSearchOptions): Promise<SearchHit[]
     const candidates = [...scores.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, k * 3);
-    return hydrateActiveHits(tx, wikiId, candidates, simById, k, "external");
+    return hydrateActiveHits(tx, wikiId, candidates, simById, k, "external", scope);
   });
 }
 
@@ -715,8 +800,9 @@ external_rel AS (
   JOIN "Page" pf ON pf.id=r."fromPageId" AND pf."wikiId"=r."wikiId"
   JOIN "Page" pt ON pt.id=r."toPageId" AND pt."wikiId"=r."wikiId"
   WHERE r."wikiId"=$1 AND s."archivedAt" IS NULL AND s."modelAccess"='external'
-    AND pf."archivedAt" IS NULL AND pf."modelAccess"='external' AND pf.kind <> 'personal'
-    AND pt."archivedAt" IS NULL AND pt."modelAccess"='external' AND pt.kind <> 'personal'
+    AND s."curationState"='curated'
+    AND pf."archivedAt" IS NULL AND pf."modelAccess"='external' AND pf.kind IN ('concept','entity')
+    AND pt."archivedAt" IS NULL AND pt."modelAccess"='external' AND pt.kind IN ('concept','entity')
 ),
 deg AS (
   -- 위상적 차수 = 서로 다른 이웃 개념 수. count(*)로 엣지 행을 세면 같은 논리 엣지가
@@ -785,7 +871,7 @@ export async function expandViaGraph(wikiId: string, seedPageIds: string[], dept
       slug: { not: ONTOLOGY_SLUG },
       archivedAt: null,
       modelAccess: "external",
-      kind: { not: "personal" },
+      kind: { in: ["concept", "entity"] },
     },
     select: { id: true, slug: true, title: true, body: true },
   });

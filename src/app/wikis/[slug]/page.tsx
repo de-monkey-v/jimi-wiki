@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, listPages } from "@/lib/wiki";
 import { prisma } from "@/lib/db";
@@ -17,6 +17,8 @@ export default async function WikiHome({
   searchParams: Promise<{ run?: string }>;
 }) {
   const t = await getTranslations("WikisSlugPage");
+  const locale = await getLocale();
+  const documentDate = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   const tk = await getTranslations("Kinds");
   const { slug: rawSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
@@ -37,6 +39,20 @@ export default async function WikiHome({
     orderBy: { createdAt: "desc" },
     take: 6,
   });
+
+  const recentProjectDocuments = wiki.kind === "project"
+    ? await prisma.page.findMany({
+        where: {
+          wikiId: wiki.id,
+          kind: "document",
+          documentType: { in: ["worklog", "troubleshooting", "decision"] },
+          archivedAt: null,
+        },
+        orderBy: [{ documentAt: "desc" }, { createdAt: "desc" }],
+        take: 9,
+        select: { id: true, slug: true, title: true, documentType: true, documentAt: true },
+      })
+    : [];
 
   const pages = await listPages(wiki.id);
   const groups = new Map<string, typeof pages>();
@@ -105,9 +121,30 @@ export default async function WikiHome({
       </>
       )}
 
+      {recentProjectDocuments.length > 0 && (
+        <section className="mt-10 rounded-xl border border-stone-200 bg-stone-50/60 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-stone-600">{t("recentProjectDocuments")}</h2>
+          <ol className="space-y-2">
+            {recentProjectDocuments.map((document) => (
+              <li key={document.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                <time className="font-mono text-xs tabular-nums text-stone-400" dateTime={document.documentAt?.toISOString()}>
+                  {document.documentAt ? documentDate.format(document.documentAt) : ""}
+                </time>
+                <span className="rounded-full border border-indigo-100 bg-white px-2 py-0.5 text-[11px] font-medium text-indigo-700">
+                  {document.documentType ? t(`documentType.${document.documentType}`) : ""}
+                </span>
+                <Link href={`/wikis/${slug}/${document.slug}`} className="min-w-0 truncate text-stone-700 hover:text-indigo-700 hover:underline">
+                  {document.title}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       {logs.length > 0 && (
         <section className="mt-8 border-t pt-4">
-          <h2 className="text-sm font-semibold text-gray-500 mb-2">{t("recentActivity")}</h2>
+          <h2 className="text-sm font-semibold text-gray-500 mb-2">{t("systemActivity")}</h2>
           <ul className="space-y-1 text-sm text-gray-500">
             {logs.map((l) => (
               <li key={l.id} className="flex gap-2">

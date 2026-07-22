@@ -1,6 +1,6 @@
 import "server-only";
 import { getBlobStore, makeStorageKey } from "@/lib/blob";
-import { createIngestRun, type IngestInput } from "@/lib/ingest";
+import { createIngestRun, type IngestInput, type IngestMode } from "@/lib/ingest";
 import type { ModelAccessValue } from "@/lib/model-access";
 import {
   classifyUpload,
@@ -9,6 +9,24 @@ import {
   ZIP_MAX_ENTRY_BYTES,
   ZIP_MAX_RATIO,
 } from "@/lib/file-types";
+
+export function zipChildIngestInput(input: {
+  storageKey: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  modelAccess?: ModelAccessValue;
+  mode: IngestMode;
+}): IngestInput {
+  return {
+    storageKey: input.storageKey,
+    filename: input.filename,
+    mimeType: input.mimeType,
+    size: input.size,
+    ...(input.modelAccess ? { modelAccess: input.modelAccess } : {}),
+    mode: input.mode,
+  };
+}
 
 /**
  * zip 을 워커에서 펼쳐(fan-out) 안의 파일들을 각각 개별 Source 로 만든다: 엔트리별로 blob 저장 후
@@ -24,8 +42,10 @@ export async function fanOutZip(opts: {
   userId?: string | null;
   /** 부모 ingest의 정책. internalOnly ZIP의 모든 child run에 그대로 상속한다. */
   modelAccess?: ModelAccessValue;
+  /** 부모 run의 preserve/curate 의미를 모든 child가 그대로 상속한다. */
+  mode: IngestMode;
 }): Promise<number> {
-  const { wikiId, buffer, userId, modelAccess } = opts;
+  const { wikiId, buffer, userId, modelAccess, mode } = opts;
   const store = getBlobStore();
   const yauzl = (await import("yauzl")).default;
 
@@ -92,13 +112,14 @@ export async function fanOutZip(opts: {
             // 중첩 zip 은 펼치지 않고(깊이 1) 지원 안 하는 엔트리도 조용히 스킵
             if (!("rejected" in cls) && cls.kind !== "zip") {
               const key = makeStorageKey(wikiId, cls.ext);
-              const childInput: IngestInput & { modelAccess?: ModelAccessValue } = {
+              const childInput = zipChildIngestInput({
                 storageKey: key,
                 filename: base,
                 mimeType: cls.mimeType,
                 size: buf.length,
-                ...(modelAccess ? { modelAccess } : {}),
-              };
+                modelAccess,
+                mode,
+              });
               pending.push(
                 store
                   .put(key, buf)

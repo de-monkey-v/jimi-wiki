@@ -5,6 +5,9 @@ import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getPage } from "@/lib/wiki";
 import { savePageAction } from "../../../actions";
 import { MANUAL_KIND_OPTIONS, MANUAL_KINDS } from "@/lib/kinds";
+import { DocumentDateInput } from "./DocumentDateInput";
+
+const DOCUMENT_TYPES = ["general", "worklog", "troubleshooting", "decision", "reference", "plan", "spec"] as const;
 
 export default async function EditPage({
   params,
@@ -35,14 +38,17 @@ export default async function EditPage({
         <input type="hidden" name="expectedVersion" value={page.currentVersion} />
 
         <div className="flex gap-3">
+          <label htmlFor="page-title" className="sr-only">{t("titleLabel")}</label>
           <input
+            id="page-title"
             name="title"
             defaultValue={page.title}
             required
             className="flex-1 border rounded px-3 py-2 font-semibold"
           />
-          <select name="kind" defaultValue={page.kind} className="border rounded px-3 py-2">
-            {MANUAL_KIND_OPTIONS.map((o) => (
+          <label htmlFor="page-kind" className="sr-only">{t("kindLabel")}</label>
+          <select id="page-kind" name="kind" defaultValue={page.kind} className="border rounded px-3 py-2">
+            {MANUAL_KIND_OPTIONS.filter((o) => page.kind === "document" ? o.value === "document" : o.value !== "document").map((o) => (
               <option key={o.value} value={o.value}>{tk(`${o.value}Option`)}</option>
             ))}
             {/* 시스템 kind(note/meta)는 새로 지정할 수 없지만, 이미 그 kind인 페이지는 값을 보존한다 */}
@@ -52,7 +58,24 @@ export default async function EditPage({
           </select>
         </div>
 
+        {page.kind === "document" && (
+          <div className="grid gap-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 sm:grid-cols-2">
+            <label className="text-sm text-stone-600">
+              <span className="mb-1 block font-medium">{t("documentTypeLabel")}</span>
+              <select name="documentType" defaultValue={page.documentType ?? "general"} className="w-full rounded border bg-white px-3 py-2">
+                {DOCUMENT_TYPES.map((type) => <option key={type} value={type}>{t(`documentType.${type}`)}</option>)}
+              </select>
+            </label>
+            <label className="text-sm text-stone-600">
+              <span className="mb-1 block font-medium">{t("documentAtLabel")}</span>
+              <DocumentDateInput value={page.documentAt?.toISOString() ?? ""} />
+            </label>
+          </div>
+        )}
+
+        <label htmlFor="page-body" className="sr-only">{t("bodyLabel")}</label>
         <textarea
+          id="page-body"
           name="body"
           defaultValue={page.body}
           rows={22}

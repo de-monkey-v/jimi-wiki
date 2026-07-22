@@ -98,11 +98,13 @@
       "auth": "すべての外部呼び出しは<code>{header}</code>ヘッダーで認証します。APIキーは発行時に一度だけ表示されるので、安全に保管してください。",
       "li1": "<link>APIキー</link>画面で発行（書き込み操作はeditor以上）。",
       "li2": "キーを特定のwikiに<strong>スコープ</strong>したり、<strong>上限ロール（maxRole）</strong>・<strong>有効期限</strong>を設定できます。有効ロール = min(メンバーシップロール, maxRole)。",
-      "li3": "アカウントあたり有効キーは最大20個。レート制限：毎分60回／毎時1000回（超過時は<code>429</code> + Retry-After）。"
+      "li3": "アカウントあたり有効キーは最大20個。レート制限：毎分120回／毎時3000回（超過時は<code>429</code> + Retry-After）。"
     },
     "section2": {
-      "intro": "リポジトリの<code>mcp/server.mjs</code>をMCPクライアントに登録すると、コンテンツAPIがツールとして公開されます。Claude Codeの例：",
-      "toolsLabel": "公開されるツール（11種）："
+      "intro": "リポジトリの<code>mcp/server.mjs</code>を登録すると、Wiki kindに合ったプロファイルとコンテンツツールが公開されます。",
+      "claudeLabel": "Claude Code — プロジェクト限定の --scope local",
+      "hermesLabel": "Hermes — キーは ~/.hermes/.env、YAMLは環境変数プレースホルダー",
+      "toolsLabel": "主な公開ツール："
     },
     "section3": {
       "p1": "リポジトリの<code>skills/wiki-ingest/</code>スキルバンドルは外部メンテナー向けのワークフローです — 原文の取り込み（ingest）だけでなく、分類・整理（organize）・機械チェック（lint）・照会（query）まで対応します。特定のエージェントに縛られないため、<strong>MCPをサポートすればツールとして、そうでなければRESTで同じ手順</strong>を実行します。内部ingestエージェントと<strong>同じ分類ルール</strong>（オントロジー／カテゴリ）を正本からコピーし、CIでbyte-parityを保証するので、Web UIから入れてもスキルで入れてもwikiの分類が一貫します。",
@@ -118,11 +120,11 @@
       "fullRef": "全リファレンス（すべてのエンドポイント・レスポンス・エラーコード）はリポジトリの<code>docs/rest-api.md</code>にあります。"
     },
     "auth": {
-      "intro": "「認証境界 = コスト境界」。内部AI（Gemini）を大量消費するルートは<strong>Web UIのCookieセッション専用</strong>のため、APIキーでは呼び出せません。外部経路ではprimitiveで直接作成してください。",
+      "intro": "「認証境界 = コスト境界」。生成キュレーションはクォータで制限し、保護メモは外部モデル境界から隠します。",
       "card1Title": "APIキー（Bearer）で可能",
-      "card1Body": "ページの照会／作成／削除、原文の保存／照会、ハイブリッド検索、オントロジー照会・カテゴリマッチング、機械チェックlint、ジョブ状態のポーリング",
+      "card1Body": "ページ・文書の参照／作成、preserve/curate ingest、原文、検索、リーディングリスト昇格、ジョブ状態ポーリング",
       "card2Title": "セッション専用（APIキー不可）",
-      "card2Body": "<code>POST /ingest</code>（内部AI ingest）、<code>/query</code>、<code>/reindex</code>、<code>{lint}</code> — Web UIのみ"
+      "card2Body": "<code>/query</code>、<code>/reindex</code>、<code>{lint}</code>、ingestファイルアップロードはWeb UIのみ。JSON ingestはAPIキー可"
     },
     "footer": "参考ファイル — スキルバンドル：<code>skills/wiki-ingest/</code>（SKILL.md + references/）· MCP：<code>mcp/server.mjs</code> · REST：<code>docs/rest-api.md</code>"
   },
@@ -195,12 +197,17 @@
     "note": "ソースノート",
     "concept": "概念",
     "entity": "エンティティ",
+    "document": "ドキュメント",
     "meta": "メタ",
     "conceptOption": "概念 — アイデア・パターン・理論・ドキュメント",
     "entityOption": "エンティティ — 人物・組織・ツール・製品",
-    "personal": "個人ノート",
-    "personalOption": "個人ノート — 自分だけのメモ(AI対象外)",
+    "documentOption": "ドキュメント — 作業記録・決定・問題解決・計画",
+    "personal": "保護メモ — 外部AI対象外",
+    "personalOption": "保護メモ — 外部AI対象外",
     "personalWarning": "個人ノートはAI対象外ですが暗号化はされません — 本物のパスワードは保存しないでください。"
+  },
+  "DocumentTypes": {
+    "general": "一般", "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定", "reference": "参考資料", "plan": "計画", "spec": "仕様"
   },
   "LoginActions": {
     "emptyCredentials": "メールアドレスとパスワードを入力してください",
@@ -325,12 +332,15 @@
     "pinnedHeading": "ピン留め",
     "recentHeading": "最近見た文書",
     "newNoteAtRoot": "新規ノート",
+    "newKind": { "personal": "新しい保護メモ", "documents": "新しいドキュメント", "knowledge": "新しい知識ページ", "sources": "新しい原文" },
+    "newKindInFolder": "「{name}」フォルダーに{kind}",
     "movePage": "フォルダーへ移動",
     "newNoteInFolder": "「{name}」フォルダーに新規ノート",
     "quickSwitch": "クイック移動",
     "quickCapture": "クイックメモ",
     "section": {
-      "personal": "マイノート",
+      "personal": "保護メモ",
+      "documents": "ドキュメント",
       "sources": "原文・ソース",
       "knowledge": "整理された知識"
     },
@@ -353,9 +363,12 @@
     "emptyTitle": "まだウィキがありません",
     "emptyBody": "下から最初のウィキを作成すると、ドキュメントと関連リンクがここに蓄積されます。",
     "createWiki": "新しいウィキを作成",
+    "titleLabel": "ウィキのタイトル",
     "titlePlaceholder": "ウィキのタイトル",
     "kindPersonal": "personal（個人）",
     "kindProject": "project（プロジェクト）",
+    "kindPersonalDescription": "個人知識・参考資料・読み物を一か所に整理します。",
+    "kindProjectDescription": "作業記録・決定・問題解決・仕様・参考資料をプロジェクトごとに保存します。",
     "create": "作成"
   },
   "WikisSlugCategoryPathPage": {
@@ -514,15 +527,22 @@
     "reuseHint": "既存カテゴリの再利用を推奨します。保存時に表記が自動で正規化されます。",
     "kindHint": {
       "personal": "個人ナレッジウィキ — 概念やエンティティを自由に整理できます。",
-      "project": "プロジェクトウィキ — 議事録・決定事項・仕様はカテゴリでまとめると見つけやすくなります。",
+      "project": "プロジェクトウィキ — 作業記録・決定・問題解決・仕様を独立した文書として残します。",
       "channel": "公開チャンネル — 他の人が閲覧します。タイトルと分類を明確に。"
     },
     "titleLabel": "タイトル",
     "titlePlaceholder": "ページタイトル",
     "kindLabel": "種類",
+    "documentTypeLabel": "文書タイプ",
+    "documentAtLabel": "文書日時",
+    "documentHint": "文書はソース要約ではなく独立した作業記録です。検索とWikiリンクに参加します。",
+    "documentType": {
+      "general": "一般", "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定", "reference": "参考資料", "plan": "計画", "spec": "仕様"
+    },
     "modelAccessLabel": "外部AI処理を許可",
     "modelAccessHint": "チャット・モデル検索・埋め込みの根拠としてこのページを使用できます。",
     "personalModelAccessHint": "個人ノートは常に外部AI処理から除外されます。",
+    "documentModelAccessHint": "ドキュメントは検索とエージェントの作業記録に使うため、外部AI許可で保存されます。",
     "ingestHint": "原文を整理したソースノートは<link>ソース編入（Ingest）</link>で、AI回答の保存はチャットの「ウィキに保存」で作成されます。",
     "bodyLabel": "内容",
     "bodyLabelHint": "（任意 · 後から編集可能）",
@@ -538,10 +558,20 @@
     "emptyTitle": "ページはまだありません",
     "emptyBodyWrite": "下からソースを収集するか新しいページを作成すると、ドキュメントと概念のつながりがここに整理されます。",
     "emptyBodyRead": "ページが追加されると、読めるドキュメントと概念のつながりがここに表示されます。",
-    "recentActivity": "最近のアクティビティ"
+    "recentProjectDocuments": "最近のプロジェクト文書",
+    "systemActivity": "システム活動",
+    "documentType": { "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定" }
   },
   "WikisSlugPageSlugEditPage": {
     "backTo": "{title}に戻る",
+    "titleLabel": "ページタイトル",
+    "kindLabel": "ページ種類",
+    "bodyLabel": "本文",
+    "documentTypeLabel": "文書タイプ",
+    "documentAtLabel": "文書日時",
+    "documentType": {
+      "general": "一般", "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定", "reference": "参考資料", "plan": "計画", "spec": "仕様"
+    },
     "bodyPlaceholder": "Markdownで記述。ウィキリンクは [[ページスラッグ]] または [[スラッグ|表示名]]",
     "save": "保存",
     "cancel": "キャンセル"
@@ -618,6 +648,9 @@
     "switcherEmpty": "一致するページや原文がありません",
     "pageResult": "ページ",
     "sourceResult": "原文",
+    "protectedGroup": "保護メモ",
+    "knowledgeGroup": "整理された知識",
+    "documentsGroup": "ドキュメント",
     "switcherHint": "↑↓ 移動 · Enter 開く · Esc 閉じる",
     "captureTitle": "クイックメモ",
     "capturePlaceholder": "今思いついたことをメモ…",

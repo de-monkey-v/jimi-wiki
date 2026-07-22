@@ -1,5 +1,5 @@
 /**
- * 검증 환경 모델 고정: ChatGPT OAuth만 허용하고 gpt-5.6 → gpt-5.5 순서로 실제 호출한다.
+ * 검증 환경 모델 고정: ChatGPT OAuth만 허용하고 gpt-5.6-sol → gpt-5.5 순서로 실제 호출한다.
  * 성공한 첫 모델을 chat/gen/ingest 세 필드에 원자적으로 저장한다.
  */
 import "dotenv/config";

@@ -15,6 +15,7 @@ import { reindexEmbeddings } from "@/lib/search";
 import { archiveSourceWithPropagation } from "@/lib/model-policy";
 import { withModelPolicyWriteLock } from "@/lib/model-access";
 import type {
+  DocumentType,
   ModelAccess,
   PageKind,
   WikiKind,
@@ -31,6 +32,8 @@ type PageWrite = {
   kind: PageKind;
   body: string;
   category?: string | null;
+  documentType?: DocumentType | null;
+  documentAt?: Date | null;
   sourceId?: string | null;
   sourceRevisionIds?: string[];
   modelAccess?: ModelAccess;
@@ -127,6 +130,8 @@ export function listPages(wikiId: string) {
       slug: true,
       title: true,
       kind: true,
+      documentType: true,
+      documentAt: true,
       origin: true,
       modelAccess: true,
       currentVersion: true,
@@ -184,7 +189,7 @@ function buildCategoryTree(pages: { slug: string; title: string; kind: PageKind;
 }
 
 /**
- * 3섹션 목차: 내 노트(personal, 전용 폴더 트리 — AI 지식과 분리) · 원문/소스(note, 평평) · 정리된 지식(파생, category 폴더 트리).
+ * 4섹션 목차: 보호 메모 · 문서 · 원문/소스 · 정리된 지식.
  * opts.includePersonal=false면 personal 섹션 제외(공개 뷰). personal은 AI 코퍼스엔 없지만 사이드바 탐색엔 노출된다(제목/트리).
  */
 export async function getWikiToc(
@@ -202,15 +207,19 @@ export async function getWikiToc(
   const sourceEntries: TocEntry[] = pages
     .filter((p) => p.kind === "note")
     .map((p) => ({ type: "page", slug: p.slug, title: p.title, kind: p.kind, currentVersion: p.currentVersion }));
-  const derivedPages = pages.filter((p) => p.kind !== "note" && p.kind !== "personal"); // concept/entity/meta
+  const documentPages = pages.filter((p) => p.kind === "document");
+  const derivedPages = pages.filter((p) => !["note", "document", "personal"].includes(p.kind)); // concept/entity/meta
 
   const personalEntries = buildCategoryTree(personalPages);
+  const documentEntries = buildCategoryTree(documentPages);
   const knowledgeEntries = buildCategoryTree(derivedPages);
 
-  const sections: TocSection[] = [];
-  if (personalEntries.length) sections.push({ key: "personal", entries: personalEntries });
-  if (sourceEntries.length) sections.push({ key: "sources", entries: sourceEntries });
-  if (knowledgeEntries.length) sections.push({ key: "knowledge", entries: knowledgeEntries });
+  const sections: TocSection[] = [
+    ...(includePersonal ? [{ key: "personal" as const, entries: personalEntries }] : []),
+    { key: "documents", entries: documentEntries },
+    { key: "sources", entries: sourceEntries },
+    { key: "knowledge", entries: knowledgeEntries },
+  ];
 
   const flat: { slug: string; title: string }[] = [];
   const walk = (entries: TocEntry[]) => {
@@ -293,6 +302,8 @@ export async function createPage(
     kind: PageKind;
     body?: string;
     category?: string | null;
+    documentType?: DocumentType | null;
+    documentAt?: Date | null;
     sourceId?: string | null;
     sourceRevisionIds?: string[];
     slug?: string;
@@ -323,6 +334,8 @@ export async function createPage(
         body: input.body ?? "",
         sortOrder,
         category: input.category ?? null,
+        documentType: input.documentType ?? null,
+        documentAt: input.documentAt ?? null,
         sourceId: input.sourceId ?? null,
         modelAccess: input.modelAccess,
         sourceRevisionIds,
@@ -421,6 +434,8 @@ export async function updatePage(wikiId: string, slug: string, input: PageWrite)
         kind: input.kind,
         body: input.body,
         ...(input.category !== undefined ? { category: input.category } : {}),
+        ...(input.documentType !== undefined ? { documentType: input.documentType } : {}),
+        ...(input.documentAt !== undefined ? { documentAt: input.documentAt } : {}),
         ...(input.sourceId !== undefined ? { sourceId: input.sourceId } : {}),
         ...(input.modelAccess !== undefined ? { modelAccess: input.modelAccess } : {}),
       },
@@ -466,6 +481,8 @@ export async function upsertPage(
         body: input.body,
         sortOrder: await nextSortOrder(wikiId, null),
         category: input.category ?? null,
+        documentType: input.documentType ?? null,
+        documentAt: input.documentAt ?? null,
         sourceId: input.sourceId ?? null,
         modelAccess: input.modelAccess,
         sourceRevisionIds,
@@ -721,7 +738,7 @@ export async function replaceSourceRelations(
 ): Promise<number> {
   return withModelPolicyWriteLock(wikiId, async (tx) => {
     const source = await tx.source.findFirst({
-      where: { id: sourceId, wikiId, archivedAt: null, modelAccess: "external" },
+      where: { id: sourceId, wikiId, archivedAt: null, modelAccess: "external", curationState: "curated" },
       select: {
         id: true,
         currentVersion: true,
@@ -738,7 +755,7 @@ export async function replaceSourceRelations(
     const slugs = [...new Set(tuples.flatMap((tuple) => [tuple.fromSlug, tuple.toSlug]))];
     const pages = slugs.length
       ? await tx.page.findMany({
-        where: { wikiId, slug: { in: slugs }, archivedAt: null },
+        where: { wikiId, slug: { in: slugs }, archivedAt: null, kind: { in: ["concept", "entity"] } },
         select: { id: true, slug: true },
       })
       : [];
@@ -782,7 +799,7 @@ export async function getPageSources(
 }
 
 // ---------- P3: 그래프 ----------
-/** 위키 전체 링크 그래프. 노드=페이지(ontology 제외), 엣지=해소된 위키링크. 깨진 링크는 ghost 노드로. */
+/** 위키 전체 링크 그래프. 문서를 포함한 일반 위키링크를 시각화한다. typed ConceptRelation 그래프와는 별개다. */
 export async function getWikiGraph(wikiId: string): Promise<WikiGraph> {
   const [pages, links] = await Promise.all([
     prisma.page.findMany({

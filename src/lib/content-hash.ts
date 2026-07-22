@@ -27,6 +27,8 @@ export interface PageHashSnapshot {
   kind: string;
   frontmatter: unknown;
   category: string | null;
+  documentType?: string | null;
+  documentAt?: Date | string | null;
   parentId: string | null;
   sortOrder: number;
   sourceId: string | null;

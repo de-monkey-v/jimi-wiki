@@ -44,17 +44,17 @@ pnpm openai:login
 
 ```bash
 OPENAI_OAUTH_PERSONAL=1        # OAuth 경로 활성화
-CHAT_MODEL=gpt-5.5             # ChatGPT 구독에서 쓸 수 있는 모델 (GEN_MODEL / INGEST_MODEL 도 지정 가능)
+CHAT_MODEL=gpt-5.6-sol         # ChatGPT 구독에서 쓸 수 있는 모델 (GEN_MODEL / INGEST_MODEL 도 지정 가능)
 ```
 
 > - `OPENAI_BASE_URL` 이 설정돼 있으면 **그쪽(외부 프록시)이 우선**한다. OAuth 경로를 쓰려면 비워둔다.
-> - **모델 이름**은 네 ChatGPT 플랜이 노출하는 것을 써야 한다(예: `gpt-5.5`). `gpt-5.1`·`*-codex` 처럼
+> - **모델 이름**은 네 ChatGPT 플랜이 노출하는 것을 써야 한다(예: `gpt-5.6-sol`). `gpt-5.1`·`*-codex` 처럼
 >   플랜에 없는 id 는 codex 백엔드가 `model is not supported ...` 로 거부한다. 거부되면 다른 id 로 바꿔본다.
 
 ### 3. 검증 (실제 호출 테스트)
 
 ```bash
-pnpm openai:smoke              # 또는: pnpm openai:smoke gpt-5.5
+pnpm openai:smoke              # 또는: pnpm openai:smoke gpt-5.6-sol
 ```
 
 OAuth 경로로 GPT 에 한 문장 질의를 보내 응답·토큰 usage 를 출력한다. 성공하면 배선이 완료된 것이다.

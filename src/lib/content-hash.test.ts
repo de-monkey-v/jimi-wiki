@@ -32,3 +32,25 @@ test("Source hash는 추출 본문과 storageKey를 모두 포함한다", () => 
   assert.notEqual(sourceSnapshotHash(base), sourceSnapshotHash({ ...base, body: "수정" }));
   assert.notEqual(sourceSnapshotHash(base), sourceSnapshotHash({ ...base, storageKey: "wiki/blob" }));
 });
+
+test("document metadata 변경은 Page snapshot hash에 포함된다", () => {
+  const base = {
+    title: "결정 기록",
+    body: "본문",
+    kind: "document",
+    documentType: "decision",
+    documentAt: new Date("2026-07-21T00:00:00Z"),
+    frontmatter: null,
+    category: null,
+    parentId: null,
+    sortOrder: 0,
+    sourceId: null,
+    origin: "human",
+    modelAccess: "external",
+    archivedAt: null,
+    suppressedAt: null,
+    staleAt: null,
+  };
+  assert.notEqual(pageSnapshotHash(base), pageSnapshotHash({ ...base, documentType: "worklog" }));
+  assert.notEqual(pageSnapshotHash(base), pageSnapshotHash({ ...base, documentAt: new Date("2026-07-22T00:00:00Z") }));
+});

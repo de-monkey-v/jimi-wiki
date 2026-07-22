@@ -98,11 +98,13 @@
       "auth": "Every external call authenticates via the <code>{header}</code> header. The raw key is shown only once at issuance, so store it safely.",
       "li1": "Issue one on the <link>API keys</link> screen (editor or higher for write operations).",
       "li2": "You can <strong>scope</strong> a key to a specific wiki or set a <strong>max role (maxRole)</strong> and <strong>expiry</strong>. Effective role = min(membership role, maxRole).",
-      "li3": "Up to 20 active keys per account. Rate limit: 60/min and 1000/hour (if exceeded, <code>429</code> + Retry-After)."
+      "li3": "Up to 20 active keys per account. Rate limit: 120/min and 3000/hour (if exceeded, <code>429</code> + Retry-After)."
     },
     "section2": {
-      "intro": "Register the repo's <code>mcp/server.mjs</code> with your MCP client and the content API is exposed as tools. Claude Code example:",
-      "toolsLabel": "Tools exposed (11 total):"
+      "intro": "Register the repo's <code>mcp/server.mjs</code> to expose a wiki-kind-aware profile and content tools.",
+      "claudeLabel": "Claude Code — project-only --scope local",
+      "hermesLabel": "Hermes — key in ~/.hermes/.env, environment placeholder in YAML",
+      "toolsLabel": "Key tools exposed:"
     },
     "section3": {
       "p1": "The repo's <code>skills/wiki-ingest/</code> skill bundle is a workflow for external maintainers — covering not just ingesting sources but also classifying, organizing, automated linting, and querying. It isn't tied to any specific agent, so it <strong>runs as tools where MCP is supported and via REST otherwise, following the same procedure</strong>. It copies the <strong>same classification rules</strong> (ontology/categories) from the canonical source as the internal ingest agent and enforces byte-parity in CI, so classification stays consistent whether you add content via the web UI or the skill.",
@@ -118,11 +120,11 @@
       "fullRef": "The full reference (all endpoints, responses, and error codes) is in the repo at <code>docs/rest-api.md</code>."
     },
     "auth": {
-      "intro": "\"Auth boundary = cost boundary.\" Routes that heavily consume the internal AI (Gemini) are <strong>cookie-session only in the web UI</strong> and can't be called with an API key. On external paths, write directly with primitives.",
+      "intro": "\"Auth boundary = cost boundary.\" Generative curation is quota-limited, and protected notes stay hidden beyond the external-model boundary.",
       "card1Title": "Works with an API key (Bearer)",
-      "card1Body": "Read/write/delete pages, store/read sources, hybrid search, ontology lookup and category matching, automated linting, job status polling",
+      "card1Body": "Read/write pages and documents, preserve/curate ingest, store/read sources, search, reading-list promotion, and job polling",
       "card2Title": "Session only (no API key)",
-      "card2Body": "<code>POST /ingest</code> (internal-AI ingest), <code>/query</code>, <code>/reindex</code>, <code>{lint}</code> — web UI only"
+      "card2Body": "<code>/query</code>, <code>/reindex</code>, <code>{lint}</code>, and ingest file uploads are web-session only. JSON ingest accepts API keys"
     },
     "footer": "Reference files — Skill bundle: <code>skills/wiki-ingest/</code> (SKILL.md + references/) · MCP: <code>mcp/server.mjs</code> · REST: <code>docs/rest-api.md</code>"
   },
@@ -195,12 +197,17 @@
     "note": "Source note",
     "concept": "Concept",
     "entity": "Entity",
+    "document": "Document",
     "meta": "Meta",
     "conceptOption": "Concept — ideas, patterns, theories, documents",
     "entityOption": "Entity — people, organizations, tools, products",
-    "personal": "Personal note",
-    "personalOption": "Personal — private notes (excluded from AI)",
+    "documentOption": "Document — work logs, decisions, troubleshooting, plans",
+    "personal": "Protected note — excluded from external AI",
+    "personalOption": "Protected note — excluded from external AI",
     "personalWarning": "Personal notes are excluded from AI but not encrypted — don’t store real passwords."
+  },
+  "DocumentTypes": {
+    "general": "General", "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision", "reference": "Reference", "plan": "Plan", "spec": "Spec"
   },
   "LoginActions": {
     "emptyCredentials": "Enter your email and password",
@@ -325,12 +332,15 @@
     "pinnedHeading": "Pinned",
     "recentHeading": "Recent",
     "newNoteAtRoot": "New note",
+    "newKind": { "personal": "New protected note", "documents": "New document", "knowledge": "New knowledge page", "sources": "New source" },
+    "newKindInFolder": "{kind} in ‘{name}’",
     "movePage": "Move to folder",
     "newNoteInFolder": "New note in ‘{name}’",
     "quickSwitch": "Quick switch",
     "quickCapture": "Quick capture",
     "section": {
-      "personal": "My notes",
+      "personal": "Protected notes",
+      "documents": "Documents",
       "sources": "Sources",
       "knowledge": "Knowledge"
     },
@@ -353,9 +363,12 @@
     "emptyTitle": "No wikis yet",
     "emptyBody": "Create your first wiki below and your documents and their links will start collecting here.",
     "createWiki": "Create a new wiki",
+    "titleLabel": "Wiki title",
     "titlePlaceholder": "Wiki title",
     "kindPersonal": "personal",
     "kindProject": "project",
+    "kindPersonalDescription": "Keep personal knowledge, references, and reading material together.",
+    "kindProjectDescription": "Preserve work logs, decisions, troubleshooting, specs, and references per project.",
     "create": "Create"
   },
   "WikisSlugCategoryPathPage": {
@@ -514,15 +527,22 @@
     "reuseHint": "Reusing an existing category is recommended. Formatting is normalized automatically on save.",
     "kindHint": {
       "personal": "Personal knowledge wiki — organize concepts and entities freely.",
-      "project": "Project wiki — group meeting notes, decisions, and specs into categories to find them faster.",
+      "project": "Project wiki — record work logs, decisions, troubleshooting, and specs as standalone documents.",
       "channel": "Public channel — others will browse it. Keep titles and categories clear."
     },
     "titleLabel": "Title",
     "titlePlaceholder": "Page title",
     "kindLabel": "Kind",
+    "documentTypeLabel": "Document type",
+    "documentAtLabel": "Document time",
+    "documentHint": "Documents are standalone work records, not source summaries. They participate in search and wikilinks.",
+    "documentType": {
+      "general": "General", "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision", "reference": "Reference", "plan": "Plan", "spec": "Spec"
+    },
     "modelAccessLabel": "Allow external AI processing",
     "modelAccessHint": "Allows this page to be used as evidence in chat, model search, and embeddings.",
     "personalModelAccessHint": "Personal notes are always excluded from external AI processing.",
+    "documentModelAccessHint": "Documents allow external AI access for search and agent work records.",
     "ingestHint": "Source notes distilled from original material are created via <link>Ingest</link>; saved AI answers are created with ‘Save to wiki’ in chat.",
     "bodyLabel": "Content",
     "bodyLabelHint": "(optional · editable later)",
@@ -538,10 +558,20 @@
     "emptyTitle": "No pages yet",
     "emptyBodyWrite": "Collect sources below or create a new page, and your documents and concept links will come together here.",
     "emptyBodyRead": "Once pages are added, readable documents and concept links will show up here.",
-    "recentActivity": "Recent activity"
+    "recentProjectDocuments": "Recent project documents",
+    "systemActivity": "System activity",
+    "documentType": { "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision" }
   },
   "WikisSlugPageSlugEditPage": {
     "backTo": "Back to {title}",
+    "titleLabel": "Page title",
+    "kindLabel": "Page kind",
+    "bodyLabel": "Body",
+    "documentTypeLabel": "Document type",
+    "documentAtLabel": "Document time",
+    "documentType": {
+      "general": "General", "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision", "reference": "Reference", "plan": "Plan", "spec": "Spec"
+    },
     "bodyPlaceholder": "Write in Markdown. Wikilinks: [[page-slug]] or [[slug|display name]]",
     "save": "Save",
     "cancel": "Cancel"
@@ -618,6 +648,9 @@
     "switcherEmpty": "No matching pages or sources",
     "pageResult": "Page",
     "sourceResult": "Source",
+    "protectedGroup": "Protected notes",
+    "knowledgeGroup": "Curated knowledge",
+    "documentsGroup": "Documents",
     "switcherHint": "↑↓ move · Enter open · Esc close",
     "captureTitle": "Quick capture",
     "capturePlaceholder": "Jot something down…",

@@ -11,7 +11,7 @@
 - 채팅 UI: `src/app/wikis/[slug]/chat/WikiChat.tsx` (순수 텍스트, stop/스크롤/에러/출처카드 전무).
 - 출처 링크 대상 라우트 확정: `src/app/wikis/[slug]/[pageSlug]/page.tsx` → URL `/wikis/<slug>/<pageSlug>`.
 - `SearchHit` (src/lib/search.ts L145-154): `{ id, refType, refId, heading, snippet, score, pageSlug?, pageTitle? }`. `refType==="source"`면 `pageSlug`/`pageTitle` undefined.
-- 저장 서버액션 `saveAnswerAction(slug, question, answer)` (editor 이상) — 유지.
+- 채팅 답변을 영구 보존할 때는 별도 answer 페이지가 아니라 `document/general`로 기록한다.
 
 ---
 
@@ -175,7 +175,7 @@ execute: async ({ writer }) => {
 
 ## 5. 클라이언트 — `src/app/wikis/[slug]/chat/WikiChat.tsx`
 
-기존 시그니처 `WikiChat({ slug, canWrite })` 유지. `SaveButton`/`saveAnswerAction`/뷰어·역할 게이트(`canWrite`) 유지.
+기존 시그니처 `WikiChat({ slug, canWrite })`와 뷰어·역할 게이트(`canWrite`)를 유지한다. 저장 UI를 제공한다면 문서 기록 경로(`document/general`)를 사용한다.
 
 ### 5.1 신규 헬퍼 컴포넌트
 
@@ -252,7 +252,7 @@ const busy = status === "submitted" || status === "streaming";
 - **(d) 자동 스크롤** — 컨테이너에 `ref`, `useEffect(()=>{ endRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages])` (스트리밍 중 messages 갱신마다 하단 정렬). 리스트 끝에 `<div ref={endRef} />`.
 - **(e) 에러 표시+재시도** — `status==="error" && error`일 때 `role="alert"` 배너: `오류: {error.message}` + `<button onClick={()=>regenerate()}>재시도</button>` + `<button onClick={()=>clearError()}>닫기</button>`.
 - **(f) Enter 전송** — textarea `onKeyDown`: `if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); submit(); }`. Shift+Enter는 개행.
-- **(g) 위키에 저장** — `SaveButton` 그대로. `!busy && text.trim()`일 때만 렌더(현행 유지). `canWrite` 게이트 유지.
+- **(g) 위키에 저장** — 저장 UI가 있다면 `document/general` 문서로 기록한다. `!busy && text.trim()`일 때만 렌더하고 `canWrite` 게이트를 유지한다.
 
 ### 5.4 제출 로직
 
@@ -308,4 +308,4 @@ function submit() {
 | `src/app/globals.css` | 수정 — `@source "../../node_modules/streamdown/dist/index.js";` 1줄 |
 | `package.json` | `streamdown@2.5.0` 추가 (npm i) |
 
-건드리지 않음: `saveAnswerAction`(actions.ts), 검색(search.ts), 세션/게이트, Quartz/빌드 설정.
+건드리지 않음: 검색(search.ts), 세션/게이트, Quartz/빌드 설정. 답변 저장은 별도 answer kind를 만들지 않고 문서 기록 계약을 따른다.

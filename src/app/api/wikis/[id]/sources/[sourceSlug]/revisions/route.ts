@@ -15,7 +15,7 @@ export async function GET(
   if (!gate.ok) return gate.res;
   const source = await prisma.source.findUnique({
     where: { wikiId_slug: { wikiId: gate.wiki.id, slug: sourceSlug } },
-    select: { id: true, slug: true, title: true, currentVersion: true, archivedAt: true },
+    select: { id: true, slug: true, title: true, currentVersion: true, archivedAt: true, curationState: true },
   });
   if (!source) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const revisions = await prisma.sourceRevision.findMany({

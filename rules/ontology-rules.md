@@ -1,5 +1,5 @@
 ---
-version: 2
+version: 3
 ---
 
 # 위키 온톨로지 · 분류 규칙 (정본)
@@ -8,7 +8,7 @@ version: 2
 
 ## 1. 두 축: kind(무엇) vs category(어디)
 
-- **kind** = 페이지의 의미 유형. 닫힌 집합: `note`(소스 노트, 원문에 충실) · `concept`(개념) · `entity`(인물·조직·도구·제품) · `answer`(질문 답변) · `meta`(위키 자체 문서). 새 kind를 만들지 않는다.
+- **kind** = 페이지의 의미 유형. 닫힌 집합: `note`(소스 노트, 원문에 충실) · `concept`(개념) · `entity`(인물·조직·도구·제품) · `document`(독립 작업 기록·결정·문제 해결·계획·참고 자료) · `meta`(위키 자체 문서) · `personal`(외부 AI 제외 보호 메모). 새 kind를 만들지 않는다.
 - **category** = 자유형 폴더 경로(예: `ai/architectures`, `product/decisions`). 조직·탐색용. 필요하면 새로 만들 수 있으나 **재사용을 우선**한다(§3).
 
 kind는 "이게 무엇인가", category는 "어디에 꽂히는가"다. 직교한다.
@@ -16,8 +16,14 @@ kind는 "이게 무엇인가", category는 "어디에 꽂히는가"다. 직교�
 ## 2. 소스 노트 순수성
 
 - `note` 페이지 **본문**은 원문에 충실해야 한다 — 핵심 주장·데이터·인용만. **합성·비교·상호참조를 note 본문에 쓰지 않는다.** note에는 category를 붙이지 않는다(원문은 조직 축의 대상이 아니라 provenance로 연결된다).
-- 상호참조·비교·종합·모순 표시는 **파생 페이지**(`concept`/`entity`/`answer`)에서 한다. 파생 페이지에만 `## 관련 문서` 섹션과 `[[slug]]` 링크, 그리고 category를 붙인다.
+- 상호참조·비교·종합·모순 표시는 **파생 지식 페이지**(`concept`/`entity`)에서 한다. 파생 지식 페이지에 `## 관련 문서` 섹션과 `[[slug]]` 링크, 그리고 category를 붙인다.
 - "이 원문에서 무엇이 파생됐는가"는 시스템이 backlink로 자동 표시하므로 note 본문에 나열하지 않는다.
+
+## 2-1. 독립 문서와 보호 메모
+
+- `document`는 사람이거나 에이전트가 작성하는 독립 문서다. 원문 요약용으로 쓰지 않고 `sourceSlug`/`sourceId` provenance를 연결하지 않는다. 저장할 AI 답변도 `document/general`로 남긴다.
+- `document`는 검색과 위키링크에는 참여하지만 concept/entity 관계 그래프, 고아 개념 lint, KnowledgeBuild 자동 재작성·stale·suppress 대상에는 들어가지 않는다.
+- `personal`은 웹 UI에서만 만드는 `internalOnly` 보호 메모다. 외부 AI/MCP 목록·읽기·검색·그래프·run output에 노출하지 않는다. 암호화 저장소는 아니므로 비밀번호·API key·token은 저장하지 않는다.
 
 ## 3. 재사용 우선(reuse-before-create)
 

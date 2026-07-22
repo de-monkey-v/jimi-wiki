@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiOrSessionWikiGate, checkGenerativeQuotaResponse, hasBearerAuth, sessionOnlyGate } from "@/lib/api-gate";
-import { createIngestRun, createFileIngestRun, type IngestInput } from "@/lib/ingest";
+import { createIngestRun, createFileIngestRun, parseIngestMode, type IngestInput } from "@/lib/ingest";
 import type { ModelAccess } from "@/generated/prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -42,8 +42,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     const form = await req.formData();
     const modelAccess = parseModelAccess(form.get("modelAccess"));
+    const mode = parseIngestMode(form.has("mode") ? form.get("mode") : undefined);
     if (!modelAccess) return NextResponse.json({ error: "invalid_model_access" }, { status: 400 });
-    if (modelAccess === "external") {
+    if (!mode) return NextResponse.json({ error: "invalid_ingest_mode" }, { status: 400 });
+    if (modelAccess === "external" && mode === "curate") {
       const costRes = await checkGenerativeCost(req, id, gate.user.id);
       if (costRes) return costRes;
     }
@@ -55,7 +57,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const buffer = Buffer.from(await file.arrayBuffer());
         const run = await createFileIngestRun(
           gate.wiki.id,
-          { buffer, filename: file.name, mimeType: file.type || undefined, modelAccess },
+          { buffer, filename: file.name, mimeType: file.type || undefined, modelAccess, mode },
           gate.user.id,
         );
         runIds.push(run.id);
@@ -76,15 +78,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "url_or_text_required" }, { status: 400 });
   }
   const modelAccess = parseModelAccess(body.modelAccess);
+  const mode = parseIngestMode(body.mode);
   if (!modelAccess) return NextResponse.json({ error: "invalid_model_access" }, { status: 400 });
-  if (modelAccess === "external") {
+  if (!mode) return NextResponse.json({ error: "invalid_ingest_mode" }, { status: 400 });
+  if (modelAccess === "external" && mode === "curate") {
     const costRes = await checkGenerativeCost(req, id, gate.user.id);
     if (costRes) return costRes;
   }
   // 필드 화이트리스트: storageKey/filename 등 파일 참조 필드는 클라에서 받지 않는다(워커가 임의 blob 읽는 것 차단).
   // notifyChatId 도 마찬가지 — 봇 경로에서만 서버가 채운다(임의 chat 으로 알림 전송 차단).
   // 파일 업로드는 위 multipart 분기(createFileIngestRun 게이트)로만 허용한다.
-  const input: IngestInput = { url: body.url, text: body.text, title: body.title, modelAccess };
+  const input: IngestInput = { url: body.url, text: body.text, title: body.title, modelAccess, mode };
 
   const run = await createIngestRun(gate.wiki.id, input, gate.user.id);
 

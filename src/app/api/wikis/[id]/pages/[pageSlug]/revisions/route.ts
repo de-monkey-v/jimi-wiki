@@ -33,6 +33,8 @@ export async function GET(
       kind: true,
       frontmatter: true,
       category: true,
+      documentType: true,
+      documentAt: true,
       parentId: true,
       sortOrder: true,
       sourceId: true,

@@ -38,6 +38,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         url: source.url,
         body: source.body,
         modelAccess: source.modelAccess,
+        curationState: source.curationState,
         currentVersion: source.currentVersion,
         archivedAt: source.archivedAt,
         ingestedAt: source.ingestedAt,
@@ -65,7 +66,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const source = await prisma.source.findUnique({
     where: { wikiId_slug: { wikiId: gate.wiki.id, slug: sourceSlug } },
-    select: { id: true, modelAccess: true },
+    select: { id: true, modelAccess: true, curationState: true },
   });
   if (!source || (requestsExternalModelScope(req) && source.modelAccess !== "external")) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });

@@ -21,7 +21,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const links = await prisma.savedLink.findMany({
     where: { wikiId: gate.wiki.id, userId: gate.user.id },
     orderBy: { createdAt: "desc" },
-    select: { id: true, url: true, title: true, description: true, promotedAt: true, createdAt: true },
+    select: {
+      id: true,
+      url: true,
+      title: true,
+      description: true,
+      promotedAt: true,
+      promotedRunId: true,
+      promotedRun: { select: { status: true, error: true } },
+      createdAt: true,
+    },
   });
   return NextResponse.json({ links }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -50,7 +59,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!BARE_URL.test(url)) return NextResponse.json({ error: "invalid_url" }, { status: 400 });
   const note = typeof body?.note === "string" && body.note.trim() ? body.note.trim() : null;
 
-  const select = { id: true, url: true, title: true, description: true, promotedAt: true, createdAt: true } as const;
+  const select = {
+    id: true,
+    url: true,
+    title: true,
+    description: true,
+    promotedAt: true,
+    promotedRunId: true,
+    promotedRun: { select: { status: true, error: true } },
+    createdAt: true,
+  } as const;
   const existing = await prisma.savedLink.findFirst({
     where: { wikiId: gate.wiki.id, userId: gate.user.id, url },
     select,

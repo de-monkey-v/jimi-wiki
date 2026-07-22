@@ -16,6 +16,7 @@ import type { ModelAccess, PageKind } from "@/generated/prisma/client";
 import { stageExternalPageProposal } from "@/lib/builds";
 import { ONTOLOGY_PAGE_SLUG } from "@/lib/wiki-routes";
 import { sanitizeCategorySlug } from "@/lib/ontology";
+import { parseDocumentDate, parseDocumentType } from "@/lib/documents";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           slug: true,
           title: true,
           kind: true,
+          documentType: true,
+          documentAt: true,
           category: true,
           currentVersion: true,
           updatedAt: true,
@@ -69,6 +72,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     sourceSlug?: string;
     modelAccess?: ModelAccess;
     expectedVersion?: unknown;
+    documentType?: unknown;
+    documentAt?: unknown;
   };
   try {
     body = await req.json();
@@ -99,6 +104,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           id: true,
           slug: true,
           origin: true,
+          kind: true,
+          documentType: true,
+          documentAt: true,
           modelAccess: true,
           archivedAt: true,
           currentVersion: true,
@@ -123,6 +131,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (occupied && !expectedVersion) {
     return NextResponse.json({ error: "expected_version_required" }, { status: 400 });
   }
+  if (occupied && expectedVersion !== occupied.currentVersion) {
+    return NextResponse.json(
+      { error: "version_conflict", expectedVersion, actualVersion: occupied.currentVersion },
+      { status: 409 },
+    );
+  }
+  if (kind === "document" && !occupied) {
+    return NextResponse.json({ error: "use_documents_api" }, { status: 409 });
+  }
+  if (occupied && (kind === "document") !== (occupied.kind === "document")) {
+    return NextResponse.json({ error: "document_kind_conversion_forbidden" }, { status: 409 });
+  }
+  const documentType = kind === "document"
+    ? parseDocumentType(body.documentType, occupied?.documentType ?? undefined)
+    : null;
+  const documentAt = kind === "document"
+    ? parseDocumentDate(body.documentAt, occupied?.documentAt ?? undefined)
+    : null;
+  if (kind === "document" && (!documentType || !documentAt)) {
+    return NextResponse.json({ error: "document_metadata_required" }, { status: 400 });
+  }
   // upsert update에서 생략은 현재 정책 유지, create에서만 확정 기본값 external을 적용한다.
   const modelAccess = body.modelAccess ?? occupied?.modelAccess ?? "external";
   if (modelAccess !== "external" && modelAccess !== "internalOnly") {
@@ -145,6 +174,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // 외부(AI 무관) ingest의 provenance: note는 sourceId 연결, 파생 페이지는 기여(PageContribution) 기록
   let source: Awaited<ReturnType<typeof getSource>> = null;
   if (body.sourceSlug) {
+    if (kind === "document") {
+      return NextResponse.json({ error: "document_source_provenance_forbidden" }, { status: 400 });
+    }
     source = await getSource(gate.wiki.id, String(body.sourceSlug));
     if (
       !source ||
@@ -196,11 +228,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           parentId: occupied.parentId,
           sortOrder: occupied.sortOrder,
           modelAccess: occupied.modelAccess,
+          documentType: occupied.documentType,
+          documentAt: occupied.documentAt,
         },
         title: String(body.title),
         body: body.body,
-        kind: kind as "note" | "concept" | "entity",
+        kind,
         category: category === undefined ? occupied.category : category,
+        documentType,
+        documentAt,
         sourceRevisionIds,
         ...(source && sourceRevision ? {
           buildInput: {
@@ -229,6 +265,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       kind,
       body: body.body,
       category,
+      documentType,
+      documentAt,
       modelAccess,
       userId: gate.user.id,
       actor: requestsExternalModelScope(req) ? "agent" : "human",
@@ -243,7 +281,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const page = await prisma.page.findUniqueOrThrow({
       where: { wikiId_slug: { wikiId: gate.wiki.id, slug: res.slug } },
-      select: { origin: true, modelAccess: true, currentVersion: true, archivedAt: true },
+      select: {
+        origin: true,
+        modelAccess: true,
+        currentVersion: true,
+        archivedAt: true,
+        documentType: true,
+        documentAt: true,
+      },
     });
     return NextResponse.json({ ...res, ...page, embedded }, { status: res.created ? 201 : 200 });
   } catch (error) {

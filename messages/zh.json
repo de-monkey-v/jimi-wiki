@@ -98,11 +98,13 @@
       "auth": "所有外部调用都通过 <code>{header}</code> 请求头进行认证。原始密钥仅在签发时显示一次，请妥善保管。",
       "li1": "在 <link>API 密钥</link> 页面签发（写操作需 editor 及以上）。",
       "li2": "可将密钥<strong>限定</strong>到特定 wiki，或设置<strong>上限角色（maxRole）</strong>和<strong>有效期</strong>。有效角色 = min(成员角色, maxRole)。",
-      "li3": "每个账户最多 20 个有效密钥。速率限制：每分钟 60 次／每小时 1000 次（超出时返回 <code>429</code> + Retry-After）。"
+      "li3": "每个账户最多 20 个有效密钥。速率限制：每分钟 120 次／每小时 3000 次（超出时返回 <code>429</code> + Retry-After）。"
     },
     "section2": {
-      "intro": "将仓库中的 <code>mcp/server.mjs</code> 注册到 MCP 客户端后，内容 API 即以工具形式暴露。Claude Code 示例：",
-      "toolsLabel": "暴露的工具（共 11 种）："
+      "intro": "注册仓库中的 <code>mcp/server.mjs</code> 后，会暴露与 Wiki kind 对应的配置和内容工具。",
+      "claudeLabel": "Claude Code — 仅项目生效的 --scope local",
+      "hermesLabel": "Hermes — 密钥放在 ~/.hermes/.env，YAML 使用环境变量占位符",
+      "toolsLabel": "主要工具："
     },
     "section3": {
       "p1": "仓库中的 <code>skills/wiki-ingest/</code> Skill 包是面向外部维护者的工作流 — 不仅涵盖原文纳入（ingest），还包括分类整理（organize）、机器检查（lint）和查询（query）。它不绑定特定智能体，因此<strong>在支持 MCP 时以工具运行，否则用 REST 执行相同流程</strong>。它从正本复制与内部 ingest 智能体<strong>相同的分类规则</strong>（本体／类别），并在 CI 中强制 byte-parity，因此无论通过 Web UI 还是 Skill 录入，wiki 的分类都保持一致。",
@@ -118,11 +120,11 @@
       "fullRef": "完整参考（所有端点、响应、错误码）见仓库中的 <code>docs/rest-api.md</code>。"
     },
     "auth": {
-      "intro": "“认证边界 = 成本边界”。大量消耗内部 AI（Gemini）的路由<strong>仅限 Web UI 的 Cookie 会话</strong>，无法用 API 密钥调用。在外部路径上，请用 primitive 直接撰写。",
+      "intro": "“认证边界 = 成本边界”。生成式整理受配额限制，受保护笔记不会越过外部模型边界。",
       "card1Title": "可用 API 密钥（Bearer）完成",
-      "card1Body": "页面查询／创建／删除，原文保存／查询，混合检索，本体查询与类别匹配，机器检查 lint，作业状态轮询",
+      "card1Body": "页面和文档查询／写入、preserve/curate ingest、原文、搜索、稍后阅读提升与任务轮询",
       "card2Title": "仅限会话（不可用 API 密钥）",
-      "card2Body": "<code>POST /ingest</code>（内部 AI ingest）、<code>/query</code>、<code>/reindex</code>、<code>{lint}</code> — 仅 Web UI"
+      "card2Body": "<code>/query</code>、<code>/reindex</code>、<code>{lint}</code>及 ingest 文件上传仅限 Web UI；JSON ingest 支持 API 密钥"
     },
     "footer": "参考文件 — Skill 包：<code>skills/wiki-ingest/</code>（SKILL.md + references/）· MCP：<code>mcp/server.mjs</code> · REST：<code>docs/rest-api.md</code>"
   },
@@ -195,12 +197,17 @@
     "note": "来源笔记",
     "concept": "概念",
     "entity": "实体",
+    "document": "文档",
     "meta": "元数据",
     "conceptOption": "概念 — 想法、模式、理论、文档",
     "entityOption": "实体 — 人物、组织、工具、产品",
-    "personal": "个人笔记",
-    "personalOption": "个人笔记 — 仅自己可见（不参与 AI）",
+    "documentOption": "文档 — 工作记录、决策、问题解决、计划",
+    "personal": "受保护笔记 — 不参与外部 AI",
+    "personalOption": "受保护笔记 — 不参与外部 AI",
     "personalWarning": "个人笔记不参与 AI，但不会加密 — 请勿保存真实密码。"
+  },
+  "DocumentTypes": {
+    "general": "通用", "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策", "reference": "参考资料", "plan": "计划", "spec": "规格"
   },
   "LoginActions": {
     "emptyCredentials": "请输入邮箱和密码",
@@ -325,12 +332,15 @@
     "pinnedHeading": "已固定",
     "recentHeading": "最近查看",
     "newNoteAtRoot": "新建笔记",
+    "newKind": { "personal": "新建受保护笔记", "documents": "新建文档", "knowledge": "新建知识页面", "sources": "新建原文" },
+    "newKindInFolder": "在“{name}”文件夹中{kind}",
     "movePage": "移动到文件夹",
     "newNoteInFolder": "在“{name}”文件夹中新建笔记",
     "quickSwitch": "快速跳转",
     "quickCapture": "快速记录",
     "section": {
-      "personal": "我的笔记",
+      "personal": "受保护笔记",
+      "documents": "文档",
       "sources": "原文 / 来源",
       "knowledge": "已整理知识"
     },
@@ -353,9 +363,12 @@
     "emptyTitle": "还没有维基",
     "emptyBody": "在下方创建你的第一个维基，你的文档及其链接关系将在此处汇聚。",
     "createWiki": "创建新维基",
+    "titleLabel": "维基标题",
     "titlePlaceholder": "维基标题",
     "kindPersonal": "personal（个人）",
     "kindProject": "project（项目）",
+    "kindPersonalDescription": "集中整理个人知识、参考资料与阅读内容。",
+    "kindProjectDescription": "按项目保存工作记录、决策、问题解决、规格与参考资料。",
     "create": "创建"
   },
   "WikisSlugCategoryPathPage": {
@@ -514,15 +527,22 @@
     "reuseHint": "建议复用已有分类。保存时会自动规范化格式。",
     "kindHint": {
       "personal": "个人知识维基 — 自由整理概念与实体。",
-      "project": "项目维基 — 将会议记录、决策和规格归入分类，更易查找。",
+      "project": "项目维基 — 将工作记录、决策、问题解决和规格保存为独立文档。",
       "channel": "公开频道 — 他人会浏览。请让标题和分类清晰明确。"
     },
     "titleLabel": "标题",
     "titlePlaceholder": "页面标题",
     "kindLabel": "类型",
+    "documentTypeLabel": "文档类型",
+    "documentAtLabel": "文档时间",
+    "documentHint": "文档是独立工作记录，而不是来源摘要；它会参与搜索和维基链接。",
+    "documentType": {
+      "general": "通用", "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策", "reference": "参考资料", "plan": "计划", "spec": "规格"
+    },
     "modelAccessLabel": "允许外部 AI 处理",
     "modelAccessHint": "允许在聊天、模型搜索和向量嵌入中将此页面作为依据。",
     "personalModelAccessHint": "个人笔记始终排除在外部 AI 处理之外。",
+    "documentModelAccessHint": "文档用于搜索和代理工作记录，因此会以允许外部 AI 的方式保存。",
     "ingestHint": "整理原文而成的来源笔记通过<link>来源编入（Ingest）</link>创建，AI 回答的保存则通过聊天中的“保存到维基”完成。",
     "bodyLabel": "内容",
     "bodyLabelHint": "（可选 · 之后可编辑）",
@@ -538,10 +558,20 @@
     "emptyTitle": "还没有页面",
     "emptyBodyWrite": "在下方收集来源或新建页面，文档与概念的关联将在此汇总。",
     "emptyBodyRead": "添加页面后，可阅读的文档与概念关联将显示在此处。",
-    "recentActivity": "最近活动"
+    "recentProjectDocuments": "最近的项目文档",
+    "systemActivity": "系统活动",
+    "documentType": { "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策" }
   },
   "WikisSlugPageSlugEditPage": {
     "backTo": "返回{title}",
+    "titleLabel": "页面标题",
+    "kindLabel": "页面类型",
+    "bodyLabel": "正文",
+    "documentTypeLabel": "文档类型",
+    "documentAtLabel": "文档时间",
+    "documentType": {
+      "general": "通用", "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策", "reference": "参考资料", "plan": "计划", "spec": "规格"
+    },
     "bodyPlaceholder": "使用 Markdown 编写。维基链接使用 [[页面-slug]] 或 [[slug|显示名]]",
     "save": "保存",
     "cancel": "取消"
@@ -618,6 +648,9 @@
     "switcherEmpty": "没有匹配的页面或原文",
     "pageResult": "页面",
     "sourceResult": "原文",
+    "protectedGroup": "受保护的笔记",
+    "knowledgeGroup": "整理后的知识",
+    "documentsGroup": "文档",
     "switcherHint": "↑↓ 移动 · Enter 打开 · Esc 关闭",
     "captureTitle": "快速记录",
     "capturePlaceholder": "随手记点什么…",

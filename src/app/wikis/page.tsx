@@ -85,11 +85,24 @@ export default async function WikisPage() {
 
       <form action={createWikiAction} className="border rounded-lg p-4 space-y-3">
         <h2 className="font-semibold">{t("createWiki")}</h2>
-        <input name="title" required placeholder={t("titlePlaceholder")} className="w-full border rounded px-3 py-2" />
-        <select name="kind" className="border rounded px-3 py-2">
-          <option value="personal">{t("kindPersonal")}</option>
-          <option value="project">{t("kindProject")}</option>
-        </select>
+        <label htmlFor="new-wiki-title" className="block text-sm font-medium text-stone-700">{t("titleLabel")}</label>
+        <input id="new-wiki-title" name="title" required placeholder={t("titlePlaceholder")} className="w-full border rounded px-3 py-2" />
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="cursor-pointer rounded-lg border border-stone-200 p-3 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50/50">
+            <span className="flex items-center gap-2 font-medium text-stone-800">
+              <input type="radio" name="kind" value="personal" defaultChecked className="text-indigo-600" />
+              {t("kindPersonal")}
+            </span>
+            <span className="mt-1 block pl-6 text-xs leading-5 text-stone-500">{t("kindPersonalDescription")}</span>
+          </label>
+          <label className="cursor-pointer rounded-lg border border-stone-200 p-3 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50/50">
+            <span className="flex items-center gap-2 font-medium text-stone-800">
+              <input type="radio" name="kind" value="project" className="text-indigo-600" />
+              {t("kindProject")}
+            </span>
+            <span className="mt-1 block pl-6 text-xs leading-5 text-stone-500">{t("kindProjectDescription")}</span>
+          </label>
+        </div>
         <button type="submit" className="block bg-stone-900 text-white rounded px-4 py-2">
           {t("create")}
         </button>

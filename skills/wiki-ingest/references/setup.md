@@ -19,7 +19,7 @@
 
 **Claude Code:**
 ```sh
-claude mcp add jimi-wiki \
+claude mcp add --scope local jimi-wiki \
   -e JIMI_WIKI_URL=<앱주소> \
   -e JIMI_WIKI_API_KEY=<발급받은-키> \
   -e JIMI_WIKI_SLUG=<대상-위키-slug> \
@@ -43,7 +43,7 @@ claude mcp add jimi-wiki \
 }
 ```
 
-**Hermes Agent** — `~/.hermes/config.yaml`의 `mcp_servers` 아래에 등록한다. 서버별 `tools.include`로 노출 도구를 좁힐 수 있다:
+**Hermes Agent** — 개인 위키 전용 키를 `wiki scope + maxRole=editor + 90일 만료`로 발급하고 `~/.hermes/.env`에 `JIMI_WIKI_PERSONAL_KEY=...`로 보관한다. `config.yaml`에는 원문 키 대신 placeholder를 쓴다. `JIMI_MCP_ALLOW_DESTRUCTIVE`는 설정하지 않는다:
 ```yaml
 mcp_servers:
   jimi-wiki:
@@ -51,17 +51,17 @@ mcp_servers:
     args: ["<repo>/mcp/server.mjs"]
     env:
       JIMI_WIKI_URL: "<앱주소>"
-      JIMI_WIKI_API_KEY: "<발급받은-키>"
+      JIMI_WIKI_API_KEY: "${JIMI_WIKI_PERSONAL_KEY}"
       JIMI_WIKI_SLUG: "<대상-위키-slug>"
     tools:
       # 비서 프로필 — 찾고·넣고·담아두는 일상 사용
-      include: [search_wiki, read_page, list_pages, ingest_url, ingest_text, get_run_status, save_link, list_saved_links]
+      include: [search_wiki, search_documents, read_page, list_pages, list_sources, read_source, create_source, write_page, get_ontology, match_category, preserve_url, preserve_text, curate_url, curate_text, curate_source, get_run_status, record_document, record_worklog, append_document, save_link, list_saved_links, promote_saved_link]
 ```
 
-- **비서 프로필**(위 `include`): 위임형 편입과 검색 위주. 에이전트가 문서 구조를 직접 건드리지 않는다.
-- **유지보수 프로필**: `include`를 지우면 전체 도구(`create_source`, `write_page`, `list_sources`, `read_source`, `get_ontology`, `match_category`, `run_lint`)가 노출된다 — 스킬 절차대로 직접 큐레이션할 때.
+- **개인 위키 프로필**(위 `include`): 검색·원문 보존·직접/위임 정리·문서 기록·읽을거리 관리를 허용한다. 보호 메모(`personal/internalOnly`)는 MCP에서 보이지 않는다.
+- **유지보수 프로필**: `include`를 지우면 `run_lint`를 포함한 전체 비파괴 도구가 추가로 노출된다.
 - `delete_page`는 어느 프로필에서도 기본 미노출이다. 필요하면 `env`에 `JIMI_MCP_ALLOW_DESTRUCTIVE: "1"`을 추가한다(자율 에이전트에는 권장하지 않음).
-- 자율 에이전트에 주는 키는 **위키 스코프 + `maxRole=editor` + 만료일**을 걸어 발급하라. 사고 시 그 키만 폐기하면 된다.
+- Claude Code 프로젝트 위키는 프로젝트 전용 키와 slug로 위 명령을 `--scope local` 등록한다. 그 키로 개인/다른 프로젝트 위키를 요청하면 `404`가 정상이다.
 
 ### 2-b) REST로 연결 (MCP 없는 하네스)
 

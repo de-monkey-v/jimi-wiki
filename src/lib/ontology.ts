@@ -8,7 +8,7 @@ import {
 import { ONTOLOGY_PAGE_SLUG, isReservedWikiPageSlug } from "@/lib/wiki-routes";
 
 // ---------- 정본 규칙과 동기화되는 상수 (rules/ontology-rules.md 의 version:과 일치) ----------
-export const ONTOLOGY_RULES_VERSION = 2;
+export const ONTOLOGY_RULES_VERSION = 3;
 export const PROMOTION_MIN_ITEMS = 3; // 새 category 승격 최소 항목 수
 export const CATEGORY_MAX_DEPTH = 4;
 export const RESERVED_RELATIONS = ["uses", "is-a", "part-of", "contradicts", "example-of", "developed-by"] as const;

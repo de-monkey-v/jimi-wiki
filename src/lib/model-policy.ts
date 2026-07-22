@@ -561,6 +561,7 @@ export async function changeSourceModelAccess(input: ChangeSourceModelAccessInpu
         id: true,
         modelAccess: true,
         archivedAt: true,
+        curationState: true,
       },
     });
     if (!current) throw new ContentNotFoundError("source");
@@ -597,7 +598,7 @@ export async function changeSourceModelAccess(input: ChangeSourceModelAccessInpu
           })
         : { pages: [], revisions: [], categories: [] };
     const cancelled =
-      plan.effective === "internalOnly"
+      plan.effective === "internalOnly" && current.curationState === "curated"
         ? await cancelPendingModelWork(tx, input.wikiId, SOURCE_DOWNGRADE_REASON, now)
         : { cancelledBuilds: 0, cancelledRuns: 0 };
 
@@ -622,7 +623,8 @@ export async function changeSourceModelAccess(input: ChangeSourceModelAccessInpu
   const shouldQueueExternalWork =
     result.plan.isRelaxation &&
     result.saved.projection.archivedAt == null &&
-    result.saved.projection.modelAccess === "external";
+    result.saved.projection.modelAccess === "external" &&
+    result.saved.projection.curationState === "curated";
   const pageIds = result.propagated.pages.map((page) => page.id);
   let projectionRefreshPending = await refreshDerivedState({
     wikiId: input.wikiId,
@@ -671,7 +673,7 @@ export async function archiveSourceWithPropagation(input: ArchiveSourceWithPropa
   const result = await withModelPolicyWriteLock(input.wikiId, async (tx) => {
     const current = await tx.source.findFirst({
       where: { id: input.sourceId, wikiId: input.wikiId },
-      select: { id: true },
+      select: { id: true, curationState: true },
     });
     if (!current) throw new ContentNotFoundError("source");
     const saved = await archiveSourceSnapshotTx(tx, {
@@ -696,7 +698,9 @@ export async function archiveSourceWithPropagation(input: ArchiveSourceWithPropa
       userId: input.userId,
       reason: SOURCE_ARCHIVE_REASON,
     });
-    const cancelled = await cancelPendingModelWork(tx, input.wikiId, SOURCE_ARCHIVE_REASON, now);
+    const cancelled = current.curationState === "curated"
+      ? await cancelPendingModelWork(tx, input.wikiId, SOURCE_ARCHIVE_REASON, now)
+      : { cancelledBuilds: 0, cancelledRuns: 0 };
     await syncSearchChunkPolicy(tx, input.wikiId, [
       {
         refType: "source",
@@ -712,7 +716,7 @@ export async function archiveSourceWithPropagation(input: ArchiveSourceWithPropa
       })),
     ]);
     await removeUnbackedCategoryChunks(tx, input.wikiId, propagated.categories);
-    return { saved, propagated, cancelled };
+    return { saved, propagated, cancelled, wasCurated: current.curationState === "curated" };
   });
 
   const pageIds = result.propagated.pages.map((page) => page.id);
@@ -721,17 +725,19 @@ export async function archiveSourceWithPropagation(input: ArchiveSourceWithPropa
     pageIds,
     sourceIds: [result.saved.projection.id],
   });
-  const queued = await queueIncrementalKnowledgeBuild(
-    input.wikiId,
-    input.userId ?? null,
-  ).catch(() => null);
-  if (!queued) projectionRefreshPending = true;
+  const queued = result.wasCurated
+    ? await queueIncrementalKnowledgeBuild(
+        input.wikiId,
+        input.userId ?? null,
+      ).catch(() => null)
+    : null;
+  if (result.wasCurated && !queued) projectionRefreshPending = true;
   return {
     source: result.saved.projection,
     revision: result.saved.revision,
     pageRevisions: result.propagated.revisions,
     signals: {
-      queueIncrementalBuild: true,
+      queueIncrementalBuild: result.wasCurated,
       queueEmbeddingReindex: false,
       reindexPageIds: pageIds,
       reindexSourceIds: [result.saved.projection.id],

@@ -25,6 +25,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         title: true,
         url: true,
         modelAccess: true,
+        curationState: true,
         currentVersion: true,
         archivedAt: true,
         ingestedAt: true,
@@ -80,6 +81,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     {
       slug: source.slug,
       modelAccess: source.modelAccess,
+      curationState: source.curationState,
       currentVersion: source.currentVersion,
       archivedAt: null,
     },

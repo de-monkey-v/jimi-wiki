@@ -38,7 +38,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       runId: run.id,
       status: run.status,
       output: showOutput ? run.output : undefined,
-      error: run.status === "error" ? run.error : undefined,
+      error: run.status === "error" && !hideOutput ? run.error : undefined,
       ...(published ? { published: true } : {}),
     },
     { headers: { "Cache-Control": "no-store" } },

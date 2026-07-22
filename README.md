@@ -136,14 +136,14 @@ Health check:
 3. **MCP**: `mcp/server.mjs`를 MCP 클라이언트(Claude Code 등)에 등록하면 콘텐츠 API가 도구로 노출된다. 세부 워크플로우는 [`skills/wiki-ingest/SKILL.md`](skills/wiki-ingest/SKILL.md).
 
    ```bash
-   claude mcp add jimi-wiki \
+   claude mcp add --scope local jimi-wiki \
      -e JIMI_WIKI_URL=http://localhost:3007 \
      -e JIMI_WIKI_API_KEY=<키> \
      -e JIMI_WIKI_SLUG=<위키슬러그> \
      -- node <repo>/mcp/server.mjs
    ```
 
-> 내부 AI를 소비하는 라우트(`/query`, `/reindex`, `/lint?deep`)는 **세션 전용**이다. 예외로 `POST /ingest`는 외부 에이전트도 쓸 수 있게 API 키에 열려 있으며(파일 업로드는 세션 전용), 대신 세션과 동일한 일일 토큰 쿼터가 걸린다. API 키로 직접 큐레이션하려면 `create_source` + `write_page` primitive를 쓴다. 자세한 정책은 `docs/rest-api.md` 참조.
+> 내부 AI를 소비하는 라우트(`/query`, `/reindex`, `/lint?deep`)는 **세션 전용**이다. `POST /ingest`는 API 키에도 열려 있으며 `mode=preserve`는 원문만 보존하고 생성형 쿼터를 쓰지 않는다. `mode=curate`(기본값)는 기존 지식 합성 파이프라인과 일일 토큰 쿼터를 사용한다. 독립 작업 기록은 `/documents`, 읽을거리 승격은 `/saved-links/{id}/promote`를 쓴다. 자세한 정책은 `docs/rest-api.md` 참조.
 
 ## 기여
 

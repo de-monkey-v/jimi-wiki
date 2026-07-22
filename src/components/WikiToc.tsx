@@ -56,6 +56,7 @@ function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: No
           <button
             type="button"
             title={ctx.moveLabel}
+            aria-label={ctx.moveLabel}
             onClick={(e) => {
               e.stopPropagation();
               quick.openMove(entry.slug, parentPath || null, entry.currentVersion);
@@ -94,6 +95,7 @@ function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "f
           <button
             type="button"
             title={ctx.newInFolderLabel(entry.name)}
+            aria-label={ctx.newInFolderLabel(entry.name)}
             onClick={() => actions.openNewPage({ category: entry.path, kind: ctx.newKind })}
             className="block shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
@@ -121,6 +123,7 @@ function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "f
 // 섹션별 "+" 새 노트 kind. 원문/소스(sources)는 ingest 전용이라 "+" 없음.
 const SECTION_NEW_KIND: Record<TocSection["key"], string | undefined> = {
   personal: "personal",
+  documents: "document",
   knowledge: "concept",
   sources: undefined,
 };
@@ -250,7 +253,7 @@ export function WikiToc({
                 newKind,
                 movable: canWrite && s.key === "personal",
                 moveLabel: t("movePage"),
-                newInFolderLabel: (name) => t("newNoteInFolder", { name }),
+                newInFolderLabel: (name) => t("newKindInFolder", { kind: t(`newKind.${s.key}`), name }),
               };
               return (
                 <div key={s.key} className="group/section">
@@ -259,7 +262,8 @@ export function WikiToc({
                     {newKind && actions && (
                       <button
                         type="button"
-                        title={t("newNoteAtRoot")}
+                        title={t(`newKind.${s.key}`)}
+                        aria-label={t(`newKind.${s.key}`)}
                         onClick={() => actions.openNewPage({ kind: newKind })}
                         className="block shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                       >

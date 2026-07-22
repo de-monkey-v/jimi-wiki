@@ -7,7 +7,9 @@ import { withModelPolicyWriteLock } from "@/lib/model-access";
 
 /** Page revision projection에서 링크·로컬 FTS projection을 재생성한다. */
 export async function refreshPageDerivedState(wikiId: string, pageId: string): Promise<void> {
-  const page = await prisma.$transaction(async (tx) => {
+  // PageLink의 unresolved-target 해소와 from-page 재생성을 서로 다른 페이지에서 동시에 하면
+  // 동일 PageLink 행을 반대 순서로 잠가 deadlock이 날 수 있다. wiki 단위 write lock으로 projection을 직렬화한다.
+  const page = await withModelPolicyWriteLock(wikiId, async (tx) => {
     await tx.$executeRawUnsafe(
       'SELECT 1 FROM "Page" WHERE id=$1 AND "wikiId"=$2 FOR UPDATE',
       pageId,
@@ -41,7 +43,7 @@ export async function refreshPageDerivedState(wikiId: string, pageId: string): P
       : [];
     const idBySlug = new Map(resolved.map((target) => [target.slug, target.id]));
     await tx.pageContribution.deleteMany({ where: { pageId: current.id } });
-    if (current.kind !== "note" && contributionSourceIds.length) {
+    if ((current.kind === "concept" || current.kind === "entity") && contributionSourceIds.length) {
       await tx.pageContribution.createMany({
         data: contributionSourceIds.map((sourceId) => ({ wikiId, pageId: current.id, sourceId })),
         skipDuplicates: true,
@@ -63,7 +65,7 @@ export async function refreshPageDerivedState(wikiId: string, pageId: string): P
       data: { toPageId: current.id },
     });
     return current;
-  }, { maxWait: 15_000, timeout: 120_000 });
+  });
   if (!page || page.archivedAt) return;
   await reindexPage(wikiId, page);
 }
@@ -81,7 +83,7 @@ export async function refreshSourceDerivedState(wikiId: string, sourceId: string
 export async function rebuildPageContributions(wikiId: string): Promise<void> {
   await withModelPolicyWriteLock(wikiId, async (tx) => {
     const pages = await tx.page.findMany({
-      where: { wikiId, archivedAt: null, kind: { not: "note" } },
+      where: { wikiId, archivedAt: null, kind: { in: ["concept", "entity"] } },
       select: {
         id: true,
         currentVersion: true,

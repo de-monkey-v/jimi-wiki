@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiWikiGate } from "@/lib/api-gate";
-import { expandViaGraph, modelSearch, requestedGraphDepth, RESULT_N } from "@/lib/search";
+import { expandViaGraph, modelSearch, parseSearchScope, requestedGraphDepth, RESULT_N } from "@/lib/search";
 import { EXTERNAL_MODEL_SCOPE, withExternalModelDispatchLock } from "@/lib/model-access";
 
 export const dynamic = "force-dynamic";
@@ -17,16 +17,36 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
-  if (!q) return NextResponse.json({ hits: [] }, { headers: { "Cache-Control": "no-store" } });
+  const scope = parseSearchScope(url.searchParams.get("scope"));
+  if (!scope) return NextResponse.json({ error: "invalid_search_scope" }, { status: 400 });
+  if (!q) {
+    const empty = scope === "all"
+      ? { groups: { knowledge: { hits: [] }, documents: { hits: [] } } }
+      : { hits: [] };
+    return NextResponse.json(empty, { headers: { "Cache-Control": "no-store" } });
+  }
 
   const kRaw = parseInt(url.searchParams.get("k") ?? "", 10);
   const k = Number.isFinite(kRaw) ? Math.min(Math.max(kRaw, 1), 50) : RESULT_N;
 
   // 이 REST endpoint는 MCP/외부 agent primitive다. local UI FTS와 달리 항상 external-only.
   const depth = requestedGraphDepth({ graph: url.searchParams.get("graph"), depth: url.searchParams.get("depth") });
+  if (depth > 0 && scope !== "knowledge") {
+    return NextResponse.json({ error: "graph_requires_knowledge_scope" }, { status: 400 });
+  }
 
   return withExternalModelDispatchLock(gate.wiki.id, async () => {
-    const hits = await modelSearch({ ...EXTERNAL_MODEL_SCOPE, wikiId: gate.wiki.id, queryText: q, k });
+    if (scope === "all") {
+      const [knowledge, documents] = await Promise.all([
+        modelSearch({ ...EXTERNAL_MODEL_SCOPE, wikiId: gate.wiki.id, queryText: q, k, scope: "knowledge" }),
+        modelSearch({ ...EXTERNAL_MODEL_SCOPE, wikiId: gate.wiki.id, queryText: q, k, scope: "documents" }),
+      ]);
+      return NextResponse.json(
+        { groups: { knowledge: { hits: knowledge }, documents: { hits: documents } } },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    const hits = await modelSearch({ ...EXTERNAL_MODEL_SCOPE, wikiId: gate.wiki.id, queryText: q, k, scope });
     if (depth <= 0) return NextResponse.json({ hits }, { headers: { "Cache-Control": "no-store" } });
     // expandViaGraph 는 순수 SQL(임베딩 호출 없음)이고 내부에서 external-only 로 재격리하며, 실패 시 [] 를 돌려준다.
     const seedPageIds = hits.filter((h) => h.refType === "page").map((h) => h.refId);

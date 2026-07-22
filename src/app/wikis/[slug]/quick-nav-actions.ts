@@ -14,6 +14,7 @@ export type QuickNavSearchItem = {
   kind: string;
   heading: string | null;
   snippet: string | null;
+  group: "protected" | "knowledge" | "documents" | null;
 };
 
 const RESULT_LIMIT = 40;
@@ -44,12 +45,23 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
       kind: page.kind,
       heading: null,
       snippet: null,
+      group: null,
     }));
   }
 
-  const hits = await localFtsSearch(wiki.id, query, RESULT_LIMIT);
-  const pageIds = hits.filter((hit) => hit.refType === "page").map((hit) => hit.refId);
-  const sourceIds = hits.filter((hit) => hit.refType === "source").map((hit) => hit.refId);
+  const perGroupLimit = Math.floor(RESULT_LIMIT / 3);
+  const [protectedHits, knowledgeHits, documentHits] = await Promise.all([
+    localFtsSearch(wiki.id, query, perGroupLimit, "protected"),
+    localFtsSearch(wiki.id, query, perGroupLimit, "knowledge"),
+    localFtsSearch(wiki.id, query, perGroupLimit, "documents"),
+  ]);
+  const hits = [
+    ...protectedHits.map((hit) => ({ hit, group: "protected" as const })),
+    ...knowledgeHits.map((hit) => ({ hit, group: "knowledge" as const })),
+    ...documentHits.map((hit) => ({ hit, group: "documents" as const })),
+  ];
+  const pageIds = hits.filter(({ hit }) => hit.refType === "page").map(({ hit }) => hit.refId);
+  const sourceIds = hits.filter(({ hit }) => hit.refType === "source").map(({ hit }) => hit.refId);
   const [pages, sources] = await Promise.all([
     pageIds.length
       ? prisma.page.findMany({
@@ -67,7 +79,7 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
   const pageById = new Map(pages.map((page) => [page.id, page]));
   const sourceById = new Map(sources.map((source) => [source.id, source]));
 
-  return hits.flatMap((hit): QuickNavSearchItem[] => {
+  return hits.flatMap(({ hit, group }): QuickNavSearchItem[] => {
     if (hit.refType === "page") {
       const page = pageById.get(hit.refId);
       if (!page || page.slug === ONTOLOGY_SLUG) return [];
@@ -80,6 +92,7 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
           kind: page.kind,
           heading: hit.heading || null,
           snippet: hit.snippet || null,
+          group,
         },
       ];
     }
@@ -95,6 +108,7 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
           kind: "source",
           heading: hit.heading || null,
           snippet: hit.snippet || null,
+          group,
         },
       ];
     }

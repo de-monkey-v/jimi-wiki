@@ -13,6 +13,7 @@ import {
   transitionPageOrigin,
 } from "@/lib/content-policy";
 import type {
+  DocumentType,
   ModelAccess,
   Page,
   PageKind,
@@ -20,6 +21,7 @@ import type {
   PageRevision,
   RevisionActor,
   Source,
+  SourceCurationState,
   SourceRevision,
 } from "@/generated/prisma/client";
 import type { Prisma } from "@/generated/prisma/client";
@@ -101,6 +103,8 @@ interface PageState {
   kind: PageKind;
   frontmatter: Prisma.InputJsonValue;
   category: string | null;
+  documentType: DocumentType | null;
+  documentAt: Date | null;
   parentId: string | null;
   sortOrder: number;
   sourceId: string | null;
@@ -119,6 +123,8 @@ export interface CreatePageSnapshotInput {
   kind: PageKind;
   frontmatter?: Prisma.InputJsonValue;
   category?: string | null;
+  documentType?: DocumentType | null;
+  documentAt?: Date | null;
   parentId?: string | null;
   sortOrder?: number;
   sourceId?: string | null;
@@ -137,6 +143,8 @@ export interface PageSnapshotChanges {
   kind?: PageKind;
   frontmatter?: Prisma.InputJsonValue;
   category?: string | null;
+  documentType?: DocumentType | null;
+  documentAt?: Date | null;
   parentId?: string | null;
   sortOrder?: number;
   sourceId?: string | null;
@@ -245,6 +253,21 @@ function primarySourceId(
   return null;
 }
 
+function assertDocumentPageState(state: Pick<PageState, "kind" | "documentType" | "documentAt" | "sourceId">, sourceRevisionIds: string[]): void {
+  if (state.kind === "document") {
+    if (!state.documentType || !state.documentAt) {
+      throw new ContentProvenanceError("document pages require documentType and documentAt");
+    }
+    if (state.sourceId || sourceRevisionIds.length > 0) {
+      throw new ContentProvenanceError("document pages cannot attach Source provenance");
+    }
+    return;
+  }
+  if (state.documentType || state.documentAt) {
+    throw new ContentProvenanceError("document metadata is only valid for document pages");
+  }
+}
+
 function revisionData(state: PageState, pageId: string, version: number, context: RevisionContext) {
   return {
     pageId,
@@ -254,6 +277,8 @@ function revisionData(state: PageState, pageId: string, version: number, context
     kind: state.kind,
     frontmatter: state.frontmatter,
     category: state.category,
+    documentType: state.documentType,
+    documentAt: state.documentAt,
     parentId: state.parentId,
     sortOrder: state.sortOrder,
     sourceId: state.sourceId,
@@ -334,6 +359,8 @@ export async function createPageSnapshotTx(
     kind,
     frontmatter: input.frontmatter ?? {},
     category: input.category ?? null,
+    documentType: input.documentType ?? null,
+    documentAt: input.documentAt ?? null,
     parentId: input.parentId ?? null,
     sortOrder: input.sortOrder ?? 0,
     sourceId: primarySourceId(kind, input.sourceId, sourceRevisions),
@@ -343,6 +370,7 @@ export async function createPageSnapshotTx(
     suppressedAt: input.suppressedAt ?? null,
     staleAt: input.staleAt ?? null,
   };
+  assertDocumentPageState(state, sourceRevisionIds);
   assertActivePageSourceEligibility(state.archivedAt, sourceRevisions);
 
   const projection = await tx.page.create({
@@ -399,6 +427,9 @@ export async function updatePageSnapshotTx(
   const sourceRevisionIds = unique(input.sourceRevisionIds ?? inheritedSources.revisionIds);
   const sourceRevisions = await resolveSourceRevisions(tx, input.wikiId, sourceRevisionIds);
   const kind = input.changes.kind ?? current.kind;
+  if (kind !== current.kind && (kind === "document" || current.kind === "document")) {
+    throw new ContentProvenanceError("document pages cannot be converted to or from another page kind");
+  }
   const parentId = own(input.changes, "parentId") ? (input.changes.parentId ?? null) : current.parentId;
   await assertParent(tx, input.wikiId, parentId);
   if (parentId === current.id) throw new ContentProvenanceError("a page cannot be its own parent");
@@ -429,6 +460,8 @@ export async function updatePageSnapshotTx(
     kind,
     frontmatter: input.changes.frontmatter ?? (current.frontmatter as Prisma.InputJsonValue),
     category: own(input.changes, "category") ? (input.changes.category ?? null) : current.category,
+    documentType: own(input.changes, "documentType") ? (input.changes.documentType ?? null) : current.documentType,
+    documentAt: own(input.changes, "documentAt") ? (input.changes.documentAt ?? null) : current.documentAt,
     parentId,
     sortOrder: input.changes.sortOrder ?? current.sortOrder,
     sourceId,
@@ -444,6 +477,7 @@ export async function updatePageSnapshotTx(
     suppressedAt: own(input.changes, "suppressedAt") ? (input.changes.suppressedAt ?? null) : current.suppressedAt,
     staleAt: own(input.changes, "staleAt") ? (input.changes.staleAt ?? null) : current.staleAt,
   };
+  assertDocumentPageState(state, sourceRevisionIds);
   const version = current.currentVersion + 1;
   const policyVersion = current.policyVersion + (state.modelAccess === current.modelAccess ? 0 : 1);
   const changed = await tx.page.updateMany({
@@ -517,6 +551,8 @@ export async function restorePageRevisionTx(tx: ContentTransaction, input: Resto
       kind: true,
       frontmatter: true,
       category: true,
+      documentType: true,
+      documentAt: true,
       parentId: true,
       sortOrder: true,
       sourceId: true,
@@ -550,6 +586,8 @@ export async function restorePageRevisionTx(tx: ContentTransaction, input: Resto
       kind: selected.kind,
       frontmatter: selected.frontmatter as Prisma.InputJsonValue,
       category: selected.category,
+      documentType: selected.documentType,
+      documentAt: selected.documentAt,
       parentId: selected.parentId,
       sortOrder: selected.sortOrder,
       sourceId: selected.sourceId,
@@ -633,6 +671,7 @@ export interface CreateSourceSnapshotInput {
   body?: string | null;
   storageKey?: string | null;
   modelAccess?: ModelAccess;
+  curationState?: SourceCurationState;
   archivedAt?: Date | null;
   context: RevisionContext;
 }
@@ -682,7 +721,14 @@ export async function createSourceSnapshotTx(
     archivedAt: input.archivedAt ?? null,
   };
   const projection = await tx.source.create({
-    data: { wikiId: input.wikiId, slug: input.slug, ...state, currentVersion: 1, policyVersion: 1 },
+    data: {
+      wikiId: input.wikiId,
+      slug: input.slug,
+      ...state,
+      curationState: input.curationState ?? "curated",
+      currentVersion: 1,
+      policyVersion: 1,
+    },
   });
   const revision = await tx.sourceRevision.create({ data: sourceRevisionData(state, projection.id, 1, input.context) });
   return { source: projection, projection, revision };
@@ -690,6 +736,44 @@ export async function createSourceSnapshotTx(
 
 export function createSourceSnapshot(input: CreateSourceSnapshotInput) {
   return prisma.$transaction((tx) => createSourceSnapshotTx(tx, input));
+}
+
+export interface TransitionSourceCurationInput {
+  wikiId: string;
+  sourceId: string;
+  expectedVersion: number;
+  to: SourceCurationState;
+}
+
+/**
+ * Curation is a one-way lifecycle flag, not a mutable SourceRevision payload.
+ * Call this inside the same transaction that publishes curated knowledge so a
+ * failed publish leaves the immutable Source in `preserved` state.
+ */
+export async function transitionSourceCurationStateTx(
+  tx: ContentTransaction,
+  input: TransitionSourceCurationInput,
+): Promise<Source> {
+  const current = await tx.source.findFirst({ where: { id: input.sourceId, wikiId: input.wikiId } });
+  if (!current) throw new ContentNotFoundError("source");
+  if (current.currentVersion !== input.expectedVersion) {
+    throw new ContentVersionConflictError(input.expectedVersion, current.currentVersion);
+  }
+  if (current.curationState === input.to) return current;
+  if (current.curationState !== "preserved" || input.to !== "curated") {
+    throw new ContentProvenanceError(`invalid Source curation transition: ${current.curationState} -> ${input.to}`);
+  }
+  const changed = await tx.source.updateMany({
+    where: {
+      id: current.id,
+      wikiId: input.wikiId,
+      currentVersion: input.expectedVersion,
+      curationState: "preserved",
+    },
+    data: { curationState: "curated" },
+  });
+  if (changed.count !== 1) throw new ContentVersionConflictError(input.expectedVersion);
+  return tx.source.findUniqueOrThrow({ where: { id: current.id } });
 }
 
 export async function updateSourceSnapshotTx(

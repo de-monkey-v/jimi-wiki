@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getBacklinks, getOutlinks, existingSlugSet, getPrevNext, getPageProvenance, getPageSources, getPageNeighborhood, isPagePinned } from "@/lib/wiki";
 import { PinButton } from "./PinButton";
@@ -30,6 +30,9 @@ export default async function PageView({
 }) {
   const t = await getTranslations("WikisSlugPageSlugPage");
   const ts = await getTranslations("KnowledgeStatus");
+  const td = await getTranslations("DocumentTypes");
+  const locale = await getLocale();
+  const documentDate = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" });
   const { slug: rawSlug, pageSlug: rawPageSlug } = await params;
   const { lang } = await searchParams;
   const slug = decodeURIComponent(rawSlug);
@@ -138,6 +141,16 @@ export default async function PageView({
   };
   const headerMeta = (
     <div className="flex flex-wrap items-center gap-2">
+      {page.kind === "document" && page.documentType && page.documentAt && (
+        <>
+          <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+            {td(page.documentType)}
+          </span>
+          <time dateTime={page.documentAt.toISOString()} className="font-mono text-xs tabular-nums text-stone-500">
+            {documentDate.format(page.documentAt)}
+          </time>
+        </>
+      )}
       <KnowledgeBadges origin={page.origin} modelAccess={page.modelAccess} labels={knowledgeLabels} />
       <span className="font-mono text-xs tabular-nums text-stone-400">{ts("version", { version: page.currentVersion })}</span>
       <Link

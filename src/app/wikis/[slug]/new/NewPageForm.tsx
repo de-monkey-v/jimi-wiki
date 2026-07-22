@@ -9,12 +9,14 @@ import { MANUAL_KIND_OPTIONS } from "@/lib/kinds";
 type WikiKind = "personal" | "project" | "channel";
 export type CategoryOption = { slug: string; label: string; itemCount: number };
 
-// 위키 종류별 빠른 카테고리. 프로젝트 위키의 문서 니즈는 kind가 아니라 category로 흡수한다.
+// 위키 종류별 빠른 카테고리. 문서의 의미 유형은 DocumentType으로 따로 보존한다.
 const KIND_QUICK_CATS: Record<WikiKind, string[]> = {
   personal: [],
-  project: ["decisions", "meetings", "specs"],
+  project: [],
   channel: [],
 };
+
+const DOCUMENT_TYPES = ["general", "worklog", "troubleshooting", "decision", "reference", "plan", "spec"] as const;
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -164,7 +166,7 @@ function CategoryPicker({ categories, quickCats, initialValue }: { categories: C
   );
 }
 
-/** 새 페이지 수동 생성 폼(클라이언트). kind는 concept/entity로 제한, 카테고리는 자동완성, 위키 종류별 안내. */
+/** 새 페이지 수동 생성 폼. 문서는 독립적인 작업 기록이며 원문 provenance를 갖지 않는다. */
 export function NewPageForm({
   wikiSlug,
   wikiKind,
@@ -181,9 +183,11 @@ export function NewPageForm({
   const t = useTranslations("WikisSlugNewNewPageForm");
   const tk = useTranslations("Kinds");
   const quickCats = KIND_QUICK_CATS[wikiKind];
-  const [kind, setKind] = useState(presetKind ?? "concept"); // controlled — personal 선택 시 보안 경고 노출
+  const [kind, setKind] = useState(presetKind ?? (wikiKind === "project" ? "document" : "concept"));
+  const [documentAt, setDocumentAt] = useState("");
   const [allowExternalAi, setAllowExternalAi] = useState(true);
-  const externalAllowed = kind !== "personal" && allowExternalAi;
+  const externalAllowed = kind === "document" || (kind !== "personal" && allowExternalAi);
+  const accessLocked = kind === "personal" || kind === "document";
   return (
     <form action={createPageAction} className="space-y-4">
       <input type="hidden" name="wikiSlug" value={wikiSlug} />
@@ -243,22 +247,47 @@ export function NewPageForm({
         </p>
       </div>
 
+      {kind === "document" && (
+        <div className="grid gap-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="new-document-type" className="mb-1 block text-sm font-medium text-stone-600">
+              {t("documentTypeLabel")}
+            </label>
+            <select id="new-document-type" name="documentType" defaultValue={wikiKind === "project" ? "worklog" : "general"} className="w-full rounded border bg-white px-3 py-2">
+              {DOCUMENT_TYPES.map((type) => <option key={type} value={type}>{t(`documentType.${type}`)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="new-document-at" className="mb-1 block text-sm font-medium text-stone-600">
+              {t("documentAtLabel")}
+            </label>
+            <input type="hidden" name="documentAt" value={documentAt ? new Date(documentAt).toISOString() : ""} />
+            <input id="new-document-at" type="datetime-local" value={documentAt} onChange={(event) => setDocumentAt(event.target.value)} className="w-full rounded border bg-white px-3 py-2" />
+          </div>
+          <p className="text-xs leading-5 text-stone-500 sm:col-span-2">{t("documentHint")}</p>
+        </div>
+      )}
+
       <CategoryPicker categories={categories} quickCats={quickCats} initialValue={presetCategory} />
 
       <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5">
-        <label htmlFor="new-model-access" className={`flex items-start gap-2.5 ${kind === "personal" ? "cursor-not-allowed" : "cursor-pointer"}`}>
+        <label htmlFor="new-model-access" className={`flex items-start gap-2.5 ${accessLocked ? "cursor-not-allowed" : "cursor-pointer"}`}>
           <input
             id="new-model-access"
             type="checkbox"
             checked={externalAllowed}
-            disabled={kind === "personal"}
+            disabled={accessLocked}
             onChange={(event) => setAllowExternalAi(event.target.checked)}
             className="mt-0.5 h-4 w-4 rounded border-stone-300 text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50"
           />
           <span className="min-w-0">
             <span className="block text-sm font-medium text-stone-700">{t("modelAccessLabel")}</span>
             <span className="mt-0.5 block text-xs leading-5 text-stone-500">
-              {kind === "personal" ? t("personalModelAccessHint") : t("modelAccessHint")}
+              {kind === "personal"
+                ? t("personalModelAccessHint")
+                : kind === "document"
+                  ? t("documentModelAccessHint")
+                  : t("modelAccessHint")}
             </span>
           </span>
         </label>

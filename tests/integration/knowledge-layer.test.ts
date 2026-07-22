@@ -233,7 +233,7 @@ test("revision, policy, staging publish, local/model search, restore and purge i
     await projections.refreshPageDerivedState(wiki.id, attachedInternalPage.page.id);
     const seededAttachedVector = await prisma.$executeRawUnsafe(
       `UPDATE "SearchChunk"
-       SET embedding = array_fill(0.01::real, ARRAY[768])::vector
+       SET embedding = array_fill(0.01::real, ARRAY[1024])::vector
        WHERE "wikiId"=$1 AND "refType"='page' AND "refId"=$2 AND "modelAccess"='external'`,
       wiki.id,
       attachedInternalPage.page.id,
@@ -931,7 +931,7 @@ test("revision, policy, staging publish, local/model search, restore and purge i
     await projections.refreshPageDerivedState(wiki.id, downgradePage.page.id);
     const seededVectors = await prisma.$executeRawUnsafe(
       `UPDATE "SearchChunk"
-       SET embedding = array_fill(0.01::real, ARRAY[768])::vector
+       SET embedding = array_fill(0.01::real, ARRAY[1024])::vector
        WHERE "wikiId"=$1 AND "modelAccess"='external'
          AND (("refType"='page' AND "refId"=$2) OR ("refType"='source' AND "refId"=$3))`,
       wiki.id,

@@ -67,17 +67,25 @@ type ConfigRow = {
   openaiTransport: string | null;
 };
 
+/** OAuth 자동 기본 모델은 사용자가 실제 OAuth transport를 선택한 경우에만 주입한다. */
+export function shouldUseOAuthModelDefault(transport: OpenAITransport, oauthStoreAvailable: boolean): boolean {
+  return transport === "oauth" && oauthStoreAvailable;
+}
+
 function resolve(row: ConfigRow | null): ResolvedConfig {
   const env = envDefaults();
+  const transport = row?.openaiTransport && isTransport(row.openaiTransport) ? row.openaiTransport : env.openaiTransport;
   // "OAuth를 쓸 수 있으면 GPT가 기본": OAuth 로그인 토큰이 있고 프로브가 호출 가능한 GPT를
-  // 확정했으면 그 모델을 모델 기본값으로 쓴다. 우선순위 = 명시 AppConfig 값 > 프로브 확정 GPT > env.
+  // 확정했으며 OAuth transport를 선택했으면 그 모델을 기본값으로 쓴다.
+  // 우선순위 = 명시 AppConfig 값 > OAuth transport의 프로브 확정 GPT > env.
+  // apikey/proxy에서는 과거 OAuth store가 남아 있어도 해당 transport의 모델 선택을 덮지 않는다.
   // 프로브 전(null)이면 env로 자연 폴백하므로 미검증 모델을 강제하지 않는다.
-  const gptDefault = storeExists() ? oauthDefaultGptModel : null;
+  const gptDefault = shouldUseOAuthModelDefault(transport, storeExists()) ? oauthDefaultGptModel : null;
   return {
     chatModel: row?.chatModel ?? gptDefault ?? env.chatModel,
     genModel: row?.genModel ?? gptDefault ?? env.genModel,
     ingestModel: row?.ingestModel ?? gptDefault ?? env.ingestModel,
-    openaiTransport: row?.openaiTransport && isTransport(row.openaiTransport) ? row.openaiTransport : env.openaiTransport,
+    openaiTransport: transport,
   };
 }
 
@@ -91,7 +99,7 @@ export function refreshConfig(): Promise<void> {
       loadedAt = Date.now();
       // OAuth 토큰이 있으면 백그라운드로 기본 GPT 모델을 프로브·확정한다(자체 TTL로 매번은 안 함).
       // 동적 import로 순환 의존(model-resolver→openai→model-config)을 끊는다. 결과는 다음 resolve에 반영.
-      if (storeExists()) {
+      if (shouldUseOAuthModelDefault(cache.openaiTransport, storeExists())) {
         void import("@/lib/model-resolver").then((m) => m.refreshPreferredGptModel()).catch(() => {});
       }
     } catch (e) {

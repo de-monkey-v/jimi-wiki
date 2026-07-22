@@ -1,0 +1,1 @@
+ALTER TYPE "PageKind" ADD VALUE IF NOT EXISTS 'document';

@@ -17,7 +17,7 @@ import type { Provider } from "@/lib/provider";
  *   손편집 fallback 으로 추락하지 않고, 설정 페이지 렌더가 네트워크에 블로킹되지 않는다.
  * - context/cost/reasoning/tool_call 메타데이터를 담아 셀렉터에 근거를 표시한다.
  *
- * 주의: ChatGPT 구독(OAuth) 경로는 플랜이 노출하는 모델만 동작(예: gpt-5.5). 최종 확인은 "테스트" 버튼.
+ * 주의: ChatGPT 구독(OAuth) 경로는 플랜이 노출하는 모델만 동작(예: gpt-5.6-sol). 최종 확인은 "테스트" 버튼.
  */
 
 export type CatalogModel = {
@@ -48,7 +48,7 @@ const LABEL: Record<Provider, string> = {
 // 첫 모델을 자동 선택하므로(계정에 안 열렸으면 조용히 다음 후보), 다른 코드 변경이 필요 없다.
 // 이 배열이 드롭다운 표시·자동 기본선택·configure-test 프로브의 단일 출처(SSOT)다.
 const OAUTH_OPENAI: CatalogModel[] = [
-  { id: "gpt-5.6", name: "GPT-5.6 (ChatGPT 구독)", reasoning: true, toolCall: true },
+  { id: "gpt-5.6-sol", name: "GPT-5.6 Sol (ChatGPT 구독)", reasoning: true, toolCall: true },
   { id: "gpt-5.5", name: "GPT-5.5 (ChatGPT 구독)", reasoning: true, toolCall: true },
   { id: "gpt-5.1", name: "GPT-5.1 (ChatGPT 구독)", reasoning: true, toolCall: true },
 ];

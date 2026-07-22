@@ -11,7 +11,8 @@
 
 | 능력 | MCP 도구 | REST | 비고 |
 |---|---|---|---|
-| 하이브리드 검색 | `search_wiki(query, k?, graph?, depth?)` | `GET /search?q=&k=&graph=1&depth=` | BM25+임베딩. 쓰기 전 중복 확인. `graph=1`이면 지식그래프 이웃을 `neighbors`로 함께 반환 |
+| 지식 검색 | `search_wiki(query, k?, graph?, depth?)` | `GET /search?q=&scope=knowledge` | curated 원문·note·concept/entity. 기본 scope |
+| 문서 검색 | `search_documents(query?, type?, from?, to?)` | `GET /search?...&scope=documents` 또는 `GET /documents` | preserve 원문과 document를 지식 결과와 분리 |
 | 페이지 목록 | `list_pages()` | `GET /pages` | slug·title·kind·category |
 | 페이지 조회 | `read_page(slug)` | `GET /pages/{slug}` | 본문 포함 |
 | 페이지 생성/수정 | `write_page({slug?, title, kind, body, category?, sourceSlug?, embed?})` | `POST /pages` | slug 생략=신규, 주면 수정 |
@@ -19,39 +20,47 @@
 | 원문 목록 | `list_sources()` | `GET /sources` | 본문 제외 |
 | 원문 조회 | `read_source(slug)` | `GET /sources/{slug}` | 불변 |
 | 원문 저장 | `create_source({title, body, url?})` | `POST /sources` | → `{slug}` 반환. ingest 1단계 |
+| 원문만 보존 | `preserve_url` / `preserve_text` | `POST /ingest {mode:"preserve",...}` | Source+pointer note, 생성형 큐레이션 없음 |
+| 정리 편입 | `curate_url` / `curate_text` | `POST /ingest {mode:"curate",...}` | 기존 `ingest_*`도 curate 별칭 |
+| 보존 원문 정리 | `curate_source(sourceSlug)` | `POST /sources/{slug}/curate` | blob-only 파일은 이때 추출/OCR 후 새 SourceRevision을 만들며, 게시 성공 뒤에만 curated 전환 |
+| 문서 기록 | `record_document(...)` | `POST /documents` | `general|worklog|troubleshooting|decision|reference|plan|spec` |
+| 작업 기록 | `record_worklog(...)` | `POST /documents` | 7개 고정 heading |
+| 문서 추가 | `append_document(slug, content, expectedVersion)` | `POST /documents/{slug}/append` | document 전용, CAS |
 | 온톨로지 조회 | `get_ontology()` | `GET /ontology` | category 인스턴스·관계 어휘. 재사용 후보 확인 |
 | 카테고리 매칭 | `match_category(text)` | `POST /categories/match` | 텍스트→가장 가까운 기존 category(자동 병합 아님) |
 | 기계 lint | `run_lint()` | `POST /lint` | 고아·깨진 링크·정크 노트·원문 중복·카테고리 건강 + 건강 점수. 얕은 점검만 |
 | 잡 상태 폴링 | `get_run_status(runId)` | `GET /runs/{runId}` | `pending`\|`running`\|`done`\|`error`. 위임형 ingest 완료 확인 |
-| 위임형 편입(URL) | `ingest_url(url)` | `POST /ingest {url}` | 앱 ingest 파이프라인에 위임(비동기 → `{runId}`). 생성 쿼터 소모 |
-| 위임형 편입(텍스트) | `ingest_text(text, title?)` | `POST /ingest {text,title}` | 위와 동일 |
+| 위임형 편입(URL) | `ingest_url(url)` | `POST /ingest {url}` | `curate_url` 호환 별칭 |
+| 위임형 편입(텍스트) | `ingest_text(text, title?)` | `POST /ingest {text,title}` | `curate_text` 호환 별칭 |
 | 읽을거리 담기 | `save_link(url, note?)` | `POST /saved-links` | read-later 개인 리스트(위키 편입 아님). 같은 URL 재요청은 기존 항목 반환 |
 | 읽을거리 목록 | `list_saved_links()` | `GET /saved-links` | 최신순. `promotedAt`이 있으면 편입 완료 |
+| 읽을거리 승격 | `promote_saved_link(id)` | `POST /saved-links/{id}/promote` | 재시도·동시 호출은 같은 runId |
 
 ## write_page 필드
 
-- `kind` (필수): `note` | `concept` | `entity` | `answer` | `meta`. 닫힌 집합, 새 kind 금지.
+- `kind` (필수): `note` | `concept` | `entity` | `meta`. `document`는 전용 문서 API를 쓰며 `personal`은 웹 UI 전용이다.
 - `body` (필수): 마크다운. 내부 링크는 `[[slug]]` 또는 `[[slug|표시명]]`.
 - `category` (선택): 파생 페이지의 분류 경로(예: `ai/architectures`). **note에는 붙이지 않는다.** 기존 category 재사용 우선([`ontology-rules.md`](./ontology-rules.md) §3).
 - `sourceSlug`: 근거 원문 slug. **note는 필수**(없으면 `note_requires_source` 거부) — provenance로 연결된다. 파생 페이지는 선택 — 기여(contribution)로 기록된다.
 - `embed` (선택): `true`면 위키의 미색인 청크 전체를 임베딩(시맨틱 검색 반영). **작업의 마지막 write_page 1회**에만 넣으면 충분하다.
+- 기존 slug 수정은 `expectedVersion` 필수다. 충돌은 `409 version_conflict`; 사람/혼합 문서에 대한 외부 에이전트 수정은 `202 {staged:true}`다.
 
 ## 인증 경계 — 무엇이 API 키로 되고 안 되나
 
-> "인증 경계 = 비용 경계." 내부 AI(Gemini)를 대량 소비하는 라우트는 원칙적으로 **웹 UI 쿠키 세션 전용**이다. 유일한 예외가 `POST /ingest`이며, 그 대신 API 키 경로에도 세션과 **동일한 일일 생성 쿼터**가 걸린다.
+> "인증 경계 = 비용 경계." 내부 AI를 대량 소비하는 라우트는 원칙적으로 웹 UI 세션 전용이다. `POST /ingest`는 API 키에도 열려 있고, 그중 `mode=curate`에만 세션과 동일한 일일 생성 쿼터가 걸린다.
 
 - **API 키/MCP로 가능**: 위 표의 모든 도구 — 조회·작성·삭제, 원문 저장/조회, 하이브리드 검색(+graph), 온톨로지, 기계 lint, 읽을거리, **위임형 ingest와 잡 폴링**.
 - **세션 전용(API 키 불가)**: `POST /query`, `POST /reindex`, `POST /lint {deep:true}`. 외부 에이전트는 자기 LLM이 있으므로 `/query` 대신 `search_wiki`로 근거를 받아 스스로 종합한다.
-- **ingest 쿼터**: 위키 소유자의 일일 토큰 상한(`DAILY_TOKEN_LIMIT`)을 넘으면 `429 daily_quota_exceeded`. `Retry-After`가 없으므로 재시도하지 말고 사용자에게 알린다.
+- **ingest 쿼터**: `curate`만 위키 소유자의 일일 생성 토큰 상한(`DAILY_TOKEN_LIMIT`)을 소비한다. `preserve`는 생성형 쿼터를 소비하지 않는다. 초과 시 `429 daily_quota_exceeded`이며 임의 재시도하지 않는다.
 
-## 편입 두 방식 — 언제 무엇을 쓰나
+## 편입 세 방식 — 언제 무엇을 쓰나
 
-| | 위임형 (`ingest_url`/`ingest_text`) | 직접 큐레이션 (`create_source`+`write_page`) |
-|---|---|---|
-| 처리 주체 | 앱의 ingest 파이프라인(내부 AI) | 너(외부 에이전트) |
-| 얻는 것 | 웹 본문추출·유튜브 자막·불변 원문 저장·초안 검토까지 자동 | 문서 구조·분류·상호참조를 네가 설계 |
-| 비용 | 위키 소유자의 생성 쿼터 소모 | 네 쪽 토큰만 |
-| 언제 | "이 링크 넣어줘" 같은 단순 편입 | 여러 원문 종합·기존 문서 재구성 등 판단이 필요한 작업 |
+| | 원문 보존 (`preserve_*`) | 위임형 정리 (`curate_*`) | 직접 큐레이션 (`create_source`+`write_page`) |
+|---|---|---|---|
+| 처리 주체 | 결정론 파이프라인 | 앱의 ingest 파이프라인(내부 AI) | 너(외부 에이전트) |
+| 얻는 것 | 불변 Source + pointer note | 원문 저장·note·concept/entity 합성·초안 검토 | 문서 구조·분류·상호참조를 네가 설계 |
+| 비용 | 생성형 쿼터 없음 | 위키 소유자의 생성 쿼터 | 네 쪽 토큰만 |
+| 언제 | "원문만 그대로 보관" | "정리해서 지식으로 저장" | 여러 원문 종합·기존 문서 재구성 |
 
 ## 비동기 잡 폴링
 

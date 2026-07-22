@@ -11,8 +11,8 @@ import { oauthPersonalEnabled, storeExists, storePath } from "../src/lib/openai-
 
 async function main() {
   // 이 스모크는 GPT-over-OAuth 검증용이므로 GPT 모델을 쓴다(CHAT_MODEL 이 gemini 여도 무시). 인자로 override.
-  // codex 백엔드는 stream:true 만 허용 → streamText 사용. gpt-5.5 는 ChatGPT 구독에서 쓸 수 있는 모델.
-  const model = process.argv[2] || "gpt-5.5";
+  // codex 백엔드는 stream:true 만 허용 → streamText 사용. 기본값은 내부 에이전트와 같은 Sol 모델.
+  const model = process.argv[2] || "gpt-5.6-sol";
 
   console.log("=== ChatGPT OAuth 스모크 ===");
   console.log("토큰 파일:", storePath(), storeExists() ? "(있음)" : "(없음)");

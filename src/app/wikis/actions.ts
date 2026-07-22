@@ -14,6 +14,8 @@ import { normalizeCategoryForWrite } from "@/lib/governance";
 import { checkDailyQuota } from "@/lib/usage";
 import { prisma } from "@/lib/db";
 import type { ModelAccess, PageKind, WikiKind } from "@/generated/prisma/client";
+import { promoteSavedLink } from "@/lib/saved-link-promotion";
+import { parseDocumentDate, parseDocumentType, writeDocument } from "@/lib/documents";
 
 function formModelAccess(formData: FormData): ModelAccess {
   return String(formData.get("modelAccess") ?? "external") === "internalOnly" ? "internalOnly" : "external";
@@ -47,7 +49,8 @@ export async function getWikiCategoriesAction(
 export async function createWikiAction(formData: FormData) {
   const userId = await getCurrentUserId();
   const title = String(formData.get("title") ?? "");
-  const kind = String(formData.get("kind") ?? "personal") as WikiKind;
+  const rawKind = String(formData.get("kind") ?? "personal");
+  const kind: WikiKind = rawKind === "project" ? "project" : "personal";
   const wiki = await createWiki(userId, { title, kind });
   redirect(`/wikis/${encodeURIComponent(wiki.slug)}`);
 }
@@ -57,7 +60,7 @@ export async function createPageAction(formData: FormData) {
   const wikiSlug = String(formData.get("wikiSlug"));
   const wiki = await requireWriteAccess(userId, wikiSlug);
   const title = String(formData.get("title") ?? "");
-  // 수동 생성은 concept/entity로 제한(폼 밖에서의 임의 kind 주입 방어). 미허용 값은 concept로 강등.
+  // 수동 생성은 닫힌 MANUAL_KINDS 집합으로 제한한다.
   const kindRaw = String(formData.get("kind") ?? "concept") as PageKind;
   const kind: PageKind = MANUAL_KINDS.includes(kindRaw) ? kindRaw : "concept";
   // 카테고리는 서버측 정규화(sanitize + 강한 문자열 매치면 canonical 흡수) — 표기 분기 예방
@@ -65,8 +68,25 @@ export async function createPageAction(formData: FormData) {
   const category = catRaw ? await normalizeCategoryForWrite(wiki.id, catRaw) : null;
   const body = String(formData.get("body") ?? "");
   const modelAccess = formModelAccess(formData);
-  // 제목·종류·카테고리·본문을 한 화면에서 받아 곧바로 저장하고 페이지 뷰로 이동한다(별도 편집 단계 없음).
-  const page = await createPage(wiki.id, { title, kind, category, body, modelAccess, userId });
+  // document는 source provenance를 가질 수 없는 전용 writer를 통해 생성한다.
+  let page;
+  if (kind === "document") {
+    const result = await writeDocument({
+        wikiId: wiki.id,
+        userId,
+        actor: "human",
+        externalAgent: false,
+        title,
+        body,
+        documentType: parseDocumentType(formData.get("documentType"), "general") ?? "general",
+        documentAt: parseDocumentDate(formData.get("documentAt"), new Date()) ?? new Date(),
+        category,
+      });
+    if (result.staged) throw new Error("사람이 작성한 새 문서는 검토 초안으로 전환되지 않습니다");
+    page = result.page;
+  } else {
+    page = await createPage(wiki.id, { title, kind, category, body, modelAccess, userId });
+  }
   revalidatePath(`/wikis/${wikiSlug}`, "layout"); // 사이드바 TOC 갱신(폴더 "+"·수동 생성이 즉시 반영)
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(page.slug)}`);
 }
@@ -82,10 +102,30 @@ export async function savePageAction(formData: FormData) {
   const body = String(formData.get("body") ?? "");
   const expectedVersion = Number(formData.get("expectedVersion"));
   if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) throw new Error("유효한 page version이 필요합니다");
-  // kind는 수동 kind(concept/entity)로만 변경 허용. 시스템 kind(note/meta)면 기존 값을 유지한다.
+  // document와 지식 페이지 사이 변환은 금지한다. 문서 metadata는 revision마다 함께 보존한다.
   const current = await getPage(wiki.id, pageSlug);
-  const kind: PageKind = MANUAL_KINDS.includes(submittedKind) ? submittedKind : (current?.kind ?? "concept");
-  await updatePage(wiki.id, pageSlug, { title, kind, body, userId, expectedVersion });
+  if (!current) throw new Error("페이지를 찾을 수 없습니다");
+  const kind: PageKind = current.kind === "document"
+    ? "document"
+    : submittedKind === "document"
+      ? current.kind
+      : MANUAL_KINDS.includes(submittedKind) ? submittedKind : current.kind;
+  const documentType = current.kind === "document"
+    ? parseDocumentType(formData.get("documentType"), current.documentType ?? "general")
+    : null;
+  const documentAt = current.kind === "document"
+    ? parseDocumentDate(formData.get("documentAt"), current.documentAt ?? new Date())
+    : null;
+  if (current.kind === "document" && (!documentType || !documentAt)) throw new Error("유효한 문서 메타데이터가 필요합니다");
+  await updatePage(wiki.id, pageSlug, {
+    title,
+    kind,
+    body,
+    userId,
+    expectedVersion,
+    documentType,
+    documentAt,
+  });
   revalidatePath(`/wikis/${wikiSlug}/${pageSlug}`);
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}/${encodeURIComponent(pageSlug)}`);
 }
@@ -157,15 +197,13 @@ export async function deleteSavedLinkAction(wikiSlug: string, id: string): Promi
 export async function promoteSavedLinkAction(wikiSlug: string, id: string): Promise<string> {
   const userId = await getCurrentUserId();
   const wiki = await requireWriteAccess(userId, wikiSlug); // 공유 지식에 씀 → editor+
-  await requireQuota(userId);
   const link = await prisma.savedLink.findFirst({ where: { id, userId, wikiId: wiki.id } });
   if (!link) throw new Error("링크를 찾을 수 없습니다");
-  if (link.promotedAt) throw new Error("이미 편입된 링크입니다"); // 중복 편입 방지
-  const run = await createIngestRun(wiki.id, { url: link.url, title: link.title }, userId);
-  // 삭제하지 않고 "편입됨"으로 표시 — 편입 후에도 링크를 계속 열어볼 수 있게(사용자가 삭제할 때까지 유지).
-  await prisma.savedLink.update({ where: { id: link.id }, data: { promotedAt: new Date() } });
+  if (!link.promotedRunId && !link.promotedAt) await requireQuota(userId);
+  const promotion = await promoteSavedLink(wiki.id, userId, id);
   revalidatePath(`/wikis/${wikiSlug}/reading`);
-  return run.id;
+  if (!promotion.runId) throw new Error("이미 편입된 링크입니다");
+  return promotion.runId;
 }
 
 /** 폴더(category) 핀 토글. 멤버면 OK — 개인 즐겨찾기. 반환: 토글 후 고정 상태. */

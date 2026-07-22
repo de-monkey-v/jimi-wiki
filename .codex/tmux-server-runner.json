@@ -3,6 +3,12 @@
   "startupWaitSeconds": 120,
   "services": [
     {
+      "name": "codex-proxy",
+      "command": "./local/codex-proxy/run.sh",
+      "cwd": ".",
+      "port": 10531
+    },
+    {
       "name": "web",
       "command": "pnpm exec next dev -p 3007 --hostname 0.0.0.0",
       "cwd": ".",

@@ -15,7 +15,9 @@ import {
 import {
   archivePageSnapshotTx,
   createPageSnapshotTx,
+  ContentVersionConflictError,
   restorePageRevisionTx,
+  transitionSourceCurationStateTx,
   updatePageSnapshotTx,
   type ContentTransaction,
 } from "@/lib/content-store";
@@ -33,7 +35,7 @@ import {
   type SynthesizedDraftData,
 } from "@/lib/build-artifacts";
 import { Prisma } from "@/generated/prisma/client";
-import type { BuildMode, KnowledgeBuild, RelationType } from "@/generated/prisma/client";
+import type { BuildMode, DocumentType, KnowledgeBuild, PageKind, RelationType } from "@/generated/prisma/client";
 
 export type BuildInputItem = {
   sourceId: string;
@@ -46,6 +48,7 @@ export type BuildInputItem = {
 
 export type BuildInputManifest = {
   sourceRevisionId?: string;
+  curateSourceRevisionId?: string;
   preserveRelations?: boolean;
   inputs: BuildInputItem[];
 };
@@ -99,7 +102,9 @@ function positiveInteger(value: unknown, label: string): number {
 
 export function parseBuildInputManifest(value: unknown): BuildInputManifest {
   const root = object(value, "inputManifest");
-  const extraRootKeys = Object.keys(root).filter((key) => key !== "inputs" && key !== "sourceRevisionId" && key !== "preserveRelations");
+  const extraRootKeys = Object.keys(root).filter(
+    (key) => key !== "inputs" && key !== "sourceRevisionId" && key !== "curateSourceRevisionId" && key !== "preserveRelations",
+  );
   if (extraRootKeys.length) throw new Error(`inputManifest has unknown fields: ${extraRootKeys.join(", ")}`);
   if (!Array.isArray(root.inputs)) throw new Error("inputManifest.inputs must be an array");
   const seenSources = new Set<string>();
@@ -130,11 +135,18 @@ export function parseBuildInputManifest(value: unknown): BuildInputManifest {
   if (sourceRevisionId && !seenRevisions.has(sourceRevisionId)) {
     throw new Error("incremental SourceRevision is absent from inputManifest.inputs");
   }
+  const curateSourceRevisionId = root.curateSourceRevisionId === undefined
+    ? undefined
+    : requiredString(root.curateSourceRevisionId, "inputManifest.curateSourceRevisionId");
+  if (curateSourceRevisionId && curateSourceRevisionId !== sourceRevisionId) {
+    throw new Error("curateSourceRevisionId must match the incremental sourceRevisionId");
+  }
   if (root.preserveRelations !== undefined && typeof root.preserveRelations !== "boolean") {
     throw new Error("inputManifest.preserveRelations must be boolean");
   }
   return {
     ...(sourceRevisionId ? { sourceRevisionId } : {}),
+    ...(curateSourceRevisionId ? { curateSourceRevisionId } : {}),
     ...(root.preserveRelations === true ? { preserveRelations: true } : {}),
     inputs,
   };
@@ -203,6 +215,7 @@ export async function createIncrementalBuildForRun(
   wikiId: string,
   userId: string | null,
   sourceRevisionId: string,
+  options?: { curateSourceRevisionId?: string },
 ): Promise<{ buildId: string }> {
   const build = await prisma.knowledgeBuild.create({
     data: {
@@ -214,7 +227,11 @@ export async function createIncrementalBuildForRun(
       model: ingestModel(),
       promptVersion: BUILD_PROMPT_VERSION,
       rulesHash: currentRulesHash(),
-      inputManifest: { sourceRevisionId, inputs: [] },
+      inputManifest: {
+        sourceRevisionId,
+        ...(options?.curateSourceRevisionId ? { curateSourceRevisionId: options.curateSourceRevisionId } : {}),
+        inputs: [],
+      },
     },
     select: { id: true },
   });
@@ -270,17 +287,21 @@ export async function stageExternalPageProposal(input: {
     parentId: string | null;
     sortOrder: number;
     modelAccess: "external" | "internalOnly";
+    documentType?: DocumentType | null;
+    documentAt?: Date | null;
   };
   title: string;
   body: string;
-  kind: SynthesizedDraftData["kind"];
+  kind: PageKind;
   category: string | null;
+  documentType?: DocumentType | null;
+  documentAt?: Date | null;
   sourceRevisionIds: string[];
   buildInput?: BuildInputItem;
 }): Promise<{ buildId: string; draftId: string }> {
   if (input.page.modelAccess !== "external") throw new Error("internalOnly Page cannot receive an external proposal");
   const sourceRevisionIds = [...new Set(input.sourceRevisionIds)].sort();
-  return prisma.$transaction(async (tx) => {
+  return withModelPolicyWriteLock(input.wikiId, async (tx) => {
     const current = await tx.page.findFirst({
       where: { id: input.page.id, wikiId: input.wikiId, slug: input.page.slug },
       select: { currentVersion: true, origin: true, modelAccess: true, archivedAt: true, suppressedAt: true },
@@ -294,6 +315,20 @@ export async function stageExternalPageProposal(input: {
       current.suppressedAt
     ) {
       throw new Error("Page changed before external proposal staging");
+    }
+    if (input.kind === "document") {
+      if (!input.documentType || !input.documentAt || sourceRevisionIds.length > 0) {
+        throw new Error("document proposal requires metadata and cannot attach Source provenance");
+      }
+      const pending = await tx.knowledgeDraft.count({
+        where: {
+          pageId: input.page.id,
+          baseVersion: input.page.currentVersion,
+          kind: "document",
+          status: { in: ["staged", "conflict"] },
+        },
+      });
+      if (pending > 0) throw new ContentVersionConflictError(input.page.currentVersion, input.page.currentVersion);
     }
     const build = await tx.knowledgeBuild.create({
       data: {
@@ -325,6 +360,8 @@ export async function stageExternalPageProposal(input: {
         body: input.body,
         kind: input.kind,
         category: input.category,
+        documentType: input.documentType ?? null,
+        documentAt: input.documentAt ?? null,
         parentId: input.page.parentId,
         sortOrder: input.page.sortOrder,
         origin: "generated",
@@ -334,6 +371,8 @@ export async function stageExternalPageProposal(input: {
           body: input.body,
           kind: input.kind,
           category: input.category,
+          documentType: input.documentType ?? null,
+          documentAt: input.documentAt ?? null,
           sourceRevisionIds,
         }),
         validation: { ok: true, source: "external-agent", sourceCount: sourceRevisionIds.length },
@@ -349,9 +388,23 @@ export async function stageExternalPageProposal(input: {
  * incremental도 현재 active external Source 전체를 manifest로 잡는다. extraction cache를 재사용하므로
  * 변경 Source만 다시 추출하면서도 기존 generated 페이지의 다른 provenance를 잃지 않는다.
  */
-export async function collectBuildInputs(wikiId: string, sourceRevisionId?: string): Promise<BuildInputManifest> {
+export async function collectBuildInputs(
+  wikiId: string,
+  sourceRevisionId?: string,
+  curateSourceRevisionId?: string,
+): Promise<BuildInputManifest> {
   const sources = await prisma.source.findMany({
-    where: { wikiId, archivedAt: null, modelAccess: "external" },
+    where: {
+      wikiId,
+      archivedAt: null,
+      modelAccess: "external",
+      OR: [
+        { curationState: "curated" },
+        ...(curateSourceRevisionId
+          ? [{ curationState: "preserved" as const, revisions: { some: { id: curateSourceRevisionId } } }]
+          : []),
+      ],
+    },
     select: {
       id: true,
       slug: true,
@@ -384,13 +437,18 @@ export async function collectBuildInputs(wikiId: string, sourceRevisionId?: stri
   if (sourceRevisionId && !inputs.some((item) => item.sourceRevisionId === sourceRevisionId)) {
     throw new Error("incremental build SourceRevision이 현재 external 정책과 일치하지 않습니다");
   }
-  return { ...(sourceRevisionId ? { sourceRevisionId } : {}), inputs };
+  return {
+    ...(sourceRevisionId ? { sourceRevisionId } : {}),
+    ...(curateSourceRevisionId ? { curateSourceRevisionId } : {}),
+    inputs,
+  };
 }
 
 async function assertCurrentExternalInputsTx(
   tx: ContentTransaction,
   wikiId: string,
   items: BuildInputItem[],
+  curateSourceRevisionId?: string,
 ): Promise<Map<string, { id: string; title: string; url: string | null; body: string | null; contentHash: string }>> {
   if (items.length === 0) return new Map();
   const sourceIds = items.map((item) => item.sourceId);
@@ -404,6 +462,7 @@ async function assertCurrentExternalInputsTx(
         currentVersion: true,
         policyVersion: true,
         modelAccess: true,
+        curationState: true,
         archivedAt: true,
       },
     }),
@@ -439,6 +498,10 @@ async function assertCurrentExternalInputsTx(
       source.currentVersion !== item.version ||
       source.policyVersion !== item.policyVersion ||
       source.modelAccess !== "external" ||
+      (
+        source.curationState !== "curated" &&
+        !(source.curationState === "preserved" && item.sourceRevisionId === curateSourceRevisionId)
+      ) ||
       source.archivedAt !== null ||
       revision.version !== item.version ||
       revision.contentHash !== item.contentHash ||
@@ -452,8 +515,12 @@ async function assertCurrentExternalInputsTx(
   return result;
 }
 
-async function assertCurrentExternalInputs(wikiId: string, items: BuildInputItem[]): Promise<void> {
-  await prisma.$transaction((tx) => assertCurrentExternalInputsTx(tx, wikiId, items));
+async function assertCurrentExternalInputs(
+  wikiId: string,
+  items: BuildInputItem[],
+  curateSourceRevisionId?: string,
+): Promise<void> {
+  await prisma.$transaction((tx) => assertCurrentExternalInputsTx(tx, wikiId, items, curateSourceRevisionId));
 }
 
 /** 문장/문단 경계를 우선하고, 경계 양쪽 문맥을 overlap해 관계 소실을 줄인다. */
@@ -496,7 +563,15 @@ async function generateExtraction(
     body: string | null;
     contentHash: string;
   },
-  opts: { wikiId: string; userId: string | null; model: string; rulesHash: string; rules: string; buildId: string },
+  opts: {
+    wikiId: string;
+    userId: string | null;
+    model: string;
+    rulesHash: string;
+    rules: string;
+    buildId: string;
+    curateSourceRevisionId?: string;
+  },
 ): Promise<{ data: SourceExtractionData; usage?: LoopUsage }> {
   const body = sourceRevision.body ?? "";
   const chunks = chunkSourceText(body);
@@ -505,7 +580,7 @@ async function generateExtraction(
   let used = false;
   for (let index = 0; index < chunks.length; index++) {
     const loop = await withExternalModelDispatchLock(opts.wikiId, async (tx) => {
-      await assertCurrentExternalInputsTx(tx, opts.wikiId, [item]);
+      await assertCurrentExternalInputsTx(tx, opts.wikiId, [item], opts.curateSourceRevisionId);
       return generateWithTools({
         system: `${EXTRACTION_SYSTEM}\n\n## 분류 규칙 (hash=${opts.rulesHash})\n${opts.rules}`,
         userPrompt:
@@ -568,7 +643,9 @@ export async function extractBuildSources(buildId: string): Promise<Map<string, 
   const model = build.model ?? ingestModel();
   if (manifest.inputs.length === 0) return new Map();
   if (!llmEnabledForModel(model)) throw new Error(`build model provider를 사용할 수 없습니다: ${model}`);
-  const byId = await prisma.$transaction((tx) => assertCurrentExternalInputsTx(tx, build.wikiId, manifest.inputs));
+  const byId = await prisma.$transaction((tx) =>
+    assertCurrentExternalInputsTx(tx, build.wikiId, manifest.inputs, manifest.curateSourceRevisionId),
+  );
   const out = new Map<string, SourceExtractionData>();
 
   for (const item of manifest.inputs) {
@@ -626,9 +703,10 @@ export async function extractBuildSources(buildId: string): Promise<Map<string, 
       rulesHash: build.rulesHash ?? "",
       rules,
       buildId,
+      curateSourceRevisionId: manifest.curateSourceRevisionId,
     });
     const data = generated.data;
-    await assertCurrentExternalInputs(build.wikiId, [item]);
+    await assertCurrentExternalInputs(build.wikiId, [item], manifest.curateSourceRevisionId);
     const extraction = await prisma.sourceExtraction.create({
       data: {
         sourceRevisionId: revision.id,
@@ -724,7 +802,7 @@ async function synthesizeConceptDraftBatch(
   const batchInputs = manifest.inputs.filter((item) => referenced.has(item.sourceRevisionId));
   if (batchInputs.length !== referenced.size) throw new Error("synthesis provenance가 manifest와 일치하지 않습니다");
   const loop = await withExternalModelDispatchLock(build.wikiId, async (tx) => {
-    await assertCurrentExternalInputsTx(tx, build.wikiId, batchInputs);
+    await assertCurrentExternalInputsTx(tx, build.wikiId, batchInputs, manifest.curateSourceRevisionId);
     return generateWithTools({
       system: `${SYNTHESIS_SYSTEM}\n\n## 분류 규칙 (hash=${build.rulesHash ?? ""})\n${rules}`,
       userPrompt: JSON.stringify({ concepts: groups }),
@@ -795,8 +873,22 @@ async function synthesizeConceptDrafts(
   return out;
 }
 
-export function knowledgeDraftHash(draft: Pick<SynthesizedDraftData, "title" | "body" | "kind" | "category" | "sourceRevisionIds">): string {
-  return sha(JSON.stringify([draft.title, draft.body, draft.kind, draft.category, [...draft.sourceRevisionIds].sort()]));
+export function knowledgeDraftHash(draft: {
+  title: string;
+  body: string;
+  kind: PageKind;
+  category: string | null;
+  documentType?: DocumentType | null;
+  documentAt?: Date | string | null;
+  sourceRevisionIds: string[];
+}): string {
+  const legacy = [draft.title, draft.body, draft.kind, draft.category, [...draft.sourceRevisionIds].sort()];
+  if (draft.kind !== "document") return sha(JSON.stringify(legacy));
+  return sha(JSON.stringify([
+    ...legacy,
+    draft.documentType ?? null,
+    draft.documentAt instanceof Date ? draft.documentAt.toISOString() : draft.documentAt ?? null,
+  ]));
 }
 
 /** extraction 완료 뒤 live Page를 건드리지 않고 KnowledgeDraft만 완성한다. */
@@ -842,7 +934,7 @@ export async function stageBuildDrafts(
   }
   const existing = await prisma.page.findMany({
     where: { wikiId: build.wikiId, slug: { in: drafts.map((draft) => draft.slug) } },
-    select: { id: true, slug: true, currentVersion: true, origin: true, modelAccess: true, archivedAt: true, suppressedAt: true, parentId: true, sortOrder: true },
+    select: { id: true, slug: true, kind: true, currentVersion: true, origin: true, modelAccess: true, archivedAt: true, suppressedAt: true, parentId: true, sortOrder: true },
   });
   const existingBySlug = new Map(existing.map((page) => [page.slug, page]));
   const relations: RelationDraft[] = [];
@@ -871,6 +963,7 @@ export async function stageBuildDrafts(
         where: {
           wikiId: build.wikiId,
           origin: "generated",
+          ...MANAGED_KNOWLEDGE_PAGE_WHERE,
           modelAccess: "external",
           archivedAt: null,
           slug: { notIn: [...producedSlugs] },
@@ -906,7 +999,7 @@ export async function stageBuildDrafts(
       const page = existingBySlug.get(draft.slug);
       const status = page?.suppressedAt
         ? "suppressed"
-        : page && (page.origin !== "generated" || page.modelAccess !== "external")
+        : page && (page.kind === "document" || page.origin !== "generated" || page.modelAccess !== "external")
           ? "conflict"
           : "staged";
       await tx.knowledgeDraft.create({
@@ -972,6 +1065,21 @@ export async function stageBuildDrafts(
 
 const RELATION_TYPES = new Set<RelationType>(["relatedTo", "partOf", "causes", "contrasts", "dependsOn"]);
 
+// KnowledgeBuild가 소유하는 live Page의 양의 목록. preserved Source의 pointer note는
+// 일반 위키링크·검색에는 참여하지만 build stale/checkpoint/restore 대상은 아니다.
+const MANAGED_KNOWLEDGE_PAGE_WHERE: Prisma.PageWhereInput = {
+  OR: [
+    { kind: { in: ["concept", "entity"] } },
+    {
+      kind: "note",
+      OR: [
+        { sourceId: null },
+        { source: { curationState: "curated" } },
+      ],
+    },
+  ],
+};
+
 function parseRelationDrafts(value: unknown, allowedSourceRevisionIds: Set<string>): RelationDraft[] {
   if (!Array.isArray(value)) throw new Error("relationManifest must be an array");
   const seen = new Set<string>();
@@ -996,7 +1104,7 @@ async function snapshotCurrentPagesTx(
   wikiId: string,
 ): Promise<PublishedPageManifestItem[]> {
   const pages = await tx.page.findMany({
-    where: { wikiId, archivedAt: null },
+    where: { wikiId, archivedAt: null, ...MANAGED_KNOWLEDGE_PAGE_WHERE },
     select: {
       id: true,
       slug: true,
@@ -1026,7 +1134,7 @@ async function snapshotCurrentPagesTx(
 
 async function rebuildPageContributionsTx(tx: ContentTransaction, wikiId: string): Promise<void> {
   const pages = await tx.page.findMany({
-    where: { wikiId, archivedAt: null, kind: { not: "note" } },
+    where: { wikiId, archivedAt: null, kind: { in: ["concept", "entity"] } },
     select: {
       id: true,
       currentVersion: true,
@@ -1068,8 +1176,10 @@ function assertDraftIntegrity(
     baseVersion: number | null;
     title: string;
     body: string;
-    kind: SynthesizedDraftData["kind"] | "meta" | "personal";
+    kind: PageKind;
     category: string | null;
+    documentType: DocumentType | null;
+    documentAt: Date | null;
     archivedAt: Date | null;
     contentHash: string;
     validation: Prisma.JsonValue | null;
@@ -1082,6 +1192,9 @@ function assertDraftIntegrity(
   if (draft.kind === "meta" || draft.kind === "personal") {
     throw new Error(`knowledge draft kind is not publishable: ${draft.kind}`);
   }
+  if (draft.kind === "document" && (!draft.documentType || !draft.documentAt || sourceRevisionIds.length > 0)) {
+    throw new Error("document draft metadata/provenance is invalid");
+  }
   const expected = validation.action === "archive"
     ? sha(JSON.stringify(["archive", draft.pageId, draft.baseVersion, [...sourceRevisionIds].sort()]))
     : knowledgeDraftHash({
@@ -1089,6 +1202,8 @@ function assertDraftIntegrity(
         body: draft.body,
         kind: draft.kind,
         category: draft.category,
+        documentType: draft.documentType,
+        documentAt: draft.documentAt,
         sourceRevisionIds,
       });
   if (validation.ok !== true || expected !== draft.contentHash) {
@@ -1112,7 +1227,7 @@ async function publishKnowledgeBuildTx(
       "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
       `${WIKI_PUBLISH_LOCK_PREFIX}${build.wikiId}`,
     );
-    await assertCurrentExternalInputsTx(tx, build.wikiId, manifest.inputs);
+    await assertCurrentExternalInputsTx(tx, build.wikiId, manifest.inputs, manifest.curateSourceRevisionId);
 
     const drafts = await tx.knowledgeDraft.findMany({
       where: { buildId },
@@ -1140,6 +1255,8 @@ async function publishKnowledgeBuildTx(
           kind: draft.kind,
           frontmatter: draft.frontmatter as Prisma.InputJsonValue,
           category: draft.category,
+          documentType: draft.documentType,
+          documentAt: draft.documentAt,
           parentId: draft.parentId,
           sortOrder: draft.sortOrder,
           origin: "generated",
@@ -1176,6 +1293,8 @@ async function publishKnowledgeBuildTx(
           kind: draft.kind,
           frontmatter: draft.frontmatter as Prisma.InputJsonValue,
           category: draft.category,
+          documentType: draft.documentType,
+          documentAt: draft.documentAt,
           parentId: draft.parentId,
           sortOrder: draft.sortOrder,
           origin: "generated",
@@ -1194,7 +1313,11 @@ async function publishKnowledgeBuildTx(
 
     const settledDrafts = await tx.knowledgeDraft.findMany({
       where: { buildId },
-      select: { slug: true, status: true },
+      select: {
+        slug: true,
+        status: true,
+        sources: { select: { sourceRevisionId: true } },
+      },
     });
     const publishedSlugs = new Set(
       settledDrafts.filter((draft) => draft.status === "published" || draft.status === "accepted").map((draft) => draft.slug),
@@ -1218,7 +1341,12 @@ async function publishKnowledgeBuildTx(
     const relationSlugs = [...new Set(relationDrafts.flatMap((relation) => [relation.fromSlug, relation.toSlug]))];
     const relationPages = relationSlugs.length
       ? await tx.page.findMany({
-          where: { wikiId: build.wikiId, slug: { in: relationSlugs }, archivedAt: null },
+          where: {
+            wikiId: build.wikiId,
+            slug: { in: relationSlugs },
+            archivedAt: null,
+            kind: { in: ["concept", "entity"] },
+          },
           select: { id: true, slug: true },
         })
       : [];
@@ -1272,6 +1400,31 @@ async function publishKnowledgeBuildTx(
             sourceRevisionId: relation.sourceRevisionId,
           })),
           skipDuplicates: true,
+        });
+      }
+    }
+    if (
+      manifest.curateSourceRevisionId &&
+      settledDrafts.some(
+        (draft) =>
+          (draft.status === "published" || draft.status === "accepted") &&
+          draft.sources.some((source) => source.sourceRevisionId === manifest.curateSourceRevisionId),
+      )
+    ) {
+      const target = manifest.inputs.find((item) => item.sourceRevisionId === manifest.curateSourceRevisionId);
+      if (!target) throw new Error("curate Source is absent from build manifest");
+      await transitionSourceCurationStateTx(tx, {
+        wikiId: build.wikiId,
+        sourceId: target.sourceId,
+        expectedVersion: target.version,
+        to: "curated",
+      });
+      // SavedLink promotion의 성공 marker는 Source 전환/지식 게시와 같은 transaction에 둔다.
+      // worker가 이후 output/log 기록 전에 죽어도 curated 콘텐츠와 promotedAt이 갈라지지 않는다.
+      if (build.agentRunId) {
+        await tx.savedLink.updateMany({
+          where: { promotedRunId: build.agentRunId, promotedAt: null },
+          data: { promotedAt: new Date() },
         });
       }
     }
@@ -1370,7 +1523,7 @@ export async function acceptKnowledgeDraft(
       "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
       `${WIKI_PUBLISH_LOCK_PREFIX}${build.wikiId}`,
     );
-    await assertCurrentExternalInputsTx(tx, build.wikiId, manifest.inputs);
+    await assertCurrentExternalInputsTx(tx, build.wikiId, manifest.inputs, manifest.curateSourceRevisionId);
     const draft = await tx.knowledgeDraft.findFirst({
       where: { id: draftId, buildId },
       include: { sources: { select: { sourceRevisionId: true } } },
@@ -1404,6 +1557,8 @@ export async function acceptKnowledgeDraft(
         kind: draft.kind,
         frontmatter: draft.frontmatter as Prisma.InputJsonValue,
         category: draft.category,
+        documentType: draft.documentType,
+        documentAt: draft.documentAt,
         parentId: draft.parentId,
         sortOrder: draft.sortOrder,
         modelAccess: page.modelAccess,
@@ -1500,8 +1655,9 @@ async function snapshotRelationsTx(tx: ContentTransaction, wikiId: string): Prom
   const rows = await tx.conceptRelation.findMany({
     where: {
       wikiId,
-      from: { archivedAt: null },
-      to: { archivedAt: null },
+      from: { archivedAt: null, kind: { in: ["concept", "entity"] } },
+      to: { archivedAt: null, kind: { in: ["concept", "entity"] } },
+      source: { curationState: "curated" },
     },
     select: {
       from: { select: { slug: true } },
@@ -1573,31 +1729,57 @@ export async function restoreKnowledgeBuild(
     if (!target.publishedAt || !["published", "publishedDegraded", "review", "cancelled"].includes(target.status)) {
       throw new Error("target build does not have a published snapshot");
     }
-    const manifest = parsePublishedBuildManifest(target.publishedManifest);
+    const legacyManifest = parsePublishedBuildManifest(target.publishedManifest);
     await tx.$executeRawUnsafe(
       "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
       `${WIKI_PUBLISH_LOCK_PREFIX}${target.wikiId}`,
     );
 
-    const revisions = manifest.pages.length
+    const revisions = legacyManifest.pages.length
       ? await tx.pageRevision.findMany({
-          where: { id: { in: manifest.pages.map((page) => page.pageRevisionId) }, page: { wikiId: target.wikiId } },
-          select: { id: true, pageId: true, version: true, contentHash: true },
+          where: { id: { in: legacyManifest.pages.map((page) => page.pageRevisionId) }, page: { wikiId: target.wikiId } },
+          select: { id: true, pageId: true, version: true, contentHash: true, kind: true, sourceId: true },
         })
       : [];
     const revisionById = new Map(revisions.map((revision) => [revision.id, revision]));
-    for (const page of manifest.pages) {
+    for (const page of legacyManifest.pages) {
       const revision = revisionById.get(page.pageRevisionId);
       if (!revision || revision.pageId !== page.pageId || revision.version !== page.version || revision.contentHash !== page.contentHash) {
         throw new Error(`target PageRevision is missing or changed: ${page.pageRevisionId}`);
       }
     }
-    const relationSourceIds = [...new Set(manifest.relations.map((relation) => relation.sourceId))];
-    const relationSourceRevisionIds = [...new Set(manifest.relations.map((relation) => relation.sourceRevisionId))];
-    const relationSources = relationSourceIds.length
-      ? await tx.source.findMany({ where: { wikiId: target.wikiId, id: { in: relationSourceIds } }, select: { id: true } })
+    const pageSourceIds = [...new Set(revisions.map((revision) => revision.sourceId).filter((id): id is string => Boolean(id)))];
+    const relationSourceIds = [...new Set(legacyManifest.relations.map((relation) => relation.sourceId))];
+    const sourceIds = [...new Set([...pageSourceIds, ...relationSourceIds])];
+    const sources = sourceIds.length
+      ? await tx.source.findMany({
+          where: { wikiId: target.wikiId, id: { in: sourceIds } },
+          select: { id: true, curationState: true },
+        })
       : [];
-    if (relationSources.length !== relationSourceIds.length) throw new Error("target relation Source was permanently purged");
+    const sourceById = new Map(sources.map((source) => [source.id, source]));
+    const targetPages = legacyManifest.pages.filter((page) => {
+      const revision = revisionById.get(page.pageRevisionId)!;
+      return revision.kind === "concept" || revision.kind === "entity" ||
+        (revision.kind === "note" && (!revision.sourceId || sourceById.get(revision.sourceId)?.curationState === "curated"));
+    });
+    const relationEndpointSlugs = new Set(
+      targetPages
+        .filter((page) => {
+          const kind = revisionById.get(page.pageRevisionId)?.kind;
+          return kind === "concept" || kind === "entity";
+        })
+        .map((page) => page.slug),
+    );
+    // v1 build manifest는 당시 active Page 전체(personal/meta 포함)를 담았다. 새 정책에서
+    // KnowledgeBuild가 관리하지 않는 Page/관계는 restore 대상에서 호환성 있게 걸러낸다.
+    const targetRelations = legacyManifest.relations.filter((relation) =>
+      relationEndpointSlugs.has(relation.fromSlug) &&
+      relationEndpointSlugs.has(relation.toSlug) &&
+      sourceById.get(relation.sourceId)?.curationState === "curated",
+    );
+    const manifest: PublishedBuildManifest = { pages: targetPages, relations: targetRelations };
+    const relationSourceRevisionIds = [...new Set(targetRelations.map((relation) => relation.sourceRevisionId))];
     const relationSourceRevisions = relationSourceRevisionIds.length
       ? await tx.sourceRevision.findMany({
           where: { id: { in: relationSourceRevisionIds }, source: { wikiId: target.wikiId } },
@@ -1607,12 +1789,14 @@ export async function restoreKnowledgeBuild(
     const relationRevisionById = new Map(relationSourceRevisions.map((revision) => [revision.id, revision.sourceId]));
     if (
       relationSourceRevisions.length !== relationSourceRevisionIds.length ||
-      manifest.relations.some((relation) => relationRevisionById.get(relation.sourceRevisionId) !== relation.sourceId)
+      targetRelations.some((relation) => relationRevisionById.get(relation.sourceRevisionId) !== relation.sourceId)
     ) {
       throw new Error("target relation SourceRevision was permanently purged or does not match Source");
     }
     const targetPageIds = new Set(manifest.pages.map((page) => page.pageId));
-    const currentPages = await tx.page.findMany({ where: { wikiId: target.wikiId } });
+    const currentPages = await tx.page.findMany({
+      where: { wikiId: target.wikiId, ...MANAGED_KNOWLEDGE_PAGE_WHERE },
+    });
     if (manifest.pages.some((page) => !currentPages.some((current) => current.id === page.pageId && current.slug === page.slug))) {
       throw new Error("target Page was permanently purged or its identity changed");
     }
@@ -1657,7 +1841,11 @@ export async function restoreKnowledgeBuild(
     }
 
     const restoredPages = await tx.page.findMany({
-      where: { wikiId: target.wikiId, slug: { in: [...new Set(manifest.relations.flatMap((relation) => [relation.fromSlug, relation.toSlug]))] } },
+      where: {
+        wikiId: target.wikiId,
+        slug: { in: [...new Set(manifest.relations.flatMap((relation) => [relation.fromSlug, relation.toSlug]))] },
+        kind: { in: ["concept", "entity"] },
+      },
       select: { id: true, slug: true, archivedAt: true },
     });
     const restoredPageIdBySlug = new Map(restoredPages.filter((page) => !page.archivedAt).map((page) => [page.slug, page.id]));
@@ -1730,12 +1918,15 @@ export async function prepareKnowledgeBuild(buildId: string): Promise<{ staged: 
   const sourceRevisionId = previous.sourceRevisionId === undefined
     ? undefined
     : requiredString(previous.sourceRevisionId, "inputManifest.sourceRevisionId");
+  const curateSourceRevisionId = previous.curateSourceRevisionId === undefined
+    ? undefined
+    : requiredString(previous.curateSourceRevisionId, "inputManifest.curateSourceRevisionId");
   const claimed = await prisma.knowledgeBuild.updateMany({
     where: { id: buildId, status: "pending" },
     data: { status: "running", startedAt: new Date() },
   });
   if (claimed.count !== 1) throw new Error("build was already claimed by another worker");
-  const manifest = await collectBuildInputs(build.wikiId, sourceRevisionId);
+  const manifest = await collectBuildInputs(build.wikiId, sourceRevisionId, curateSourceRevisionId);
   await prisma.knowledgeBuild.update({ where: { id: buildId }, data: { inputManifest: json(manifest) } });
   const extractions = await extractBuildSources(buildId);
   return stageBuildDrafts(buildId, extractions);

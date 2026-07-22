@@ -47,6 +47,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         slug: page.slug,
         title: page.title,
         kind: page.kind,
+        documentType: page.documentType,
+        documentAt: page.documentAt,
         category: page.category,
         body: page.body,
         origin: page.origin,

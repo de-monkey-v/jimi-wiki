@@ -6,16 +6,23 @@ import { isYoutubeUrl, fetchYoutubeTranscript } from "@/lib/youtube";
 import { stripHtml, MIN_ARTICLE_CHARS } from "@/lib/html-text";
 import { classifyUpload, MAX_UPLOAD_BYTES } from "@/lib/file-types";
 import { normalizeSlug } from "@/lib/markdown";
-import { hybridSearch, matchCategorySemantic, reindexSource } from "@/lib/search";
+import { hybridSearch, matchCategorySemantic, reindexEmbeddings, reindexSource } from "@/lib/search";
 import type { ToolSpec } from "@/lib/gemini";
 import { isAiExcludedKind } from "@/lib/kinds";
 import { checkDailyQuota } from "@/lib/usage";
 import { getOntology, matchCategory } from "@/lib/ontology";
-import { createPageSnapshot, createSourceSnapshot } from "@/lib/content-store";
+import { createPageSnapshot, createSourceSnapshot, updateSourceSnapshot } from "@/lib/content-store";
 import { refreshPageDerivedState } from "@/lib/page-projections";
 import { createIncrementalBuildForRun } from "@/lib/builds";
 import { modelPolicyClient } from "@/lib/model-access";
-import type { ModelAccess, Prisma } from "@/generated/prisma/client";
+import type { ModelAccess, Prisma, SourceCurationState } from "@/generated/prisma/client";
+
+export type IngestMode = "preserve" | "curate";
+
+export function parseIngestMode(value: unknown, fallback: IngestMode = "curate"): IngestMode | null {
+  if (value === undefined) return fallback;
+  return value === "preserve" || value === "curate" ? value : null;
+}
 
 export interface IngestInput {
   url?: string;
@@ -28,6 +35,10 @@ export interface IngestInput {
   size?: number;
   /** 외부 GPT/Gemini 처리 정책. 생략하면 기존 API 호환을 위해 external. */
   modelAccess?: ModelAccess;
+  /** 생략은 기존 호환을 위해 curate. 명시된 잘못된 값은 enqueue/worker 모두 거부한다. */
+  mode?: IngestMode;
+  /** 이미 preserved인 Source를 큐레이션할 때만 서버 내부에서 사용한다. */
+  sourceSlug?: string;
   // 텔레그램 봇 편입: 완료 시 이 chat 으로 알림을 보낸다(워커 완료 훅이 소비). 봇 경로에서만 채워진다.
   notifyChatId?: string;
 }
@@ -36,6 +47,8 @@ export interface IngestResult {
   sourceSlug: string;
   summary: string;
   pagesTouched: string[];
+  outcome: "preserved" | "curated" | "delegated";
+  textExtracted: boolean;
 }
 
 // 읽기 툴(위키 조회·검색·온톨로지) — ingest 에이전트와 텔레그램 봇 에이전트가 공유한다.
@@ -332,6 +345,7 @@ export async function createSourceUnique(
     agentRunId?: string | null;
     actor?: "human" | "agent" | "system";
     reason?: string | null;
+    curationState?: SourceCurationState;
   },
 ): Promise<{
   id: string;
@@ -339,6 +353,7 @@ export async function createSourceUnique(
   currentVersion: number;
   policyVersion: number;
   modelAccess: ModelAccess;
+  curationState: SourceCurationState;
   revisionId: string;
 }> {
   const root = `${todayStamp()}-${normalizeSlug(title) || "source"}`;
@@ -353,6 +368,7 @@ export async function createSourceUnique(
         body,
         storageKey: storageKey ?? null,
         modelAccess: options?.modelAccess ?? "external",
+        curationState: options?.curationState ?? "curated",
         context: {
           actor: options?.actor ?? "human",
           userId: options?.userId ?? null,
@@ -366,6 +382,7 @@ export async function createSourceUnique(
         currentVersion: result.source.currentVersion,
         policyVersion: result.source.policyVersion,
         modelAccess: result.source.modelAccess,
+        curationState: result.source.curationState,
         revisionId: result.revision.id,
       };
     } catch (e) {
@@ -394,6 +411,7 @@ export async function ensureSourceNote(
     userId?: string | null;
     agentRunId?: string | null;
     deterministicOnly?: boolean;
+    preserveOnly?: boolean;
   },
 ): Promise<void> {
   const has = await prisma.page.count({ where: { wikiId, sourceId, kind: "note", archivedAt: null } });
@@ -420,7 +438,9 @@ export async function ensureSourceNote(
   const modelAccess = source.modelAccess === "internalOnly" || options?.modelAccess === "internalOnly"
     ? "internalOnly"
     : "external";
-  const body = options?.deterministicOnly || modelAccess === "internalOnly"
+  const body = options?.preserveOnly
+    ? `> 원문: ${url ?? "(직접 입력)"}\n> source: ${sourceSlug}\n> 원문만 보존됨 — 아직 지식으로 정리되지 않음`
+    : options?.deterministicOnly || modelAccess === "internalOnly"
     ? `> 로컬 전용 원문: ${url ?? "(직접 입력)"}\n> source: ${sourceSlug}\n> 외부 AI/OCR 처리 제외`
     : `> 원문: ${url ?? "(직접 입력)"}\n> source: ${sourceSlug}\n\n${content.slice(0, 2000)}`;
 
@@ -465,15 +485,58 @@ export async function createIngestRun(
   if (modelAccess !== "external" && modelAccess !== "internalOnly") {
     throw new Error("유효하지 않은 modelAccess");
   }
+  const mode = parseIngestMode(input.mode);
+  if (!mode) throw new Error("유효하지 않은 ingest mode");
   return db.agentRun.create({
     data: {
       wikiId,
       userId: userId ?? null,
       type: "ingest",
       status: "pending",
-      input: { ...input, modelAccess },
+      input: { ...input, modelAccess, mode },
     },
     select: { id: true },
+  });
+}
+
+export async function createCurateSourceRun(
+  wikiId: string,
+  sourceSlug: string,
+  userId?: string,
+): Promise<{ id: string; reused: boolean }> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      'SELECT id FROM "Source" WHERE "wikiId"=$1 AND slug=$2 FOR UPDATE',
+      wikiId,
+      sourceSlug,
+    );
+    const source = await tx.source.findUnique({
+      where: { wikiId_slug: { wikiId, slug: sourceSlug } },
+      select: { id: true, archivedAt: true, modelAccess: true, curationState: true },
+    });
+    if (!source || source.archivedAt || source.modelAccess !== "external") {
+      throw new Error("curate_source 대상 Source를 찾을 수 없습니다");
+    }
+    if (source.curationState === "curated") throw new Error("Source는 이미 curated 상태입니다");
+    const active = await tx.agentRun.findMany({
+      where: { wikiId, type: "ingest", status: { in: ["pending", "running"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, input: true },
+    });
+    const existing = active.find((run) => {
+      const input = run.input && typeof run.input === "object" && !Array.isArray(run.input)
+        ? run.input as Record<string, unknown>
+        : {};
+      return input.sourceSlug === sourceSlug && input.mode === "curate";
+    });
+    if (existing) return { id: existing.id, reused: true };
+    const run = await createIngestRun(
+      wikiId,
+      { sourceSlug, mode: "curate", modelAccess: "external" },
+      userId,
+      tx,
+    );
+    return { id: run.id, reused: false };
   });
 }
 
@@ -484,13 +547,15 @@ export async function createIngestRun(
  */
 export async function createFileIngestRun(
   wikiId: string,
-  file: { buffer: Buffer; filename: string; mimeType?: string; modelAccess?: ModelAccess },
+  file: { buffer: Buffer; filename: string; mimeType?: string; modelAccess?: ModelAccess; mode?: IngestMode },
   userId?: string,
 ): Promise<{ id: string }> {
   const modelAccess = file.modelAccess ?? "external";
+  const mode = parseIngestMode(file.mode);
   if (modelAccess !== "external" && modelAccess !== "internalOnly") {
     throw new Error("유효하지 않은 modelAccess");
   }
+  if (!mode) throw new Error("유효하지 않은 ingest mode");
   if (file.buffer.length > MAX_UPLOAD_BYTES)
     throw new Error(`파일이 너무 큽니다(최대 ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)}MB)`);
   const cls = classifyUpload(file.buffer, file.filename);
@@ -506,6 +571,7 @@ export async function createFileIngestRun(
       mimeType: cls.mimeType,
       size: file.buffer.length,
       modelAccess,
+      mode,
     },
     userId,
   );
@@ -590,6 +656,7 @@ export async function runIngestJob(run: {
 }): Promise<void> {
   const { id, wikiId, input, userId } = run;
   const modelAccess: ModelAccess = input.modelAccess ?? "external";
+  const mode = parseIngestMode(input.mode);
   if (modelAccess !== "external" && modelAccess !== "internalOnly") {
     await prisma.agentRun.update({
       where: { id },
@@ -597,10 +664,27 @@ export async function runIngestJob(run: {
     });
     return;
   }
+  if (!mode) {
+    await prisma.agentRun.update({
+      where: { id },
+      data: { status: "error", stage: null, error: "유효하지 않은 ingest mode", finishedAt: new Date() },
+    });
+    return;
+  }
 
   // 진행 단계 갱신(비치명적) — 우하단 잡 인디케이터가 "지금 무슨 단계인지" 실시간 표시.
   const setStage = (stage: string) =>
     prisma.agentRun.update({ where: { id }, data: { stage } }).catch(() => {});
+  const externalOcrAllowed = async (kind: "image" | "pdf"): Promise<boolean> => {
+    if (mode !== "curate" || modelAccess !== "external") return false;
+    if (!userId) return true;
+    const quota = await checkDailyQuota(userId);
+    if (!quota.ok) {
+      console.warn(`[ingest] ${kind} OCR skipped by daily quota (${quota.used}/${quota.limit})`);
+      return false;
+    }
+    return true;
+  };
 
   try {
     // running 전이도 try 안에서(실패 시 error로 기록되게). startedAt으로 대기≠실행 구분, stage=fetch로 시작.
@@ -610,9 +694,96 @@ export async function runIngestJob(run: {
     });
 
     // 원문 수집. 파일(storageKey)이 최우선 → text 직접 입력 → 유튜브 자막 → 그 외 URL 본문 추출.
-    let content = input.text?.trim() ?? "";
+    let content = input.text ?? ""; // pasted text는 입력 문자열을 그대로 불변 Source에 저장한다.
+    let textExtracted = content.trim().length > 0;
     let derivedTitle: string | undefined; // 추출기/유튜브/파일명이 알아낸 제목(hostname보다 우선한다)
-    if (!content && input.storageKey) {
+    const existingSource = input.sourceSlug
+      ? await prisma.source.findFirst({
+          where: {
+            wikiId,
+            slug: input.sourceSlug,
+            archivedAt: null,
+            modelAccess: "external",
+            curationState: "preserved",
+          },
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            url: true,
+            body: true,
+            storageKey: true,
+            currentVersion: true,
+            policyVersion: true,
+            modelAccess: true,
+            curationState: true,
+            revisions: {
+              orderBy: { version: "desc" },
+              take: 1,
+              select: { id: true, version: true },
+            },
+          },
+        })
+      : null;
+    if (input.sourceSlug && (input.url || input.text !== undefined || input.storageKey || !existingSource)) {
+      throw new Error("curate_source 대상이 없거나 capture 입력과 함께 사용할 수 없습니다");
+    }
+    let extractedExistingSource: {
+      currentVersion: number;
+      policyVersion: number;
+      revisionId: string;
+    } | null = null;
+    if (existingSource) {
+      const revision = existingSource.revisions[0];
+      if (!revision || revision.version !== existingSource.currentVersion) {
+        throw new Error("curate_source current SourceRevision 불일치");
+      }
+      content = existingSource.body ?? "";
+      derivedTitle = existingSource.title;
+      textExtracted = content.trim().length > 0;
+      // preserve 때 외부 OCR을 보내지 않아 blob-only가 된 파일은 curate 시점에 원본을
+      // 다시 추출한다. 원본 blob과 옛 revision은 그대로 두고, 추출 텍스트를 새 immutable
+      // SourceRevision으로 추가한 뒤 그 정확한 revision을 build provenance로 사용한다.
+      if (!textExtracted && existingSource.storageKey) {
+        if (!existingSource.storageKey.startsWith(`${wikiId}/`)) {
+          throw new Error("blob 키가 이 위키 소유가 아닙니다");
+        }
+        const [{ getBlobStore }, { extractText }] = await Promise.all([
+          import("@/lib/blob"),
+          import("@/lib/file-extract"),
+        ]);
+        const buffer = await getBlobStore().get(existingSource.storageKey);
+        const cls = classifyUpload(buffer, existingSource.storageKey);
+        if ("rejected" in cls || cls.kind === "zip") {
+          throw new Error(`지원하지 않는 보존 파일: ${"rejected" in cls ? cls.rejected : "zip"}`);
+        }
+        const extracted = await extractText({
+          buffer,
+          kind: cls.kind,
+          mimeType: cls.mimeType,
+          usageMeta: { userId: userId ?? null, wikiId, route: "curate-source" },
+          allowExternalAi: cls.kind === "image" || cls.kind === "pdf"
+            ? await externalOcrAllowed(cls.kind)
+            : false,
+        });
+        content = extracted.text.trim();
+        textExtracted = content.length > 0;
+        if (textExtracted) {
+          const saved = await updateSourceSnapshot({
+            wikiId,
+            sourceId: existingSource.id,
+            expectedVersion: existingSource.currentVersion,
+            changes: { body: content },
+            context: { actor: "agent", userId, agentRunId: id, reason: "curate source deferred text extraction" },
+          });
+          extractedExistingSource = {
+            currentVersion: saved.source.currentVersion,
+            policyVersion: saved.source.policyVersion,
+            revisionId: saved.revision.id,
+          };
+        }
+      }
+    } else if (!content.trim() && input.storageKey) {
       // 방어적 심층 방어: 이 run 은 자기 위키가 소유한 blob(키가 `<wikiId>/`로 시작)만 읽을 수 있다.
       // (업로드 진입점이 makeStorageKey 로 항상 이 접두사를 붙이므로 정상 경로는 통과, 위조 키는 차단)
       if (!input.storageKey.startsWith(`${wikiId}/`)) throw new Error("blob 키가 이 위키 소유가 아닙니다");
@@ -627,7 +798,7 @@ export async function runIngestJob(run: {
         // zip 은 Source 를 만들지 않고 안의 파일들을 개별 child run 으로 펼친 뒤 조기 종료한다.
         // (ensureSourceNote 의 Source⟺note 불변식과 충돌하지 않도록 createSourceUnique 이전에 return)
         const { fanOutZip } = await import("@/lib/zip-ingest");
-        const n = await fanOutZip({ wikiId, buffer, userId, modelAccess });
+        const n = await fanOutZip({ wikiId, buffer, userId, modelAccess, mode });
         await store.delete(input.storageKey).catch(() => {}); // zip 원본은 참조 Source 가 없으니 정리
         await prisma.logEntry.create({
           data: { wikiId, kind: "ingest", title: `ingest(zip) | ${input.filename ?? "archive.zip"}`, detail: `${n}개 파일 팬아웃` },
@@ -636,7 +807,16 @@ export async function runIngestJob(run: {
           where: { id },
           data: {
             status: "done",
-            output: { summary: `압축 파일에서 ${n}개 파일을 개별 소스로 등록했습니다.`, sourceSlug: "", pagesTouched: [] },
+            output: {
+              summary: `압축 파일에서 ${n}개 파일을 개별 소스로 등록했습니다.`,
+              sourceSlug: "",
+              pagesTouched: [],
+              mode,
+              // ZIP 부모는 child run 등록까지만 완료한다. curate 성공은 각 child가 게시를
+              // 마친 뒤에만 주장할 수 있으므로 부모 결과를 성공으로 앞당겨 표시하지 않는다.
+              outcome: mode === "preserve" ? "preserved" : "delegated",
+              textExtracted: false,
+            },
             finishedAt: new Date(),
           },
         });
@@ -649,11 +829,14 @@ export async function runIngestJob(run: {
         kind: cls.kind,
         mimeType: cls.mimeType,
         usageMeta: { userId: userId ?? null, wikiId, route: "ingest" },
-        allowExternalAi: modelAccess === "external",
+        allowExternalAi: cls.kind === "image" || cls.kind === "pdf"
+          ? await externalOcrAllowed(cls.kind)
+          : false,
       });
       content = ex.text.trim();
+      textExtracted = content.length > 0;
       derivedTitle = (input.filename ?? "").replace(/\.[a-z0-9]+$/i, "") || undefined;
-    } else if (!content && input.url) {
+    } else if (!content.trim() && input.url) {
       if (isYoutubeUrl(input.url)) {
         const yt = await fetchYoutubeTranscript(input.url);
         content = yt.content;
@@ -663,11 +846,14 @@ export async function runIngestJob(run: {
         content = web.text;
         derivedTitle = web.title;
       }
+      textExtracted = content.trim().length > 0;
     }
 
     // 파일 소스는 원본(blob)을 보존하므로 추출 텍스트가 비어도(이미지·OCR 미설정 등) 진행한다.
-    const hasContent = content.length > 0;
-    if (!hasContent && !input.storageKey) throw new Error("수집할 원문이 없습니다(URL·텍스트·파일 필요)");
+    const hasContent = content.trim().length > 0;
+    if (!hasContent && !input.storageKey && !existingSource?.storageKey) {
+      throw new Error("수집할 원문이 없습니다(URL·텍스트·파일 필요)");
+    }
 
     // 제목 유도(잘못된 url이어도 text가 있으면 실패하지 않게 가드)
     let hostFromUrl: string | undefined;
@@ -684,15 +870,27 @@ export async function runIngestJob(run: {
       hostFromUrl ||
       content.split("\n").find((l) => l.trim())?.slice(0, 60) ||
       "제목 없는 소스";
+    const sourceUrl = existingSource?.url ?? input.url;
 
     // Source 저장(불변, 경합 안전) + FTS 인덱싱(코어는 임베딩 안 함). 파일 소스는 원본 blob 키를 함께 보존.
-    const source = await createSourceUnique(wikiId, title, input.url, content, input.storageKey, {
-      modelAccess,
-      userId,
-      agentRunId: id,
-      actor: "agent",
-      reason: "ingest source capture",
-    });
+    const source = existingSource
+      ? {
+          id: existingSource.id,
+          slug: existingSource.slug,
+          currentVersion: extractedExistingSource?.currentVersion ?? existingSource.currentVersion,
+          policyVersion: extractedExistingSource?.policyVersion ?? existingSource.policyVersion,
+          modelAccess: existingSource.modelAccess,
+          curationState: existingSource.curationState,
+          revisionId: extractedExistingSource?.revisionId ?? existingSource.revisions[0]!.id,
+        }
+      : await createSourceUnique(wikiId, title, sourceUrl, content, input.storageKey, {
+          modelAccess,
+          curationState: "preserved",
+          userId,
+          agentRunId: id,
+          actor: "agent",
+          reason: "ingest source capture",
+        });
     const sourceSlug = source.slug;
     await reindexSource(wikiId, { id: source.id, slug: sourceSlug, body: content });
 
@@ -701,12 +899,13 @@ export async function runIngestJob(run: {
     let buildId: string | undefined;
 
     const ensureStub = () =>
-      ensureSourceNote(wikiId, source.id, sourceSlug, input.url, title, content, touched, {
+      ensureSourceNote(wikiId, source.id, sourceSlug, sourceUrl, title, content, touched, {
         sourceRevisionId: source.revisionId,
         modelAccess,
         userId,
         agentRunId: id,
         deterministicOnly: modelAccess === "internalOnly",
+        preserveOnly: mode === "preserve" && modelAccess === "external",
       });
 
     // Source↔note projection은 build/provider/quota 성공 여부와 독립된 기본 불변식이다. external
@@ -714,7 +913,13 @@ export async function runIngestJob(run: {
     // 로컬 FTS에서 고아가 되지 않는다.
     await ensureStub();
 
-    if (modelAccess === "internalOnly") {
+    let outcome: "preserved" | "curated" = "preserved";
+    if (mode === "preserve") {
+      summary = hasContent
+        ? "불변 원문과 위치 포인터 노트만 보존했습니다. 생성형 큐레이션은 실행하지 않았습니다."
+        : "원본 blob만 보존했습니다. 외부 OCR 없이 추출할 텍스트가 없습니다.";
+      if (modelAccess === "external") await reindexEmbeddings(wikiId).catch(() => null);
+    } else if (modelAccess === "internalOnly") {
       // internalOnly는 build staging 대상이 아니므로 exact provenance의 deterministic projection만 로컬에 만든다.
       summary = hasContent
         ? "로컬 전용 원문과 검색 색인만 저장했습니다. 외부 AI·OCR·임베딩·큐레이션은 실행하지 않았습니다."
@@ -728,7 +933,9 @@ export async function runIngestJob(run: {
       if (!quota.ok) {
         summary = `일일 토큰 쿼터를 초과해(${quota.used}/${quota.limit}) SourceRevision과 소스 노트만 보존했습니다. 페이지 staging은 실행하지 않았습니다.`;
       } else {
-        const created = await createIncrementalBuildForRun(id, wikiId, userId, source.revisionId);
+        const created = await createIncrementalBuildForRun(id, wikiId, userId, source.revisionId, {
+          curateSourceRevisionId: source.revisionId,
+        });
         buildId = created.buildId;
         await setStage("build");
         const buildModule = await import("@/lib/builds");
@@ -750,6 +957,14 @@ export async function runIngestJob(run: {
         if (!build || !["published", "publishedDegraded", "review"].includes(build.status)) {
           throw new Error(`incremental build가 게시 상태에 도달하지 못했습니다: ${build?.status ?? "missing"}`);
         }
+        const curated = await prisma.source.findUnique({
+          where: { id: source.id },
+          select: { curationState: true },
+        });
+        if (curated?.curationState !== "curated") {
+          throw new Error("지식 게시 후 Source curated 전환이 완료되지 않았습니다");
+        }
+        outcome = "curated";
         summary = build?.status === "review"
           ? "증분 편입을 게시하고 사람 작성 페이지와의 충돌 초안을 승인 대기로 남겼습니다."
           : "증분 지식 build를 staging 검증 후 게시했습니다.";
@@ -761,25 +976,98 @@ export async function runIngestJob(run: {
     });
     const runState = await prisma.agentRun.findUnique({ where: { id }, select: { status: true, output: true } });
     // executeKnowledgeBuild가 publishedDegraded를 error로 표시했다면 성공으로 덮어쓰지 않는다.
-    if (runState?.status === "error") return;
+    if (runState?.status === "error") {
+      const build = buildId
+        ? await prisma.knowledgeBuild.findUnique({ where: { id: buildId }, select: { status: true } })
+        : null;
+      if (build?.status === "publishedDegraded" && outcome === "curated") {
+        const degradedOutput = runState.output && typeof runState.output === "object" && !Array.isArray(runState.output)
+          ? runState.output
+          : {};
+        await prisma.$transaction(async (tx) => {
+          await tx.agentRun.update({
+            where: { id },
+            data: {
+              output: {
+                ...degradedOutput,
+                summary,
+                sourceSlug,
+                pagesTouched: [...touched],
+                buildId,
+                modelAccess,
+                mode,
+                outcome,
+                textExtracted,
+                published: true,
+              },
+            },
+          });
+          await tx.savedLink.updateMany({
+            where: { promotedRunId: id, promotedAt: null },
+            data: { promotedAt: new Date() },
+          });
+        });
+      }
+      return;
+    }
     const existingOutput = runState?.output && typeof runState.output === "object" && !Array.isArray(runState.output)
       ? runState.output
       : {};
-    await prisma.agentRun.updateMany({
-      where: { id, status: { in: ["running", "done"] } },
-      data: {
-        status: "done",
-        stage: null, // 종료 — 진행 단계 해제
-        output: {
-          ...existingOutput,
-          summary,
-          sourceSlug,
-          pagesTouched: [...touched],
-          ...(buildId ? { buildId } : {}),
-          modelAccess,
+    const pendingPromotion = outcome === "curated"
+      ? null
+      : await prisma.savedLink.findFirst({
+          where: { promotedRunId: id, promotedAt: null },
+          select: { id: true },
+        });
+    if (pendingPromotion) {
+      await prisma.agentRun.updateMany({
+        where: { id, status: { in: ["running", "done"] } },
+        data: {
+          status: "error",
+          stage: null,
+          error: "saved_link_promotion_not_curated",
+          output: {
+            ...existingOutput,
+            summary,
+            sourceSlug,
+            pagesTouched: [...touched],
+            ...(buildId ? { buildId } : {}),
+            modelAccess,
+            mode,
+            outcome,
+            textExtracted,
+          },
+          finishedAt: new Date(),
         },
-        finishedAt: new Date(),
-      },
+      });
+      return;
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.agentRun.updateMany({
+        where: { id, status: { in: ["running", "done"] } },
+        data: {
+          status: "done",
+          stage: null, // 종료 — 진행 단계 해제
+          output: {
+            ...existingOutput,
+            summary,
+            sourceSlug,
+            pagesTouched: [...touched],
+            ...(buildId ? { buildId } : {}),
+            modelAccess,
+            mode,
+            outcome,
+            textExtracted,
+          },
+          finishedAt: new Date(),
+        },
+      });
+      if (outcome === "curated") {
+        await tx.savedLink.updateMany({
+          where: { promotedRunId: id, promotedAt: null },
+          data: { promotedAt: new Date() },
+        });
+      }
     });
   } catch (e) {
     await prisma.agentRun.update({
@@ -800,11 +1088,19 @@ export async function ingestSource(wikiId: string, input: IngestInput, userId?: 
   await runIngestJob({ id: run.id, wikiId, input, userId: userId ?? null });
   const done = await prisma.agentRun.findUniqueOrThrow({ where: { id: run.id } });
   if (done.status === "error") throw new Error(done.error ?? "ingest 실패");
-  const output = (done.output ?? {}) as { summary?: string; sourceSlug?: string; pagesTouched?: string[] };
+  const output = (done.output ?? {}) as {
+    summary?: string;
+    sourceSlug?: string;
+    pagesTouched?: string[];
+    outcome?: "preserved" | "curated" | "delegated";
+    textExtracted?: boolean;
+  };
   return {
     agentRunId: run.id,
     sourceSlug: output.sourceSlug ?? "",
     summary: output.summary ?? "",
     pagesTouched: output.pagesTouched ?? [],
+    outcome: output.outcome ?? "preserved",
+    textExtracted: output.textExtracted ?? false,
   };
 }

@@ -137,7 +137,7 @@ export async function lintWiki(
   const outbound = new Set(links.map((l) => l.fromPageId));
   // orphan/noOut는 파생 페이지(concept/entity)만 대상. note는 설계상 그래프의 잎(원문 요약
   // 전용, 상호참조 금지)이고 meta(ontology 등)는 system 페이지라 링크 검사에서 제외한다.
-  const derived = pages.filter((p) => p.kind !== "note" && p.kind !== "meta");
+  const derived = pages.filter((p) => p.kind === "concept" || p.kind === "entity");
   const orphanPages = derived.filter((p) => !inbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));
   const noOutLinks = derived.filter((p) => !outbound.has(p.id)).map((p) => ({ slug: p.slug, title: p.title }));
 
@@ -147,6 +147,7 @@ export async function lintWiki(
     where: {
       wikiId,
       archivedAt: null,
+      curationState: "curated",
       ...(externalOnly ? { modelAccess: "external" as const } : {}),
     },
     select: { id: true, slug: true, title: true, body: true },
@@ -303,7 +304,7 @@ export async function suggestIsolatedLinks(
   const outbound = new Set(links.map((l) => l.fromPageId));
   const bySlug = new Map(pages.map((p) => [p.slug, p]));
   const isolated = pages
-    .filter((p) => p.kind !== "note" && p.kind !== "meta" && (!inbound.has(p.id) || !outbound.has(p.id)))
+    .filter((p) => (p.kind === "concept" || p.kind === "entity") && (!inbound.has(p.id) || !outbound.has(p.id)))
     .slice(0, 8);
 
   const out: Awaited<ReturnType<typeof suggestIsolatedLinks>> = [];

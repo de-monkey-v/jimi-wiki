@@ -685,7 +685,9 @@ export async function addPageSource(
     ) return null;
     const sourceRevisionIds = [
       ...new Set([
-        ...pageRevision.sources.map((entry) => entry.sourceRevisionId),
+        ...pageRevision.sources.flatMap((entry) =>
+          entry.sourceRevisionId ? [entry.sourceRevisionId] : []
+        ),
         sourceRevision.id,
       ]),
     ];

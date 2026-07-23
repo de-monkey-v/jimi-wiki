@@ -53,6 +53,19 @@ export default async function WikiHome({
         select: { id: true, slug: true, title: true, documentType: true, documentAt: true },
       })
     : [];
+  const recentResearchReports = wiki.kind === "personal"
+    ? await prisma.page.findMany({
+        where: {
+          wikiId: wiki.id,
+          kind: "document",
+          documentType: "research",
+          archivedAt: null,
+        },
+        orderBy: [{ documentAt: "desc" }, { createdAt: "desc" }],
+        take: 6,
+        select: { id: true, slug: true, title: true, documentAt: true, staleAt: true },
+      })
+    : [];
 
   const pages = await listPages(wiki.id);
   const groups = new Map<string, typeof pages>();
@@ -139,6 +152,41 @@ export default async function WikiHome({
               </li>
             ))}
           </ol>
+        </section>
+      )}
+
+      {recentResearchReports.length > 0 && (
+        <section className="mt-10">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-stone-600">{t("recentResearchReports")}</h2>
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
+              {recentResearchReports.length}
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {recentResearchReports.map((report) => (
+              <Link
+                key={report.id}
+                href={`/wikis/${slug}/${report.slug}`}
+                className="group rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-indigo-600">
+                    {t("researchLabel")}
+                  </span>
+                  {report.staleAt && <span className="text-[11px] font-medium text-amber-700">{t("researchStale")}</span>}
+                </div>
+                <h3 className="line-clamp-2 font-semibold leading-snug text-stone-800 group-hover:text-indigo-700">
+                  {report.title}
+                </h3>
+                {report.documentAt && (
+                  <time className="mt-3 block font-mono text-[11px] tabular-nums text-stone-400" dateTime={report.documentAt.toISOString()}>
+                    {documentDate.format(report.documentAt)}
+                  </time>
+                )}
+              </Link>
+            ))}
+          </div>
         </section>
       )}
 

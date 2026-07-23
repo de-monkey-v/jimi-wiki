@@ -20,6 +20,8 @@ import { KnowledgeControls } from "@/components/KnowledgeControls";
 import { prisma } from "@/lib/db";
 import { isReservedSlug } from "@/lib/ontology";
 import { isPageSourcePromotionEligible } from "@/lib/page-source-promotion";
+import { ResearchArticle, type ResearchEvidence } from "@/components/research/ResearchArticle";
+import { safeResearchUrl } from "@/lib/research-markdown";
 
 export default async function PageView({
   params,
@@ -45,6 +47,7 @@ export default async function PageView({
   // 공개·모델 loader는 계속 active-only이므로 노출/AI 경계는 넓어지지 않는다.
   const page = await prisma.page.findUnique({ where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } } });
   if (!page) notFound();
+  const isResearch = page.kind === "document" && page.documentType === "research";
 
   // 온디맨드 기계 번역: ?lang=<locale> 이 원문 언어와 다를 때만 (캐시 우선) 번역본을 렌더.
   const pageLang = detectLang(page.body || page.title).code;
@@ -58,6 +61,7 @@ export default async function PageView({
     page.body.trim() &&
     !page.archivedAt &&
     page.modelAccess === "external" &&
+    !isResearch &&
     !isAiExcludedKind(page.kind)
   ) {
     // 비용 경계: 번역도 생성형 LLM 소비 → 채팅과 동일하게 일일 쿼터를 적용(초과 시 원문 표시).
@@ -80,10 +84,12 @@ export default async function PageView({
   }
 
   const existing = await existingSlugSet(wiki.id);
-  const html = await renderMarkdown(viewBody, {
-    hrefFor: (t) => `/wikis/${slug}/${t}`,
-    exists: (t) => existing.has(t),
-  });
+  const html = isResearch
+    ? ""
+    : await renderMarkdown(viewBody, {
+        hrefFor: (t) => `/wikis/${slug}/${t}`,
+        exists: (t) => existing.has(t),
+      });
   const [backlinks, outlinks, { prev, next }] = await Promise.all([
     getBacklinks(wiki.id, page.id),
     getOutlinks(wiki.id, page.id),
@@ -96,7 +102,51 @@ export default async function PageView({
     ? { title: prov.title, href: `/wikis/${slug}/sources/${prov.slug}`, url: prov.url }
     : null;
   // 파생 페이지: 유래한 원본(들) — 원문 뷰어로 링크
-  const sources = !isNote ? await getPageSources(wiki.id, page.id) : undefined;
+  const sources = !isNote && !isResearch ? await getPageSources(wiki.id, page.id) : undefined;
+  const researchRevision = isResearch
+    ? await prisma.pageRevision.findUnique({
+        where: { pageId_version: { pageId: page.id, version: page.currentVersion } },
+        select: {
+          sources: {
+            orderBy: [{ ordinal: "asc" }, { id: "asc" }],
+            select: {
+              sourceRevisionId: true,
+              sourceVersion: true,
+              sourceContentHash: true,
+              sourceSlug: true,
+              sourceRevision: {
+                select: {
+                  id: true,
+                  version: true,
+                  title: true,
+                  url: true,
+                  source: { select: { slug: true, currentVersion: true } },
+                },
+              },
+            },
+          },
+        },
+      })
+    : null;
+  const researchEvidence: ResearchEvidence[] = researchRevision?.sources.map((source, index) => {
+    const live = source.sourceRevision;
+    const evidenceSlug = source.sourceSlug ?? live?.source.slug ?? `deleted-source-${index + 1}`;
+    const historyPage = live
+      ? Math.max(0, Math.floor((live.source.currentVersion - live.version) / 50))
+      : 0;
+    return {
+      number: index + 1,
+      slug: evidenceSlug,
+      title: live?.title ?? null,
+      preservedHref: live
+        ? `/wikis/${encodeURIComponent(slug)}/sources/${encodeURIComponent(live.source.slug)}/history?page=${historyPage}&revision=${encodeURIComponent(live.id)}`
+        : null,
+      originalUrl: live?.url ? safeResearchUrl(live.url) || null : null,
+      version: source.sourceVersion,
+      contentHash: source.sourceContentHash,
+      deleted: source.sourceRevisionId === null || !live,
+    };
+  }) ?? [];
 
   // 로컬(이웃) 그래프: 파생 페이지에서 이웃이 있을 때만(그래프=정리된 지식. note는 focal이 숨겨져 headless가 되므로 제외)
   const neighborhood = isNote || page.archivedAt ? { nodes: [], edges: [] } : await getPageNeighborhood(wiki.id, pageSlug, 1);
@@ -167,10 +217,57 @@ export default async function PageView({
       {ts("archivedPage")}
     </div>
   ) : undefined;
+  const researchStatusNotice = isResearch && page.staleAt && !page.archivedAt ? (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+      {t("researchStale")}
+    </div>
+  ) : archivedNotice;
+  const knowledgeControls = canWrite ? (
+    <KnowledgeControls
+      resourceType="page"
+      wikiSlug={slug}
+      resourceSlug={page.slug}
+      currentVersion={page.currentVersion}
+      modelAccess={page.modelAccess}
+      archived={page.archivedAt != null}
+      personal={page.kind === "personal"}
+      owner={wiki.role === "owner"}
+      canLifecycle={page.origin !== "system"}
+      canPromote={isPageSourcePromotionEligible({
+        origin: page.origin,
+        kind: page.kind,
+        archivedAt: page.archivedAt,
+        reserved: isReservedSlug(page.slug),
+      })}
+    />
+  ) : undefined;
 
   return (
     <>
       {!page.archivedAt && <RecordVisit wikiSlug={slug} pageSlug={pageSlug} title={page.title} />}
+      {isResearch ? (
+        <ResearchArticle
+          title={page.title}
+          body={page.body}
+          wikiSlug={slug}
+          category={page.category}
+          existingSlugs={[...existing]}
+          evidence={researchEvidence}
+          canCreate={canWrite && !page.archivedAt}
+          canEdit={canWrite && !page.archivedAt}
+          editHref={canWrite && !page.archivedAt ? `/wikis/${slug}/${pageSlug}/edit` : undefined}
+          crumb={crumb}
+          headerMeta={headerMeta}
+          notice={researchStatusNotice}
+          controls={knowledgeControls}
+          pinControl={page.archivedAt ? undefined : <PinButton wikiSlug={slug} pageSlug={pageSlug} pinned={pinned} />}
+          backlinks={backlinks}
+          outlinks={outlinks}
+          prev={prev}
+          next={next}
+          localGraph={localGraph}
+        />
+      ) : (
       <ReadingPane
         title={viewTitle}
         html={html}
@@ -193,26 +290,9 @@ export default async function PageView({
         localGraph={localGraph}
         headerMeta={headerMeta}
         notice={archivedNotice}
-        controls={canWrite ? (
-          <KnowledgeControls
-            resourceType="page"
-            wikiSlug={slug}
-            resourceSlug={page.slug}
-            currentVersion={page.currentVersion}
-            modelAccess={page.modelAccess}
-            archived={page.archivedAt != null}
-            personal={page.kind === "personal"}
-            owner={wiki.role === "owner"}
-            canLifecycle={page.origin !== "system"}
-            canPromote={isPageSourcePromotionEligible({
-              origin: page.origin,
-              kind: page.kind,
-              archivedAt: page.archivedAt,
-              reserved: isReservedSlug(page.slug),
-            })}
-          />
-        ) : undefined}
+        controls={knowledgeControls}
       />
+      )}
     </>
   );
 }

@@ -207,7 +207,7 @@
     "personalWarning": "個人ノートはAI対象外ですが暗号化はされません — 本物のパスワードは保存しないでください。"
   },
   "DocumentTypes": {
-    "general": "一般", "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定", "reference": "参考資料", "plan": "計画", "spec": "仕様"
+    "general": "一般", "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定", "reference": "参考資料", "plan": "計画", "spec": "仕様", "research": "調査レポート"
   },
   "LoginActions": {
     "emptyCredentials": "メールアドレスとパスワードを入力してください",
@@ -252,6 +252,24 @@
     "edit": "編集",
     "derivedHeading": "このソースから派生したドキュメント",
     "derivedEmpty": "このソースから派生したドキュメントはまだありません。"
+  },
+  "ResearchArticle": {
+    "kicker": "調査レポート",
+    "edit": "編集",
+    "evidenceHeading": "根拠台帳",
+    "backToCitation": "引用 {number} に戻る",
+    "openEvidence": "根拠 {number} を開く",
+    "deletedEvidence": "削除された根拠",
+    "preservedCopy": "保存済み原文",
+    "original": "元のURL",
+    "diagramError": "この図を安全に描画できませんでした。代わりにソースを表示します。",
+    "copy": "コピー",
+    "download": "ダウンロード",
+    "downloadDiagram": "図をダウンロード",
+    "fullscreen": "全画面表示",
+    "exitFullscreen": "全画面を閉じる",
+    "copyTable": "表をコピー",
+    "downloadTable": "表をダウンロード"
   },
   "ReadingProvenanceCard": {
     "sectionLabel": "原文 (Source)",
@@ -577,6 +595,9 @@
     "emptyBodyWrite": "下からソースを収集するか新しいページを作成すると、ドキュメントと概念のつながりがここに整理されます。",
     "emptyBodyRead": "ページが追加されると、読めるドキュメントと概念のつながりがここに表示されます。",
     "recentProjectDocuments": "最近のプロジェクト文書",
+    "recentResearchReports": "最近の調査レポート",
+    "researchLabel": "調査",
+    "researchStale": "要確認",
     "systemActivity": "システム活動",
     "documentType": { "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定" }
   },
@@ -588,7 +609,7 @@
     "documentTypeLabel": "文書タイプ",
     "documentAtLabel": "文書日時",
     "documentType": {
-      "general": "一般", "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定", "reference": "参考資料", "plan": "計画", "spec": "仕様"
+      "general": "一般", "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定", "reference": "参考資料", "plan": "計画", "spec": "仕様", "research": "調査レポート"
     },
     "bodyPlaceholder": "Markdownで記述。ウィキリンクは [[ページスラッグ]] または [[スラッグ|表示名]]",
     "save": "保存",
@@ -598,7 +619,8 @@
     "connectionGraph": "接続グラフ",
     "myWikis": "マイウィキ",
     "emptyEditable": "空のページです。「編集」を押して内容を入力してください。",
-    "empty": "空のページです。"
+    "empty": "空のページです。",
+    "researchStale": "根拠ソースが変更または削除されました。レポートは保持されますが、主張の再確認が必要です。"
   },
   "WikisSlugReindexForm": {
     "reindexing": "再インデックス中…",

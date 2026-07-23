@@ -212,6 +212,339 @@ test("documents, preserve/search scopes, promotion idempotency, and API-key isol
     assert.doesNotMatch(pointer.body, /PRESERVED_SCOPE_CANARY/);
     assert.match(pointer.body, /원문만 보존됨/);
 
+    const preservedSecond = await content.createSourceSnapshot({
+      wikiId: wiki.id,
+      slug: "research-source-b",
+      title: "Research Source B",
+      url: "https://example.com/research-b",
+      body: "RESEARCH_SOURCE_B_CANARY",
+      curationState: "preserved",
+      context: { actor: "human", userId: user.id },
+    });
+    const otherWikiSource = await content.createSourceSnapshot({
+      wikiId: otherWiki.id,
+      slug: "other-wiki-research-source",
+      title: "Other Wiki Research Source",
+      body: "must not cross tenant boundary",
+      curationState: "preserved",
+      context: { actor: "human", userId: user.id },
+    });
+    const researchBody = [
+      "## 요약",
+      "",
+      `B 주장 [@${preservedSecond.source.slug}], A 주장 [@${preservedSource.slug}].`,
+      "",
+      `재인용 [@${preservedSecond.source.slug}].`,
+      "",
+      "```text",
+      "[@code-only-citation]",
+      "```",
+      "",
+      "```mermaid",
+      "flowchart LR",
+      "  A --> B",
+      "```",
+    ].join("\n");
+    const research = await documents.writeDocument({
+      wikiId: wiki.id,
+      userId: user.id,
+      actor: "agent",
+      externalAgent: true,
+      title: "Generated Research Report",
+      body: researchBody,
+      documentType: "research",
+      sourceSlugs: [preservedSecond.source.slug, preservedSource.slug],
+    });
+    assert.equal(research.staged, false);
+    if (research.staged) throw new Error("unreachable");
+    assert.equal(research.page.category, "research");
+    assert.equal(research.page.currentVersion, 1);
+    const researchV1 = await prisma.pageRevision.findUniqueOrThrow({
+      where: { pageId_version: { pageId: research.page.id, version: 1 } },
+      include: { sources: { orderBy: { ordinal: "asc" } } },
+    });
+    assert.deepEqual(researchV1.sources.map((source) => source.sourceSlug), [
+      preservedSecond.source.slug,
+      preservedSource.slug,
+    ]);
+    assert.deepEqual(researchV1.sources.map((source) => source.ordinal), [0, 1]);
+    assert.equal(new Set(researchV1.sources.map((source) => source.sourceRevisionId)).size, 2);
+
+    const filterTerm = "RESEARCH_FILTER_SATURATION_CANARY";
+    const generalSearchPages = Array.from({ length: search.POOL + 5 }, (_, index) => ({
+      id: `search-general-${index}`,
+      wikiId: wiki.id,
+      slug: `search-general-${index}`,
+      title: `Search General ${index}`,
+      kind: "document" as const,
+      documentType: "general" as const,
+      documentAt: new Date("2026-07-20T00:00:00.000Z"),
+      origin: "generated" as const,
+      modelAccess: "external" as const,
+    }));
+    await prisma.page.createMany({ data: generalSearchPages });
+    await prisma.searchChunk.createMany({
+      data: [
+        ...generalSearchPages.map((page, index) => ({
+          id: `search-general-chunk-${index}`,
+          wikiId: wiki.id,
+          refType: "page",
+          refId: page.id,
+          heading: "",
+          text: Array.from({ length: 20 }, () => filterTerm).join(" "),
+          hash: `search-general-hash-${index}`,
+          modelAccess: "external" as const,
+        })),
+        {
+          id: "search-research-chunk",
+          wikiId: wiki.id,
+          refType: "page",
+          refId: research.page.id,
+          heading: "",
+          text: filterTerm,
+          hash: "search-research-hash",
+          modelAccess: "external" as const,
+        },
+      ],
+    });
+    const filteredResearch = await search.modelSearch({
+      trust: "external",
+      wikiId: wiki.id,
+      queryText: filterTerm,
+      k: 10,
+      scope: "documents",
+      documentType: "research",
+    });
+    assert.deepEqual(
+      filteredResearch.map((hit) => hit.refId),
+      [research.page.id],
+      "documentType filter must apply before the candidate pool limit",
+    );
+    await prisma.searchChunk.deleteMany({
+      where: {
+        id: {
+          in: [
+            "search-research-chunk",
+            ...generalSearchPages.map((_, index) => `search-general-chunk-${index}`),
+          ],
+        },
+      },
+    });
+    await prisma.page.deleteMany({
+      where: { id: { in: generalSearchPages.map((page) => page.id) } },
+    });
+
+    await assert.rejects(
+      documents.writeDocument({
+        wikiId: wiki.id,
+        userId: user.id,
+        actor: "agent",
+        externalAgent: true,
+        title: "Mismatched Research",
+        body: `근거 [@${preservedSource.slug}]`,
+        documentType: "research",
+        sourceSlugs: [preservedSecond.source.slug],
+      }),
+      /research_citations_source_slugs_mismatch/,
+    );
+    await assert.rejects(
+      documents.writeDocument({
+        wikiId: wiki.id,
+        userId: user.id,
+        actor: "agent",
+        externalAgent: true,
+        title: "Cross Wiki Research",
+        body: `근거 [@${otherWikiSource.source.slug}]`,
+        documentType: "research",
+        sourceSlugs: [otherWikiSource.source.slug],
+      }),
+      /research_source_not_found/,
+    );
+    await assert.rejects(
+      documents.writeDocument({
+        wikiId: wiki.id,
+        userId: user.id,
+        actor: "agent",
+        externalAgent: true,
+        title: "Curated Source Research",
+        body: `근거 [@${curatedSource.source.slug}]`,
+        documentType: "research",
+        sourceSlugs: [curatedSource.source.slug],
+      }),
+      /research_source_not_found/,
+    );
+    await assert.rejects(
+      documents.writeDocument({
+        wikiId: wiki.id,
+        userId: user.id,
+        actor: "agent",
+        externalAgent: true,
+        title: "General With Source",
+        body: "no provenance",
+        documentType: "general",
+        sourceSlugs: [preservedSource.slug],
+      }),
+      /document_source_provenance_forbidden/,
+    );
+
+    const updatedResearch = await documents.writeDocument({
+      wikiId: wiki.id,
+      userId: user.id,
+      actor: "agent",
+      externalAgent: true,
+      slug: research.page.slug,
+      title: research.page.title,
+      body: `${researchBody}\n\n## 결론\n\n두 근거를 함께 본다.`,
+      documentType: "research",
+      sourceSlugs: [preservedSecond.source.slug, preservedSource.slug],
+      expectedVersion: research.page.currentVersion,
+    });
+    assert.equal(updatedResearch.staged, false);
+    if (updatedResearch.staged) throw new Error("unreachable");
+    assert.equal(updatedResearch.page.currentVersion, 2);
+    await assert.rejects(
+      documents.writeDocument({
+        wikiId: wiki.id,
+        userId: user.id,
+        actor: "agent",
+        externalAgent: true,
+        slug: research.page.slug,
+        title: research.page.title,
+        body: researchBody,
+        documentType: "research",
+        sourceSlugs: [preservedSecond.source.slug, preservedSource.slug],
+        expectedVersion: 1,
+      }),
+      /version conflict/,
+    );
+    await assert.rejects(
+      documents.appendDocument({
+        wikiId: wiki.id,
+        userId: user.id,
+        actor: "agent",
+        externalAgent: true,
+        slug: research.page.slug,
+        content: "append is unsafe",
+        expectedVersion: 2,
+      }),
+      /research_append_forbidden/,
+    );
+
+    const humanResearch = await documents.writeDocument({
+      wikiId: wiki.id,
+      userId: user.id,
+      actor: "human",
+      externalAgent: false,
+      title: "Human Research Report",
+      body: `사람 보고서 [@${preservedSource.slug}]`,
+      documentType: "research",
+      sourceSlugs: [preservedSource.slug],
+    });
+    assert.equal(humanResearch.staged, false);
+    if (humanResearch.staged) throw new Error("unreachable");
+    const stagedResearch = await documents.writeDocument({
+      wikiId: wiki.id,
+      userId: user.id,
+      actor: "agent",
+      externalAgent: true,
+      slug: humanResearch.page.slug,
+      title: humanResearch.page.title,
+      body: `에이전트 제안 [@${preservedSource.slug}]`,
+      documentType: "research",
+      sourceSlugs: [preservedSource.slug],
+      expectedVersion: humanResearch.page.currentVersion,
+    });
+    assert.equal(stagedResearch.staged, true);
+    if (!stagedResearch.staged) throw new Error("expected staged research");
+    const stagedResearchSources = await prisma.knowledgeDraftSource.findMany({
+      where: { draftId: stagedResearch.draftId },
+      orderBy: { ordinal: "asc" },
+    });
+    assert.deepEqual(stagedResearchSources.map((source) => source.ordinal), [0]);
+    await builds.acceptKnowledgeDraft(stagedResearch.buildId, stagedResearch.draftId, user.id);
+    const acceptedResearch = await prisma.page.findUniqueOrThrow({ where: { id: humanResearch.page.id } });
+    assert.equal(acceptedResearch.origin, "mixed");
+    assert.equal(acceptedResearch.currentVersion, 2);
+
+    const archivedEvidenceSource = await content.createSourceSnapshot({
+      wikiId: wiki.id,
+      slug: "research-source-archive",
+      title: "Research Source Archive",
+      body: "RESEARCH_SOURCE_ARCHIVE_CANARY",
+      curationState: "preserved",
+      context: { actor: "human", userId: user.id },
+    });
+    const archiveResearch = await documents.writeDocument({
+      wikiId: wiki.id,
+      userId: user.id,
+      actor: "agent",
+      externalAgent: true,
+      title: "Archive Lifecycle Research",
+      body: `근거 [@${archivedEvidenceSource.source.slug}]`,
+      documentType: "research",
+      sourceSlugs: [archivedEvidenceSource.source.slug],
+    });
+    assert.equal(archiveResearch.staged, false);
+    if (archiveResearch.staged) throw new Error("unreachable");
+    const { trashSource } = await import("../../src/lib/trash");
+    await trashSource({
+      wikiId: wiki.id,
+      sourceId: archivedEvidenceSource.source.id,
+      expectedVersion: archivedEvidenceSource.source.currentVersion,
+      userId: user.id,
+    });
+    const archiveResearchAfter = await prisma.page.findUniqueOrThrow({ where: { id: archiveResearch.page.id } });
+    assert.ok(archiveResearchAfter.staleAt);
+    assert.equal(archiveResearchAfter.currentVersion, 2);
+    const archiveResearchEvidence = await prisma.pageRevisionSource.findMany({
+      where: {
+        pageRevision: {
+          pageId: archiveResearch.page.id,
+          version: archiveResearchAfter.currentVersion,
+        },
+      },
+    });
+    assert.deepEqual(archiveResearchEvidence.map((source) => source.sourceRevisionId), [
+      archivedEvidenceSource.revision.id,
+    ], "archive lifecycle must preserve the exact cited SourceRevision rather than retargeting it");
+
+    const researchBeforePurge = await prisma.page.findUniqueOrThrow({ where: { id: research.page.id } });
+    await content.purgeSource({
+      wikiId: wiki.id,
+      sourceId: preservedSecond.source.id,
+      expectedVersion: preservedSecond.source.currentVersion,
+    });
+    const researchAfterPurge = await prisma.page.findUniqueOrThrow({ where: { id: research.page.id } });
+    assert.equal(researchAfterPurge.currentVersion, researchBeforePurge.currentVersion + 1);
+    assert.ok(researchAfterPurge.staleAt);
+    const purgedEvidence = await prisma.pageRevision.findUniqueOrThrow({
+      where: {
+        pageId_version: {
+          pageId: research.page.id,
+          version: researchAfterPurge.currentVersion,
+        },
+      },
+      include: { sources: { orderBy: { ordinal: "asc" } } },
+    });
+    assert.equal(purgedEvidence.sources[0]?.sourceRevisionId, null);
+    assert.equal(purgedEvidence.sources[0]?.sourceSlug, preservedSecond.source.slug);
+    assert.ok(purgedEvidence.sources[0]?.purgedAt);
+    assert.equal(purgedEvidence.sources[1]?.sourceSlug, preservedSource.slug);
+    const restoredResearch = await content.restorePageRevision({
+      wikiId: wiki.id,
+      pageId: research.page.id,
+      expectedVersion: researchAfterPurge.currentVersion,
+      revisionId: researchV1.id,
+      context: { actor: "restore", userId: user.id },
+    });
+    assert.ok(restoredResearch.page.staleAt);
+    const restoredResearchEvidence = await prisma.pageRevisionSource.findMany({
+      where: { pageRevisionId: restoredResearch.revision.id },
+      orderBy: { ordinal: "asc" },
+    });
+    assert.equal(restoredResearchEvidence[0]?.sourceRevisionId, null);
+    assert.equal(restoredResearchEvidence[0]?.sourceSlug, preservedSecond.source.slug);
+
     const isolationBuild = await prisma.knowledgeBuild.create({
       data: {
         wikiId: wiki.id,

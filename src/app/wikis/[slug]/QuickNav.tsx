@@ -33,6 +33,7 @@ export function QuickNavProvider({
   children: React.ReactNode;
 }) {
   const t = useTranslations("WikiQuickNav");
+  const td = useTranslations("DocumentTypes");
   const tk = useTranslations("Kinds");
   const router = useRouter();
   const inputId = useId();
@@ -222,7 +223,11 @@ export function QuickNavProvider({
         ) : (
           <ul id={listId} role="listbox" className="mt-2 max-h-80 space-y-0.5 overflow-y-auto overscroll-contain">
             {results.map((item, i) => {
-              const kindLabel = item.refType === "source" ? t("sourceResult") : tk.has(item.kind) ? tk(item.kind) : t("pageResult");
+              const kindLabel = item.documentType === "research"
+                ? td("research")
+                : item.refType === "source"
+                  ? t("sourceResult")
+                  : tk.has(item.kind) ? tk(item.kind) : t("pageResult");
               const showGroup = Boolean(query.trim() && item.group && results[i - 1]?.group !== item.group);
               return (
                 <Fragment key={item.key}>

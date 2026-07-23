@@ -12,6 +12,7 @@ export type QuickNavSearchItem = {
   slug: string;
   title: string;
   kind: string;
+  documentType: string | null;
   heading: string | null;
   snippet: string | null;
   group: "protected" | "knowledge" | "documents" | null;
@@ -35,7 +36,7 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
       where: { wikiId: wiki.id, archivedAt: null, slug: { not: ONTOLOGY_SLUG } },
       orderBy: [{ kind: "asc" }, { title: "asc" }],
       take: RESULT_LIMIT,
-      select: { slug: true, title: true, kind: true },
+      select: { slug: true, title: true, kind: true, documentType: true },
     });
     return pages.map((page) => ({
       key: `page:${page.slug}`,
@@ -43,6 +44,7 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
       slug: page.slug,
       title: page.title,
       kind: page.kind,
+      documentType: page.documentType,
       heading: null,
       snippet: null,
       group: null,
@@ -66,7 +68,7 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
     pageIds.length
       ? prisma.page.findMany({
           where: { wikiId: wiki.id, archivedAt: null, id: { in: pageIds } },
-          select: { id: true, slug: true, title: true, kind: true },
+          select: { id: true, slug: true, title: true, kind: true, documentType: true },
         })
       : [],
     sourceIds.length
@@ -90,6 +92,7 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
           slug: page.slug,
           title: page.title,
           kind: page.kind,
+          documentType: page.documentType,
           heading: hit.heading || null,
           snippet: hit.snippet || null,
           group,
@@ -106,6 +109,7 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
           slug: source.slug,
           title: source.title,
           kind: "source",
+          documentType: null,
           heading: hit.heading || null,
           snippet: hit.snippet || null,
           group,

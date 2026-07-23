@@ -54,7 +54,7 @@ test("MCP personal/project profiles expose the intended tools and route payloads
     const personalTools = (await personal.client.listTools()).tools.map((tool) => tool.name);
     for (const expected of [
       "preserve_url", "preserve_text", "curate_url", "curate_text", "curate_source",
-      "record_document", "record_worklog", "search_documents", "append_document",
+      "record_document", "record_research_report", "record_worklog", "search_documents", "append_document",
       "save_link", "list_saved_links", "promote_saved_link",
       "trash_saved_link", "restore_saved_link", "list_trash", "trash_page", "restore_page", "trash_source", "restore_source",
     ]) {
@@ -63,6 +63,8 @@ test("MCP personal/project profiles expose the intended tools and route payloads
     assert.equal(personalTools.includes("delete_page"), false, "permanent delete tool must not be exposed");
     assert.match(personal.client.getInstructions() ?? "", /비밀번호·API key·token/);
     assert.match(personal.client.getInstructions() ?? "", /읽을거리는 항상 요약을 시도한다/);
+    assert.match(personal.client.getInstructions() ?? "", /기본 8~12개의 독립 출처/);
+    assert.match(personal.client.getInstructions() ?? "", /먼저 preserve_url/);
 
     const missingSummary = await personal.client.callTool({
       name: "save_link",
@@ -88,6 +90,15 @@ test("MCP personal/project profiles expose the intended tools and route payloads
       },
     });
     await personal.client.callTool({ name: "search_documents", arguments: { query: "worklog", k: 4 } });
+    await personal.client.callTool({
+      name: "record_research_report",
+      arguments: {
+        title: "MCP Research",
+        body: "## 요약\n\n주장 [@source-a].",
+        sourceSlugs: ["source-a"],
+      },
+    });
+    await personal.client.callTool({ name: "search_documents", arguments: { query: "research", type: "research", k: 4 } });
     await personal.client.callTool({ name: "promote_saved_link", arguments: { id: "saved-1" } });
     await personal.client.callTool({ name: "save_link", arguments: { url: "https://example.com/?utm_source=test", summary: "- 핵심\n\n볼 가치: 있음" } });
     await personal.client.callTool({
@@ -108,6 +119,21 @@ test("MCP personal/project profiles expose the intended tools and route payloads
       "목표", "변경 사항", "결정", "문제와 해결", "검증", "남은 작업", "참고 자료",
     ]);
     assert.ok(seen.some((request) => request.url.includes("/search?") && request.url.includes("scope=documents")));
+    assert.ok(seen.some((request) =>
+      request.url.includes("/search?") &&
+      request.url.includes("scope=documents") &&
+      request.url.includes("type=research")
+    ));
+    const research = seen.find((request) =>
+      request.url.endsWith("/api/wikis/personal-profile/documents") &&
+      (request.body as { type?: string })?.type === "research"
+    );
+    assert.deepEqual(research?.body, {
+      title: "MCP Research",
+      body: "## 요약\n\n주장 [@source-a].",
+      sourceSlugs: ["source-a"],
+      type: "research",
+    });
     assert.ok(seen.some((request) => request.url.endsWith("/saved-links/saved-1/promote")));
     assert.ok(seen.some((request) => request.method === "DELETE" && request.url.endsWith("/saved-links/saved-1")));
     assert.ok(seen.some((request) => request.url.endsWith("/saved-links/saved-1/restore")));

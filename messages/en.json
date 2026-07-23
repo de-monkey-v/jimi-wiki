@@ -207,7 +207,7 @@
     "personalWarning": "Personal notes are excluded from AI but not encrypted — don’t store real passwords."
   },
   "DocumentTypes": {
-    "general": "General", "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision", "reference": "Reference", "plan": "Plan", "spec": "Spec"
+    "general": "General", "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision", "reference": "Reference", "plan": "Plan", "spec": "Spec", "research": "Research"
   },
   "LoginActions": {
     "emptyCredentials": "Enter your email and password",
@@ -252,6 +252,24 @@
     "edit": "Edit",
     "derivedHeading": "Documents derived from this source",
     "derivedEmpty": "No documents have been derived from this source yet."
+  },
+  "ResearchArticle": {
+    "kicker": "Research report",
+    "edit": "Edit",
+    "evidenceHeading": "Evidence ledger",
+    "backToCitation": "Back to citation {number}",
+    "openEvidence": "Open evidence {number}",
+    "deletedEvidence": "Deleted evidence",
+    "preservedCopy": "Preserved copy",
+    "original": "Original URL",
+    "diagramError": "This diagram could not be rendered safely. Its source is shown instead.",
+    "copy": "Copy",
+    "download": "Download",
+    "downloadDiagram": "Download diagram",
+    "fullscreen": "View fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "copyTable": "Copy table",
+    "downloadTable": "Download table"
   },
   "ReadingProvenanceCard": {
     "sectionLabel": "Source",
@@ -577,6 +595,9 @@
     "emptyBodyWrite": "Collect sources below or create a new page, and your documents and concept links will come together here.",
     "emptyBodyRead": "Once pages are added, readable documents and concept links will show up here.",
     "recentProjectDocuments": "Recent project documents",
+    "recentResearchReports": "Recent research reports",
+    "researchLabel": "Research",
+    "researchStale": "Needs review",
     "systemActivity": "System activity",
     "documentType": { "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision" }
   },
@@ -588,7 +609,7 @@
     "documentTypeLabel": "Document type",
     "documentAtLabel": "Document time",
     "documentType": {
-      "general": "General", "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision", "reference": "Reference", "plan": "Plan", "spec": "Spec"
+      "general": "General", "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision", "reference": "Reference", "plan": "Plan", "spec": "Spec", "research": "Research"
     },
     "bodyPlaceholder": "Write in Markdown. Wikilinks: [[page-slug]] or [[slug|display name]]",
     "save": "Save",
@@ -598,7 +619,8 @@
     "connectionGraph": "Connection graph",
     "myWikis": "My wikis",
     "emptyEditable": "This page is empty. Click Edit to add content.",
-    "empty": "This page is empty."
+    "empty": "This page is empty.",
+    "researchStale": "One or more evidence sources changed or were deleted. The report remains available, but its claims should be reviewed."
   },
   "WikisSlugReindexForm": {
     "reindexing": "Reindexing…",

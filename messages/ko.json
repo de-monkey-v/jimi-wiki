@@ -207,7 +207,7 @@
     "personalWarning": "개인 노트는 AI에서 제외되지만 암호화되지는 않습니다 — 진짜 비밀번호는 저장하지 마세요."
   },
   "DocumentTypes": {
-    "general": "일반", "worklog": "작업 기록", "troubleshooting": "문제 해결", "decision": "결정", "reference": "참고 자료", "plan": "계획", "spec": "스펙"
+    "general": "일반", "worklog": "작업 기록", "troubleshooting": "문제 해결", "decision": "결정", "reference": "참고 자료", "plan": "계획", "spec": "스펙", "research": "연구 보고서"
   },
   "LoginActions": {
     "emptyCredentials": "이메일과 비밀번호를 입력하세요",
@@ -252,6 +252,24 @@
     "edit": "편집",
     "derivedHeading": "이 소스에서 파생된 문서",
     "derivedEmpty": "아직 이 소스에서 파생된 문서가 없습니다."
+  },
+  "ResearchArticle": {
+    "kicker": "연구 보고서",
+    "edit": "편집",
+    "evidenceHeading": "근거 장부",
+    "backToCitation": "{number}번 인용으로 돌아가기",
+    "openEvidence": "{number}번 근거 열기",
+    "deletedEvidence": "삭제된 근거",
+    "preservedCopy": "보존 원문",
+    "original": "원본 URL",
+    "diagramError": "이 도표를 안전하게 렌더링하지 못했습니다. 대신 원본 코드를 표시합니다.",
+    "copy": "복사",
+    "download": "다운로드",
+    "downloadDiagram": "도표 다운로드",
+    "fullscreen": "전체 화면",
+    "exitFullscreen": "전체 화면 닫기",
+    "copyTable": "표 복사",
+    "downloadTable": "표 다운로드"
   },
   "ReadingProvenanceCard": {
     "sectionLabel": "원문 (Source)",
@@ -577,6 +595,9 @@
     "emptyBodyWrite": "아래에서 소스를 수집하거나 새 페이지를 만들면 문서와 개념 연결이 이곳에 정리됩니다.",
     "emptyBodyRead": "페이지가 추가되면 읽을 수 있는 문서와 개념 연결이 이곳에 표시됩니다.",
     "recentProjectDocuments": "최근 프로젝트 문서",
+    "recentResearchReports": "최근 연구 보고서",
+    "researchLabel": "Research",
+    "researchStale": "검토 필요",
     "systemActivity": "시스템 활동",
     "documentType": { "worklog": "작업 기록", "troubleshooting": "문제 해결", "decision": "결정" }
   },
@@ -588,7 +609,7 @@
     "documentTypeLabel": "문서 유형",
     "documentAtLabel": "문서 시각",
     "documentType": {
-      "general": "일반", "worklog": "작업 기록", "troubleshooting": "문제 해결", "decision": "결정", "reference": "참고 자료", "plan": "계획", "spec": "스펙"
+      "general": "일반", "worklog": "작업 기록", "troubleshooting": "문제 해결", "decision": "결정", "reference": "참고 자료", "plan": "계획", "spec": "스펙", "research": "연구 보고서"
     },
     "bodyPlaceholder": "마크다운으로 작성. 위키링크는 [[페이지-슬러그]] 또는 [[슬러그|표시명]]",
     "save": "저장",
@@ -598,7 +619,8 @@
     "connectionGraph": "연결 그래프",
     "myWikis": "내 위키",
     "emptyEditable": "빈 페이지입니다. 편집을 눌러 내용을 작성하세요.",
-    "empty": "빈 페이지입니다."
+    "empty": "빈 페이지입니다.",
+    "researchStale": "근거 원문이 변경되었거나 삭제되었습니다. 보고서는 보존되지만 주장을 다시 검토해야 합니다."
   },
   "WikisSlugReindexForm": {
     "reindexing": "재색인 중…",

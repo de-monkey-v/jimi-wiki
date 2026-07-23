@@ -33,7 +33,9 @@ export async function refreshPageDerivedState(wikiId: string, pageId: string): P
       select: { sources: { select: { sourceRevision: { select: { sourceId: true } } } } },
     });
     if (!currentRevision) throw new Error(`Page projection/current revision mismatch: ${current.id}@${current.currentVersion}`);
-    const contributionSourceIds = [...new Set(currentRevision.sources.map((source) => source.sourceRevision.sourceId))];
+    const contributionSourceIds = [...new Set(currentRevision.sources.flatMap((source) =>
+      source.sourceRevision ? [source.sourceRevision.sourceId] : []
+    ))];
     const targets = extractWikiTargets(current.body);
     const resolved = targets.length
       ? await tx.page.findMany({
@@ -97,7 +99,9 @@ export async function rebuildPageContributions(wikiId: string): Promise<void> {
     const rows = pages.flatMap((page) => {
       const revision = page.revisions[0];
       if (!revision || revision.version !== page.currentVersion) return [];
-      return [...new Set(revision.sources.map((source) => source.sourceRevision.sourceId))].map((sourceId) => ({
+      return [...new Set(revision.sources.flatMap((source) =>
+        source.sourceRevision ? [source.sourceRevision.sourceId] : []
+      ))].map((sourceId) => ({
         wikiId,
         pageId: page.id,
         sourceId,

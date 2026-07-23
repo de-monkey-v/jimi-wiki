@@ -25,6 +25,7 @@
 | 정리 편입 | `curate_url` / `curate_text` | `POST /ingest {mode:"curate",...}` | 기존 `ingest_*`도 curate 별칭 |
 | 보존 원문 정리 | `curate_source(sourceSlug)` | `POST /sources/{slug}/curate` | blob-only 파일은 이때 추출/OCR 후 새 SourceRevision을 만들며, 게시 성공 뒤에만 curated 전환 |
 | 문서 기록 | `record_document(...)` | `POST /documents` | `general|worklog|troubleshooting|decision|reference|plan|spec` |
+| 연구 보고서 | `record_research_report(...)` | `POST /documents {type:"research"}` | preserved Source 1~30개, `[@slug]` 첫 등장 순서와 `sourceSlugs` 일치 |
 | 작업 기록 | `record_worklog(...)` | `POST /documents` | 7개 고정 heading |
 | 문서 추가 | `append_document(slug, content, expectedVersion)` | `POST /documents/{slug}/append` | document 전용, CAS |
 | 온톨로지 조회 | `get_ontology()` | `GET /ontology` | category 인스턴스·관계 어휘. 재사용 후보 확인 |
@@ -47,6 +48,13 @@
 - `sourceSlug`: 근거 원문 slug. **note는 필수**(없으면 `note_requires_source` 거부) — provenance로 연결된다. 파생 페이지는 선택 — 기여(contribution)로 기록된다.
 - `embed` (선택): `true`면 위키의 미색인 청크 전체를 임베딩(시맨틱 검색 반영). **작업의 마지막 write_page 1회**에만 넣으면 충분하다.
 - 기존 slug 수정은 `expectedVersion` 필수다. 충돌은 `409 version_conflict`; 사람/혼합 문서에 대한 외부 에이전트 수정은 `202 {staged:true}`다.
+
+## record_research_report 필드
+
+- `title`, `body`, `sourceSlugs`는 필수다. `sourceSlugs`는 같은 위키의 active external `curationState=preserved` Source 1~30개만 허용한다.
+- 본문의 코드 블록 밖 `[@source-slug]`를 첫 등장 순서로 추출한 목록이 `sourceSlugs`와 정확히 같아야 한다. 같은 Source 재인용은 같은 번호를 쓴다.
+- `slug`, `documentAt`, `category`, `expectedVersion`은 선택이다. 새 보고서 category 기본값은 `research`.
+- `expectedVersion`은 명시한 기존 research slug 갱신에만 사용한다. 연구 보고서에는 `append_document`를 사용하지 않는다.
 
 ## 인증 경계 — 무엇이 API 키로 되고 안 되나
 

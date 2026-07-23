@@ -300,7 +300,7 @@ export async function stageExternalPageProposal(input: {
   buildInput?: BuildInputItem;
 }): Promise<{ buildId: string; draftId: string }> {
   if (input.page.modelAccess !== "external") throw new Error("internalOnly Page cannot receive an external proposal");
-  const sourceRevisionIds = [...new Set(input.sourceRevisionIds)].sort();
+  const sourceRevisionIds = [...new Set(input.sourceRevisionIds)];
   return withModelPolicyWriteLock(input.wikiId, async (tx) => {
     const current = await tx.page.findFirst({
       where: { id: input.page.id, wikiId: input.wikiId, slug: input.page.slug },
@@ -317,8 +317,13 @@ export async function stageExternalPageProposal(input: {
       throw new Error("Page changed before external proposal staging");
     }
     if (input.kind === "document") {
-      if (!input.documentType || !input.documentAt || sourceRevisionIds.length > 0) {
-        throw new Error("document proposal requires metadata and cannot attach Source provenance");
+      const isResearch = input.documentType === "research";
+      if (
+        !input.documentType ||
+        !input.documentAt ||
+        (isResearch ? sourceRevisionIds.length < 1 || sourceRevisionIds.length > 30 : sourceRevisionIds.length > 0)
+      ) {
+        throw new Error("document proposal metadata/provenance is invalid");
       }
       const pending = await tx.knowledgeDraft.count({
         where: {
@@ -376,7 +381,9 @@ export async function stageExternalPageProposal(input: {
           sourceRevisionIds,
         }),
         validation: { ok: true, source: "external-agent", sourceCount: sourceRevisionIds.length },
-        sources: { create: sourceRevisionIds.map((sourceRevisionId) => ({ sourceRevisionId })) },
+        sources: {
+          create: sourceRevisionIds.map((sourceRevisionId, ordinal) => ({ sourceRevisionId, ordinal })),
+        },
       },
       select: { id: true },
     });
@@ -1021,13 +1028,17 @@ export async function stageBuildDrafts(
           suppressedAt: null,
           contentHash: knowledgeDraftHash(draft),
           validation: { ok: true, sourceCount: draft.sourceRevisionIds.length },
-          sources: { create: draft.sourceRevisionIds.map((sourceRevisionId) => ({ sourceRevisionId })) },
+          sources: {
+            create: draft.sourceRevisionIds.map((sourceRevisionId, ordinal) => ({ sourceRevisionId, ordinal })),
+          },
         },
       });
     }
     const archiveAt = build.startedAt ?? build.createdAt;
     for (const page of staleGenerated) {
-      const sourceRevisionIds = page.revisions[0]?.sources.map((source) => source.sourceRevisionId).sort() ?? [];
+      const sourceRevisionIds = page.revisions[0]?.sources.flatMap((source) =>
+        source.sourceRevisionId ? [source.sourceRevisionId] : []
+      ).sort() ?? [];
       await tx.knowledgeDraft.create({
         data: {
           buildId,
@@ -1048,7 +1059,9 @@ export async function stageBuildDrafts(
           suppressedAt: null,
           contentHash: sha(JSON.stringify(["archive", page.id, page.currentVersion, sourceRevisionIds])),
           validation: { ok: true, action: "archive", sourceCount: sourceRevisionIds.length },
-          sources: { create: sourceRevisionIds.map((sourceRevisionId) => ({ sourceRevisionId })) },
+          sources: {
+            create: sourceRevisionIds.map((sourceRevisionId, ordinal) => ({ sourceRevisionId, ordinal })),
+          },
         },
       });
     }
@@ -1151,7 +1164,9 @@ async function rebuildPageContributionsTx(tx: ContentTransaction, wikiId: string
   const rows = pages.flatMap((page) => {
     const revision = page.revisions[0];
     if (!revision || revision.version !== page.currentVersion) throw new Error("Page contribution revision mismatch");
-    return [...new Set(revision.sources.map((source) => source.sourceRevision.sourceId))].map((sourceId) => ({
+    return [...new Set(revision.sources.flatMap((source) =>
+      source.sourceRevision ? [source.sourceRevision.sourceId] : []
+    ))].map((sourceId) => ({
       wikiId,
       pageId: page.id,
       sourceId,
@@ -1192,7 +1207,16 @@ function assertDraftIntegrity(
   if (draft.kind === "meta" || draft.kind === "personal") {
     throw new Error(`knowledge draft kind is not publishable: ${draft.kind}`);
   }
-  if (draft.kind === "document" && (!draft.documentType || !draft.documentAt || sourceRevisionIds.length > 0)) {
+  if (
+    draft.kind === "document" &&
+    (
+      !draft.documentType ||
+      !draft.documentAt ||
+      (draft.documentType === "research"
+        ? sourceRevisionIds.length < 1 || sourceRevisionIds.length > 30
+        : sourceRevisionIds.length > 0)
+    )
+  ) {
     throw new Error("document draft metadata/provenance is invalid");
   }
   const expected = validation.action === "archive"
@@ -1231,13 +1255,20 @@ async function publishKnowledgeBuildTx(
 
     const drafts = await tx.knowledgeDraft.findMany({
       where: { buildId },
-      include: { sources: { select: { sourceRevisionId: true } } },
+      include: {
+        sources: {
+          orderBy: [{ ordinal: "asc" }, { sourceRevisionId: "asc" }],
+          select: { sourceRevisionId: true },
+        },
+      },
       orderBy: { slug: "asc" },
     });
     let published = 0;
     for (const draft of drafts) {
       if (draft.status !== "staged") continue;
-      const sourceRevisionIds = draft.sources.map((source) => source.sourceRevisionId).sort();
+      const sourceRevisionIds = draft.sources.flatMap((source) =>
+        source.sourceRevisionId ? [source.sourceRevisionId] : []
+      );
       assertDraftIntegrity(draft, sourceRevisionIds);
       const page = await tx.page.findUnique({
         where: { wikiId_slug: { wikiId: build.wikiId, slug: draft.slug } },
@@ -1262,6 +1293,7 @@ async function publishKnowledgeBuildTx(
           origin: "generated",
           modelAccess: "external",
           sourceRevisionIds,
+          requireResearchSourcesPreserved: draft.documentType === "research",
           context: { actor: "agent", reason: "knowledge build publish", buildId, agentRunId: build.agentRunId },
         });
         changedPageIds.add(result.page.id);
@@ -1304,6 +1336,7 @@ async function publishKnowledgeBuildTx(
           staleAt: draft.staleAt,
         },
         sourceRevisionIds,
+        requireResearchSourcesPreserved: draft.documentType === "research",
         context: { actor: "agent", reason: draft.archivedAt ? "full build stale archive" : "knowledge build publish", buildId, agentRunId: build.agentRunId },
       });
       changedPageIds.add(result.page.id);
@@ -1526,7 +1559,12 @@ export async function acceptKnowledgeDraft(
     await assertCurrentExternalInputsTx(tx, build.wikiId, manifest.inputs, manifest.curateSourceRevisionId);
     const draft = await tx.knowledgeDraft.findFirst({
       where: { id: draftId, buildId },
-      include: { sources: { select: { sourceRevisionId: true } } },
+      include: {
+        sources: {
+          orderBy: [{ ordinal: "asc" }, { sourceRevisionId: "asc" }],
+          select: { sourceRevisionId: true },
+        },
+      },
     });
     if (!draft) throw new Error("draft not found");
     if (draft.status !== "conflict") throw new Error(`draft cannot be accepted from status ${draft.status}`);
@@ -1541,7 +1579,10 @@ export async function acceptKnowledgeDraft(
       const buildResult = await publishKnowledgeBuildTx(tx, buildId, changedPageIds);
       return { result: { accepted: false, stale: true } as const, buildResult };
     }
-    assertDraftIntegrity(draft, draft.sources.map((source) => source.sourceRevisionId).sort());
+    const sourceRevisionIds = draft.sources.flatMap((source) =>
+      source.sourceRevisionId ? [source.sourceRevisionId] : []
+    );
+    assertDraftIntegrity(draft, sourceRevisionIds);
     const claimed = await tx.knowledgeDraft.updateMany({
       where: { id: draft.id, buildId, status: "conflict" },
       data: { status: "accepted" },
@@ -1566,7 +1607,8 @@ export async function acceptKnowledgeDraft(
         suppressedAt: page.suppressedAt,
         staleAt: null,
       },
-      sourceRevisionIds: draft.sources.map((source) => source.sourceRevisionId),
+      sourceRevisionIds,
+      requireResearchSourcesPreserved: draft.documentType === "research",
       acceptedAiDraft: true,
       context: { actor: "agent", reason: "human-approved knowledge draft", userId, buildId, agentRunId: build.agentRunId },
     });

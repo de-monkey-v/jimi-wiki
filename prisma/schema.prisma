@@ -46,6 +46,7 @@ enum DocumentType {
   reference
   plan
   spec
+  research
 }
 
 enum SourceCurationState {
@@ -404,13 +405,22 @@ model PageRevision {
 }
 
 model PageRevisionSource {
+  id                 String          @id @default(cuid())
   pageRevisionId   String
-  sourceRevisionId String
+  sourceRevisionId String?
+  ordinal           Int?
+  sourceRevisionRef String?
+  sourceVersion     Int?
+  sourceContentHash String?
+  sourceSlug        String?
+  purgedAt          DateTime?
   pageRevision     PageRevision   @relation(fields: [pageRevisionId], references: [id], onDelete: Cascade)
-  sourceRevision   SourceRevision @relation(fields: [sourceRevisionId], references: [id], onDelete: Cascade)
+  sourceRevision   SourceRevision? @relation(fields: [sourceRevisionId], references: [id], onDelete: SetNull)
 
-  @@id([pageRevisionId, sourceRevisionId])
+  @@unique([pageRevisionId, sourceRevisionId])
+  @@unique([pageRevisionId, ordinal])
   @@index([sourceRevisionId])
+  @@index([sourceRevisionRef])
 }
 
 // 온디맨드 기계 번역 캐시. (page, locale)당 1행. 원문이 바뀌면 sourceHash 불일치로 재번역.
@@ -705,10 +715,12 @@ model KnowledgeDraft {
 model KnowledgeDraftSource {
   draftId          String
   sourceRevisionId String
+  ordinal          Int?
   draft            KnowledgeDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
   sourceRevision   SourceRevision @relation(fields: [sourceRevisionId], references: [id], onDelete: Cascade)
 
   @@id([draftId, sourceRevisionId])
+  @@unique([draftId, ordinal])
   @@index([sourceRevisionId])
 }
 

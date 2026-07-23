@@ -31,7 +31,7 @@ Apply and test this in the tailnet policy editor before relying on it. Policy ed
 Use a committed release ref; never deploy a dirty checkout.
 
 ```bash
-release="$(ops/deploy.sh build v0.2.0)"
+release="$(ops/deploy.sh build v0.3.0)"
 ops/prepare-env.sh \
   --app-url https://<device>.<tailnet>.ts.net \
   --login <TAILSCALE_ALLOWED_LOGIN> \
@@ -131,6 +131,6 @@ tailscale funnel status
 
 All four application ports must be loopback-only, readiness must be 200, and Funnel must be off. Verify an old key returns 401, the new personal key succeeds on its wiki, and it gets 404 on another wiki.
 
-`ops/deploy.sh rollback` swaps the release symlink and restarts services. It does not reverse database migrations. For a non-backward-compatible migration or account-reset rollback, stop all writers, restore the encrypted pre-reset database/blob backup, then run `ops/hermes-jimi-mcp.sh restore-pre-reset` to restore the protected matching Hermes key/config snapshot.
+Keep `v0.2.0` as the previous release. Before the first research row is created, `ops/deploy.sh rollback` may swap the release symlink back and restart services. Once research rows exist, a rollback that also needs the old database contract must stop every writer and restore the encrypted backup taken immediately before this cutover; the release symlink alone is not a database rollback. For an account-reset rollback, restore that same database/blob backup, then run `ops/hermes-jimi-mcp.sh restore-pre-reset` to restore the protected matching Hermes key/config snapshot.
 
 `linger=yes` restarts user services after the WSL distribution starts. The Windows logon task starts the distribution; test a real Windows reboot separately because that also exercises Docker Desktop startup ordering.

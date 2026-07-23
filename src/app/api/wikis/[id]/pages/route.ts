@@ -152,6 +152,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (kind === "document" && (!documentType || !documentAt)) {
     return NextResponse.json({ error: "document_metadata_required" }, { status: 400 });
   }
+  if (documentType === "research") {
+    return NextResponse.json({ error: "use_documents_api" }, { status: 409 });
+  }
   // upsert update에서 생략은 현재 정책 유지, create에서만 확정 기본값 external을 적용한다.
   const modelAccess = body.modelAccess ?? occupied?.modelAccess ?? "external";
   if (modelAccess !== "external" && modelAccess !== "internalOnly") {
@@ -202,7 +205,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const occupiedRevision = occupied?.revisions[0];
   const inheritedSourceRevisionIds = occupied && occupiedRevision?.version === occupied.currentVersion
-    ? occupiedRevision.sources.map((entry) => entry.sourceRevisionId)
+    ? occupiedRevision.sources.flatMap((entry) =>
+        entry.sourceRevisionId ? [entry.sourceRevisionId] : []
+      )
     : [];
   const sourceRevisionIds = kind === "note"
     ? (sourceRevision ? [sourceRevision.id] : [])

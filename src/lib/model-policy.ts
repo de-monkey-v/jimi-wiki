@@ -15,6 +15,7 @@ import { refreshPageDerivedState, refreshSourceDerivedState } from "@/lib/page-p
 import { reindexEmbeddings } from "@/lib/search";
 import { queueIncrementalKnowledgeBuild } from "@/lib/builds";
 import type {
+  DocumentType,
   ModelAccess,
   PageKind,
   PageOrigin,
@@ -122,13 +123,17 @@ interface AffectedPage {
   origin: PageOrigin;
   modelAccess: ModelAccess;
   category: string | null;
+  documentType: DocumentType | null;
   contributions: { id: string }[];
 }
 
 interface PageRevisionProvenance {
   pageId: string;
   version: number;
-  sources: { sourceRevisionId: string; sourceRevision: { sourceId: string } }[];
+  sources: {
+    sourceRevisionId: string | null;
+    sourceRevision: { sourceId: string } | null;
+  }[];
 }
 
 const POLICY_REASON = "model access policy changed";
@@ -187,6 +192,7 @@ async function loadAffectedPages(
       origin: true,
       modelAccess: true,
       category: true,
+      documentType: true,
       contributions: { where: { sourceId }, select: { id: true }, take: 1 },
     },
   });
@@ -226,8 +232,8 @@ function replaceSourceRevision(
 ): string[] {
   const inherited = provenance?.sources ?? [];
   const next = inherited
-    .filter((entry) => entry.sourceRevision.sourceId !== sourceId)
-    .map((entry) => entry.sourceRevisionId);
+    .filter((entry) => entry.sourceRevision?.sourceId !== sourceId)
+    .flatMap((entry) => entry.sourceRevisionId ? [entry.sourceRevisionId] : []);
   next.push(sourceRevisionId);
   return unique(next);
 }
@@ -491,6 +497,16 @@ async function propagateSourcePages(input: PropagateSourcePagesInput): Promise<{
   const planned = candidates.flatMap((page) => {
     const role: SourceDependentPageRole =
       page.sourceId === input.sourceId ? "note" : "contribution";
+    if (page.documentType === "research") {
+      return [{
+        page,
+        effect: {
+          archive: false,
+          markStale: true,
+          modelAccess: input.mode === "downgrade" ? "internalOnly" as const : page.modelAccess,
+        },
+      }];
+    }
     const effect = planSourceDependentPageEffect({
       mode: input.mode,
       role,
@@ -519,7 +535,7 @@ async function propagateSourcePages(input: PropagateSourcePagesInput): Promise<{
         ...(effect.archive ? { archivedAt: input.now, suppressedAt: null } : {}),
       },
       preserveOriginOnRestore: true,
-      sourceRevisionIds: input.preserveExistingProvenance
+      sourceRevisionIds: input.preserveExistingProvenance || page.documentType === "research"
         ? undefined
         : replaceSourceRevision(
             provenance.get(page.id),

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { apiWikiGate } from "@/lib/api-gate";
 import { expandViaGraph, modelSearch, parseSearchScope, requestedGraphDepth, RESULT_N } from "@/lib/search";
 import { EXTERNAL_MODEL_SCOPE, withExternalModelDispatchLock } from "@/lib/model-access";
+import { parseDocumentType } from "@/lib/documents";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const q = (url.searchParams.get("q") ?? "").trim();
   const scope = parseSearchScope(url.searchParams.get("scope"));
   if (!scope) return NextResponse.json({ error: "invalid_search_scope" }, { status: 400 });
+  const typeRaw = url.searchParams.get("type");
+  const documentType = typeRaw === null ? undefined : parseDocumentType(typeRaw) ?? undefined;
+  if (typeRaw !== null && (!documentType || scope !== "documents")) {
+    return NextResponse.json({ error: "invalid_document_type_filter" }, { status: 400 });
+  }
   if (!q) {
     const empty = scope === "all"
       ? { groups: { knowledge: { hits: [] }, documents: { hits: [] } } }
@@ -46,7 +52,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         { headers: { "Cache-Control": "no-store" } },
       );
     }
-    const hits = await modelSearch({ ...EXTERNAL_MODEL_SCOPE, wikiId: gate.wiki.id, queryText: q, k, scope });
+    const hits = await modelSearch({
+      ...EXTERNAL_MODEL_SCOPE,
+      wikiId: gate.wiki.id,
+      queryText: q,
+      k,
+      scope,
+      documentType,
+    });
     if (depth <= 0) return NextResponse.json({ hits }, { headers: { "Cache-Control": "no-store" } });
     // expandViaGraph 는 순수 SQL(임베딩 호출 없음)이고 내부에서 external-only 로 재격리하며, 실패 시 [] 를 돌려준다.
     const seedPageIds = hits.filter((h) => h.refType === "page").map((h) => h.refId);

@@ -3,6 +3,10 @@ import { prisma } from "@/lib/db";
 import { normalizeSlug } from "@/lib/markdown";
 import { isReservedSlug } from "@/lib/ontology";
 import {
+  MAX_RESEARCH_SOURCES,
+  inspectResearchMarkdown,
+} from "@/lib/research-markdown";
+import {
   ContentNotFoundError,
   ContentVersionConflictError,
   createPageSnapshot,
@@ -20,6 +24,7 @@ export const DOCUMENT_TYPES = [
   "reference",
   "plan",
   "spec",
+  "research",
 ] as const satisfies readonly DocumentType[];
 
 export const WORKLOG_SECTIONS = [
@@ -99,6 +104,7 @@ export type DocumentWriteInput = {
   documentAt?: Date;
   category?: string | null;
   expectedVersion?: number;
+  sourceSlugs?: string[];
 };
 
 export type DocumentWriteResult =
@@ -110,6 +116,81 @@ const isP2002 = (error: unknown) => (error as { code?: string })?.code === "P200
 async function finishPage(page: Page): Promise<Page> {
   await refreshPageDerivedState(page.wikiId, page.id);
   return page;
+}
+
+function assertResearchSourceSlugInput(body: string, sourceSlugs: string[] | undefined): string[] {
+  if (!sourceSlugs) throw new DocumentInputError("research_source_slugs_required");
+  if (sourceSlugs.length < 1 || sourceSlugs.length > MAX_RESEARCH_SOURCES) {
+    throw new DocumentInputError("invalid_research_source_count");
+  }
+  const normalized = sourceSlugs.map((slug) => normalizeSlug(slug));
+  if (
+    normalized.some((slug, index) => !slug || slug !== sourceSlugs[index]) ||
+    new Set(normalized).size !== normalized.length
+  ) {
+    throw new DocumentInputError("invalid_research_source_slugs");
+  }
+  const inspected = inspectResearchMarkdown(body);
+  if (inspected.invalidCitations.length > 0) {
+    throw new DocumentInputError("invalid_research_citation");
+  }
+  if (inspected.mermaidIssues.length > 0) {
+    throw new DocumentInputError(inspected.mermaidIssues[0].code);
+  }
+  if (
+    inspected.citationSlugs.length !== normalized.length ||
+    inspected.citationSlugs.some((slug, index) => slug !== normalized[index])
+  ) {
+    throw new DocumentInputError("research_citations_source_slugs_mismatch");
+  }
+  return inspected.citationSlugs;
+}
+
+async function resolveResearchSourceRevisionIds(input: {
+  wikiId: string;
+  body: string;
+  sourceSlugs?: string[];
+  externalAgent: boolean;
+}): Promise<string[]> {
+  const citationSlugs = assertResearchSourceSlugInput(input.body, input.sourceSlugs);
+  const sources = await prisma.source.findMany({
+    where: {
+      wikiId: input.wikiId,
+      slug: { in: citationSlugs },
+      archivedAt: null,
+      curationState: "preserved",
+      ...(input.externalAgent ? { modelAccess: "external" as const } : {}),
+    },
+    select: {
+      slug: true,
+      currentVersion: true,
+      revisions: {
+        orderBy: { version: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          version: true,
+          archivedAt: true,
+          modelAccess: true,
+        },
+      },
+    },
+  });
+  const revisionBySlug = new Map(
+    sources.flatMap((source) => {
+      const revision = source.revisions[0];
+      return revision &&
+        revision.version === source.currentVersion &&
+        revision.archivedAt === null &&
+        (!input.externalAgent || revision.modelAccess === "external")
+        ? [[source.slug, revision.id] as const]
+        : [];
+    }),
+  );
+  if (revisionBySlug.size !== citationSlugs.length) {
+    throw new DocumentInputError("research_source_not_found", 404);
+  }
+  return citationSlugs.map((slug) => revisionBySlug.get(slug)!);
 }
 
 export async function writeDocument(input: DocumentWriteInput): Promise<DocumentWriteResult> {
@@ -136,6 +217,15 @@ export async function writeDocument(input: DocumentWriteInput): Promise<Document
     const documentType = input.documentType ?? existing.documentType;
     const documentAt = input.documentAt ?? existing.documentAt;
     if (!documentType || !documentAt) throw new DocumentInputError("document_metadata_missing", 409);
+    if (documentType === "research" && existing.documentType !== "research") {
+      throw new DocumentInputError("research_slug_conflict", 409);
+    }
+    if (documentType !== "research" && input.sourceSlugs !== undefined) {
+      throw new DocumentInputError("document_source_provenance_forbidden");
+    }
+    const sourceRevisionIds = documentType === "research"
+      ? await resolveResearchSourceRevisionIds(input)
+      : [];
     if (input.externalAgent && (existing.origin === "human" || existing.origin === "mixed")) {
       const staged = await stageExternalPageProposal({
         wikiId: input.wikiId,
@@ -156,7 +246,7 @@ export async function writeDocument(input: DocumentWriteInput): Promise<Document
         category: input.category === undefined ? existing.category : input.category,
         documentType,
         documentAt,
-        sourceRevisionIds: [],
+        sourceRevisionIds,
       });
       return {
         created: false,
@@ -177,7 +267,8 @@ export async function writeDocument(input: DocumentWriteInput): Promise<Document
         documentAt,
         ...(input.category !== undefined ? { category: input.category } : {}),
       },
-      sourceRevisionIds: [],
+      sourceRevisionIds,
+      requireResearchSourcesPreserved: documentType === "research",
       context: { actor: input.actor, userId: input.userId, reason: "document update" },
     });
     return { created: false, staged: false, page: await finishPage(page) };
@@ -185,6 +276,12 @@ export async function writeDocument(input: DocumentWriteInput): Promise<Document
   if (input.expectedVersion !== undefined) throw new ContentNotFoundError("page");
   const documentType = input.documentType ?? "general";
   const documentAt = input.documentAt ?? new Date();
+  if (documentType !== "research" && input.sourceSlugs !== undefined) {
+    throw new DocumentInputError("document_source_provenance_forbidden");
+  }
+  const sourceRevisionIds = documentType === "research"
+    ? await resolveResearchSourceRevisionIds(input)
+    : [];
 
   const root = wanted || normalizeSlug(input.title) || "document";
   for (let attempt = 0; attempt <= 50; attempt++) {
@@ -198,9 +295,12 @@ export async function writeDocument(input: DocumentWriteInput): Promise<Document
         kind: "document",
         documentType,
         documentAt,
-        category: input.category ?? null,
+        category: input.category === undefined
+          ? documentType === "research" ? "research" : null
+          : input.category,
         sourceId: null,
-        sourceRevisionIds: [],
+        sourceRevisionIds,
+        requireResearchSourcesPreserved: documentType === "research",
         modelAccess: "external",
         context: { actor: input.actor, userId: input.userId, reason: "document create" },
       });
@@ -228,6 +328,9 @@ export async function appendDocument(input: {
   }
   if (page.kind !== "document" || !page.documentType || !page.documentAt) {
     throw new DocumentInputError("not_a_document", 409);
+  }
+  if (page.documentType === "research") {
+    throw new DocumentInputError("research_append_forbidden", 409);
   }
   if (page.currentVersion !== input.expectedVersion) {
     throw new ContentVersionConflictError(input.expectedVersion, page.currentVersion);

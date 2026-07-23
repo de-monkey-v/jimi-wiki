@@ -55,7 +55,7 @@ mcp_servers:
       JIMI_WIKI_SLUG: "<대상-위키-slug>"
     tools:
       # 비서 프로필 — 찾고·넣고·담아두는 일상 사용
-      include: [search_wiki, search_documents, read_page, list_pages, list_sources, read_source, create_source, write_page, get_ontology, match_category, preserve_url, preserve_text, curate_url, curate_text, curate_source, get_run_status, record_document, record_worklog, append_document, save_link, list_saved_links, promote_saved_link, trash_saved_link, restore_saved_link, list_trash, trash_page, restore_page, trash_source, restore_source]
+      include: [search_wiki, search_documents, read_page, list_pages, list_sources, read_source, create_source, write_page, get_ontology, match_category, preserve_url, preserve_text, curate_url, curate_text, curate_source, get_run_status, record_document, record_research_report, record_worklog, append_document, save_link, list_saved_links, promote_saved_link, trash_saved_link, restore_saved_link, list_trash, trash_page, restore_page, trash_source, restore_source]
 ```
 
 - **개인 위키 프로필**(위 `include`): 검색·원문 보존·직접/위임 정리·문서 기록·읽을거리 관리를 허용한다. 보호 메모(`personal/internalOnly`)는 MCP에서 보이지 않는다.

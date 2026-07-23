@@ -56,7 +56,7 @@ Authorization: Bearer <API_KEY>
 응답 `200`: `{ pages: [{ id, slug, title, kind, documentType?, documentAt?, category, currentVersion, updatedAt }] }`
 
 #### `GET /pages/{pageSlug}` — 단건 (viewer)
-응답 `200`: `{ slug, title, kind, documentType?, documentAt?, category, body, origin, modelAccess, currentVersion }` · 없으면 `404 not_found`
+응답 `200`: `{ slug, title, kind, documentType?, documentAt?, category, body, origin, modelAccess, currentVersion, sourceSlugs?, evidence? }` · research 문서는 exact SourceRevision identity/version/hash와 삭제 여부를 `evidence`에 포함한다. 없으면 `404 not_found`.
 
 #### `POST /pages` — 생성/수정 (editor)
 요청:
@@ -100,21 +100,27 @@ Source와 연결 source note를 함께 14일 휴지통으로 이동하거나 복
 
 ### 독립 문서(document)
 
-`document`는 Source provenance를 갖지 않으며 검색·위키링크에는 참여하지만 concept/entity 관계 그래프·고아 개념 lint·KnowledgeBuild 자동 재작성 대상에서는 제외된다.
+일반 `document`는 Source provenance를 갖지 않으며 검색·위키링크에는 참여하지만 concept/entity 관계 그래프·고아 개념 lint·KnowledgeBuild 자동 재작성 대상에서는 제외된다. 예외적으로 `type=research`만 preserved Source provenance를 요구한다.
 
 #### `POST /documents` — 생성/수정 (editor)
 ```json
 {
   "slug": "기존 수정 시만", "title": "필수", "body": "마크다운",
-  "type": "general|worklog|troubleshooting|decision|reference|plan|spec",
+  "type": "general|worklog|troubleshooting|decision|reference|plan|spec|research",
   "documentAt": "2026-07-21T12:30:00+09:00", "category": "옵션",
-  "expectedVersion": 3
+  "expectedVersion": 3,
+  "sourceSlugs": ["source-a", "source-b"]
 }
 ```
-slug 생략은 항상 신규(create-only). 기존 slug 수정은 `expectedVersion` 필수다. 에이전트 생성 문서는 CAS로 직접 갱신하고 사람/혼합 문서는 `202 {staged:true}` 검토 초안을 만든다. `sourceId|sourceSlug|sourceRevisionIds`를 보내면 `400 document_source_provenance_forbidden`. 비밀 키 패턴은 `400 secret_material_rejected`.
+slug 생략은 항상 신규(create-only). 기존 slug 수정은 `expectedVersion` 필수다. 에이전트 생성 문서는 CAS로 직접 갱신하고 사람/혼합 문서는 `202 {staged:true}` 검토 초안을 만든다.
+
+- 일반 문서에서 `sourceId|sourceSlug|sourceRevisionIds|sourceSlugs`를 보내면 `400 document_source_provenance_forbidden`.
+- research는 `sourceSlugs` 1~30개가 필수다. 같은 위키의 active `curationState=preserved` Source만 허용하며, 코드 블록 밖 `[@source-slug]` 첫 등장 순서와 정확히 같아야 한다. 새 category 기본값은 `research`.
+- research 갱신은 기존 research slug에만 허용하고 append는 `409 research_append_forbidden`이다.
+- 비밀 키 패턴은 `400 secret_material_rejected`.
 
 #### `GET /documents?type=&from=&to=` — 목록 (viewer)
-`documentAt desc` 순으로 최대 200개. 날짜 범위와 DocumentType을 필터링한다.
+`documentAt desc` 순으로 최대 200개. 날짜 범위와 DocumentType(`type=research` 포함)을 필터링한다.
 
 #### `POST /documents/{pageSlug}/append` — 끝에 추가 (editor)
 body `{ "content":"추가할 마크다운", "expectedVersion":3 }`. document 전용이며 append 64 KiB, 전체 본문 1 MiB 상한. 동시 CAS 충돌은 한쪽이 `409 version_conflict`; 사람/혼합 문서는 직접 덮지 않고 staged review를 반환한다.
@@ -122,7 +128,7 @@ body `{ "content":"추가할 마크다운", "expectedVersion":3 }`. document 전
 ### 검색 · 온톨로지
 
 #### `GET /search?q=&k=&scope=&graph=&depth=` — 하이브리드 검색 (viewer)
-`scope=knowledge|documents|all`. 생략은 기존 호환을 위해 `knowledge`. `knowledge`에는 curated Source와 그 note, concept/entity가 들어가고 `documents`에는 preserved Source와 document가 들어간다. `all`은 정본 지식이 작업 기록에 밀리지 않도록 `{ groups:{ knowledge:{hits}, documents:{hits} } }`로 분리한다. 잘못된 scope는 `400 invalid_search_scope`.
+`scope=knowledge|documents|all`. 생략은 기존 호환을 위해 `knowledge`. `knowledge`에는 curated Source와 그 note, concept/entity가 들어가고 `documents`에는 preserved Source와 document가 들어간다. `scope=documents&type=research`는 연구 보고서만 필터링한다. `all`은 정본 지식이 작업 기록에 밀리지 않도록 `{ groups:{ knowledge:{hits}, documents:{hits} } }`로 분리한다. 잘못된 scope는 `400 invalid_search_scope`.
 
 `graph=1`을 주면 히트한 페이지를 시드로 지식그래프(`ConceptRelation`)를 순회해 이웃 페이지를 함께 반환한다 — `200`: `{ hits, neighbors: [{ pageId, slug, title, snippet, depth }] }`. `depth`는 홉수(기본 1)이며 서버 상한 `KG_MAX_HOP`으로 clamp된다(`KG_MAX_HOP=0`이면 확장이 꺼져 `neighbors: []`). `graph`를 주지 않으면 응답에 `neighbors` 키가 없다(하위호환).
 

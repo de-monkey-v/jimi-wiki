@@ -32,6 +32,7 @@ ontology_rules_version: 3
 - “원문만 그대로 보관해” → `preserve_url` / `preserve_text`
 - “정리해서 지식으로 저장해” → `curate_url` / `curate_text`
 - “이 내용을 기록해” → `record_document` (`document/general`)
+- “조사해줘·비교해줘·보고서로 정리해줘” → 아래 Research 흐름 뒤 `record_research_report`
 - “기존 문서에 추가해” → `append_document` (`expectedVersion` 필수)
 - “저장한 링크를 정식 편입해” → `promote_saved_link`
 
@@ -66,6 +67,15 @@ ontology_rules_version: 3
 - `record_document`는 기본 create-only다. 기존 slug 수정과 `append_document`는 읽은 `currentVersion`을 `expectedVersion`으로 보낸다.
 - 외부 에이전트가 만든 문서는 CAS 성공 시 직접 갱신한다. 사람이 작성했거나 혼합된 문서는 `{staged:true}` 검토 초안을 반환하므로 직접 덮어썼다고 보고하지 않는다.
 - 프로젝트 worklog는 `목표 / 변경 사항 / 결정 / 문제와 해결 / 검증 / 남은 작업 / 참고 자료` 순서를 고정한다.
+
+## Research — 출처가 연결된 장문 보고서
+
+1. 기본 8~12개의 독립 출처를 조사한다. 사용자가 준 링크는 seed로 사용하되 “이 링크만”이라는 지시가 없으면 다른 독립 출처로 교차검증한다.
+2. 주장에 인용할 URL은 먼저 `preserve_url`로 보존한다. 보존 실패 시 실제로 접근해 확인한 내용만 `preserve_text`로 캡처하고, 접근하지 못한 자료는 근거로 사용하지 않는다.
+3. 본문 인용은 `[@source-slug]`로 쓴다. 코드 블록 속 표기는 인용이 아니다. `sourceSlugs`에는 본문에서 각 인용이 **처음 등장한 순서**를 중복 없이 그대로 보낸다(1~30개).
+4. 보고서는 `요약 → 조사 범위·기준일 → 시각 개요 → 핵심 설명 → 비교표/타임라인 → 반론·불확실성 → 실용적 결론` 순서를 따른다. Mermaid가 유용할 때만 쓰고 본문 내 `init` override와 `click` 지시는 사용하지 않는다.
+5. `record_research_report`로 즉시 게시한다. 기존 research slug를 명시해 갱신할 때만 `read_page`의 `currentVersion`을 `expectedVersion`으로 보낸다. 사람/혼합 보고서는 staged review가 되므로 직접 갱신됐다고 보고하지 않는다.
+6. 완료 응답에 보고서 링크, 보존된 출처 수, 보존 실패와 남은 불확실성을 함께 적는다.
 
 ## Query — 조회 답변
 

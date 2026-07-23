@@ -38,8 +38,41 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             }
           : {}),
       },
+      include: {
+        revisions: {
+          orderBy: { version: "desc" },
+          take: 1,
+          select: {
+            version: true,
+            sources: {
+              orderBy: [{ ordinal: "asc" }, { id: "asc" }],
+              select: {
+                sourceRevisionId: true,
+                sourceRevisionRef: true,
+                sourceVersion: true,
+                sourceContentHash: true,
+                sourceSlug: true,
+                purgedAt: true,
+              },
+            },
+          },
+        },
+      },
     });
     if (!page) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    const currentRevision = page.revisions[0]?.version === page.currentVersion
+      ? page.revisions[0]
+      : null;
+    const evidence = page.documentType === "research"
+      ? currentRevision?.sources.map((source) => ({
+          sourceSlug: source.sourceSlug,
+          sourceRevisionId: source.sourceRevisionRef ?? source.sourceRevisionId,
+          sourceVersion: source.sourceVersion,
+          sourceContentHash: source.sourceContentHash,
+          deleted: source.sourceRevisionId === null,
+          purgedAt: source.purgedAt,
+        })) ?? []
+      : undefined;
     return NextResponse.json(
       {
         slug: page.slug,
@@ -53,6 +86,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         modelAccess: page.modelAccess,
         currentVersion: page.currentVersion,
         archivedAt: page.archivedAt,
+        ...(evidence ? {
+          sourceSlugs: evidence.flatMap((source) => source.sourceSlug ? [source.sourceSlug] : []),
+          evidence,
+        } : {}),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

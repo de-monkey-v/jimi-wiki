@@ -207,7 +207,7 @@
     "personalWarning": "个人笔记不参与 AI，但不会加密 — 请勿保存真实密码。"
   },
   "DocumentTypes": {
-    "general": "通用", "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策", "reference": "参考资料", "plan": "计划", "spec": "规格"
+    "general": "通用", "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策", "reference": "参考资料", "plan": "计划", "spec": "规格", "research": "研究报告"
   },
   "LoginActions": {
     "emptyCredentials": "请输入邮箱和密码",
@@ -252,6 +252,24 @@
     "edit": "编辑",
     "derivedHeading": "从此来源衍生的文档",
     "derivedEmpty": "尚未从此来源衍生任何文档。"
+  },
+  "ResearchArticle": {
+    "kicker": "研究报告",
+    "edit": "编辑",
+    "evidenceHeading": "证据账本",
+    "backToCitation": "返回引用 {number}",
+    "openEvidence": "打开证据 {number}",
+    "deletedEvidence": "已删除的证据",
+    "preservedCopy": "保存的原文",
+    "original": "原始 URL",
+    "diagramError": "无法安全呈现此图。现改为显示源代码。",
+    "copy": "复制",
+    "download": "下载",
+    "downloadDiagram": "下载图表",
+    "fullscreen": "全屏查看",
+    "exitFullscreen": "退出全屏",
+    "copyTable": "复制表格",
+    "downloadTable": "下载表格"
   },
   "ReadingProvenanceCard": {
     "sectionLabel": "原文 (Source)",
@@ -577,6 +595,9 @@
     "emptyBodyWrite": "在下方收集来源或新建页面，文档与概念的关联将在此汇总。",
     "emptyBodyRead": "添加页面后，可阅读的文档与概念关联将显示在此处。",
     "recentProjectDocuments": "最近的项目文档",
+    "recentResearchReports": "最近的研究报告",
+    "researchLabel": "研究",
+    "researchStale": "需要复核",
     "systemActivity": "系统活动",
     "documentType": { "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策" }
   },
@@ -588,7 +609,7 @@
     "documentTypeLabel": "文档类型",
     "documentAtLabel": "文档时间",
     "documentType": {
-      "general": "通用", "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策", "reference": "参考资料", "plan": "计划", "spec": "规格"
+      "general": "通用", "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策", "reference": "参考资料", "plan": "计划", "spec": "规格", "research": "研究报告"
     },
     "bodyPlaceholder": "使用 Markdown 编写。维基链接使用 [[页面-slug]] 或 [[slug|显示名]]",
     "save": "保存",
@@ -598,7 +619,8 @@
     "connectionGraph": "关系图谱",
     "myWikis": "我的 wiki",
     "emptyEditable": "此页面为空。点击“编辑”添加内容。",
-    "empty": "此页面为空。"
+    "empty": "此页面为空。",
+    "researchStale": "一个或多个证据来源已更改或删除。报告仍会保留，但需要重新核查其中的论点。"
   },
   "WikisSlugReindexForm": {
     "reindexing": "重新索引中…",

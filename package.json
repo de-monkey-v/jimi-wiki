@@ -1,6 +1,6 @@
 {
   "name": "jimi-wiki-app",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "license": "MIT",
   "scripts": {
@@ -53,6 +53,7 @@
     "@prisma/client": "^7.8.0",
     "@prisma/client-runtime-utils": "^7.8.0",
     "@sigma/node-border": "3.0.0",
+    "@streamdown/mermaid": "1.0.2",
     "ai": "^6.0.218",
     "diff": "9.0.0",
     "dotenv": "^17.4.2",

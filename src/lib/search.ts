@@ -11,7 +11,7 @@ import {
   type ExternalModelScope,
   type ModelAccessValue,
 } from "@/lib/model-access";
-import type { PageKind, Prisma } from "@/generated/prisma/client";
+import type { DocumentType, PageKind, Prisma } from "@/generated/prisma/client";
 
 export const MAX_CHUNK = 4000;
 export const MIN_CHUNK = 200;
@@ -500,22 +500,33 @@ const localFtsSql = (scope?: LocalSearchScope) => `
   ORDER BY ts_rank(to_tsvector('simple', c.text), websearch_to_tsquery('simple', $2)) DESC
   LIMIT $3`;
 
-const modelFtsSql = (scope: SearchScope) => `
+const documentTypeSql = (enabled: boolean) => enabled
+  ? `AND c."refType" = 'page'
+    AND EXISTS (
+      SELECT 1 FROM "Page" p
+      WHERE p.id = c."refId" AND p."wikiId" = c."wikiId"
+        AND p."documentType" = $4::"DocumentType"
+    )`
+  : "";
+
+const modelFtsSql = (scope: SearchScope, filterDocumentType = false) => `
   SELECT c.id FROM "SearchChunk" c
   WHERE c."wikiId" = $1
     AND c."refType" IN ('page','source')
     AND c."modelAccess" = 'external'
     AND ${scopeSql(scope)}
+    ${documentTypeSql(filterDocumentType)}
     AND to_tsvector('simple', c.text) @@ websearch_to_tsquery('simple', $2)
   ORDER BY ts_rank(to_tsvector('simple', c.text), websearch_to_tsquery('simple', $2)) DESC
   LIMIT $3`;
 
-const modelVecSql = (scope: SearchScope) => `
+const modelVecSql = (scope: SearchScope, filterDocumentType = false) => `
   SELECT c.id, 1 - (c.embedding <=> $2::vector) AS sim FROM "SearchChunk" c
   WHERE c."wikiId" = $1
     AND c."refType" IN ('page','source')
     AND c."modelAccess" = 'external'
     AND ${scopeSql(scope)}
+    ${documentTypeSql(filterDocumentType)}
     AND c.embedding IS NOT NULL
   ORDER BY c.embedding <=> $2::vector ASC
   LIMIT $3`;
@@ -531,6 +542,7 @@ async function hydrateActiveHits(
   k: number,
   access: "local" | "external",
   scope?: LocalSearchScope,
+  documentType?: DocumentType,
 ): Promise<SearchHit[]> {
   if (candidates.length === 0) return [];
   const ids = candidates.map(([id]) => id);
@@ -548,6 +560,7 @@ async function hydrateActiveHits(
           wikiId,
           id: { in: pageIds },
           archivedAt: null,
+          ...(documentType ? { documentType } : {}),
           ...(access === "external"
             ? {
                 modelAccess: "external" as const,
@@ -561,6 +574,7 @@ async function hydrateActiveHits(
           slug: true,
           title: true,
           kind: true,
+          documentType: true,
           sourceId: true,
           source: { select: { curationState: true } },
         },
@@ -588,7 +602,7 @@ async function hydrateActiveHits(
     return scope === "knowledge" ? knowledge : scope === "documents" ? documents : knowledge || documents;
   };
   const sourceAllowed = (source: (typeof sources)[number]): boolean => {
-    if (scope === "protected") return false;
+    if (scope === "protected" || documentType) return false;
     if (!scope || scope === "all") return true;
     return scope === "knowledge" ? source.curationState === "curated" : source.curationState === "preserved";
   };
@@ -650,6 +664,7 @@ export interface ModelSearchOptions extends ExternalModelScope {
   queryText: string;
   k?: number;
   scope?: SearchScope;
+  documentType?: DocumentType;
 }
 
 /** 외부 모델용 검색. external active projection만 반환하고 query embedding도 이 경로에서만 수행한다. */
@@ -662,13 +677,26 @@ export async function modelSearch(opts: ModelSearchOptions): Promise<SearchHit[]
   if (!q) return [];
 
   return withExternalModelDispatchLock(wikiId, async (tx) => {
-    const ftsRows = await tx.$queryRawUnsafe<IdRow[]>(modelFtsSql(scope), wikiId, q, POOL);
+    const filterArgs = opts.documentType ? [opts.documentType] : [];
+    const ftsRows = await tx.$queryRawUnsafe<IdRow[]>(
+      modelFtsSql(scope, Boolean(opts.documentType)),
+      wikiId,
+      q,
+      POOL,
+      ...filterArgs,
+    );
     let vecRows: VecRow[] = [];
     if (embeddingEnabled()) {
       try {
         const [qv] = await embedTexts([q], "RETRIEVAL_QUERY", { wikiId, route: "search" });
         if (qv?.length === EMBED_DIM) {
-          vecRows = await tx.$queryRawUnsafe<VecRow[]>(modelVecSql(scope), wikiId, `[${qv.join(",")}]`, POOL);
+          vecRows = await tx.$queryRawUnsafe<VecRow[]>(
+            modelVecSql(scope, Boolean(opts.documentType)),
+            wikiId,
+            `[${qv.join(",")}]`,
+            POOL,
+            ...filterArgs,
+          );
         }
       } catch (e) {
         console.error(`[search] 쿼리 임베딩 실패, FTS 단독 폴백: ${(e as Error).message}`);
@@ -684,7 +712,7 @@ export async function modelSearch(opts: ModelSearchOptions): Promise<SearchHit[]
     const candidates = [...scores.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, k * 3);
-    return hydrateActiveHits(tx, wikiId, candidates, simById, k, "external", scope);
+    return hydrateActiveHits(tx, wikiId, candidates, simById, k, "external", scope, opts.documentType);
   });
 }
 

@@ -105,12 +105,14 @@ const profileInstructions = IS_PERSONAL
     : [];
 
 const server = new McpServer(
-  { name: "jimi-wiki", version: "0.5.0" },
+  { name: "jimi-wiki", version: "0.6.0" },
   {
     instructions: [
       `jimi-wiki 위키("${WIKI}", kind=${WIKI_KIND})의 유지보수 도구다. 이 API 키의 위키 스코프 밖 리소스에는 접근하지 않는다.`,
-      "의도 라우팅: URL만 보냄/‘나중에 볼게’→본문을 읽고 3~5개 핵심 bullet과 ‘볼 가치’ 한 문장으로 요약한 뒤 save_link(summary), ‘원문만 그대로 보관해’→preserve_*, ‘정리해서 지식으로 저장해’→curate_*, ‘이 내용을 기록해’→record_document, ‘기존 문서에 추가해’→append_document, ‘저장한 링크를 정식 편입해’→promote_saved_link.",
+      "의도 라우팅: URL만 보냄/‘나중에 볼게’→본문을 읽고 3~5개 핵심 bullet과 ‘볼 가치’ 한 문장으로 요약한 뒤 save_link(summary), ‘조사해줘·비교해줘·보고서로 정리해줘’→웹을 심층 조사한 뒤 record_research_report, ‘원문만 그대로 보관해’→preserve_*, ‘정리해서 지식으로 저장해’→curate_*, ‘이 내용을 기록해’→record_document, ‘기존 문서에 추가해’→append_document, ‘저장한 링크를 정식 편입해’→promote_saved_link.",
       "읽을거리는 항상 요약을 시도한다. 본문 추출이 실패한 경우에만 save_link(summaryUnavailableReason=구체적 사유)로 메타데이터를 저장하고 요약이 없음을 명시한다. URL이 여러 개면 각각 본문을 읽고 별도 SavedLink로 저장하며 성공/기존/실패를 나눠 보고한다. 삭제 의도가 명확하면 trash_*를 쓰고, 애매하면 먼저 확인한다. 휴지통은 14일간 복원할 수 있으며 영구 삭제와 위키 전체 삭제는 MCP에 없다.",
+      "연구 보고서: 기본 8~12개의 독립 출처를 조사한다. 사용자가 준 링크는 seed로 쓰되 ‘이 링크만’이라고 하지 않으면 독립 출처로 교차검증한다. 인용할 URL은 먼저 preserve_url로 보존하고 반환된 sourceSlug를 본문 [@source-slug]와 sourceSlugs에 첫 등장 순서대로 넣는다. 보존 실패 시 접근 가능한 사실만 preserve_text로 명시적으로 캡처하고, 접근하지 못한 자료는 주장 근거로 쓰지 않는다.",
+      "연구 보고서 구조: 요약 → 조사 범위·기준일 → 시각 개요(Mermaid 필요 시) → 핵심 설명 → 비교표/타임라인 → 반론·불확실성 → 실용적 결론. 완료 응답에는 보고서 링크, 출처 수, 보존 실패와 남은 불확실성을 함께 알린다.",
       "편입에는 두 방식이 있다. preserve는 불변 원문과 pointer note만 저장하고 생성형 큐레이션을 실행하지 않는다. curate는 원문→note→concept/entity 합성을 수행하며 비동기이므로 get_run_status로 완료를 확인한다.",
       "직접 큐레이션 절차: (1) create_source로 원문을 불변 저장 → (2) search_wiki/list_pages로 기존 페이지 확인 → (3) write_page로 kind=note 소스 노트 작성(sourceSlug 연결, 원문 복붙 금지·네 말로 요약) → (4) 영향받는 concept/entity 페이지 갱신·신설(sourceSlug로 기여 기록, 내부 링크 [[slug]] 적극 사용, category 재사용 우선) → (5) 모순 점검(필수): 원문 핵심 주장마다 search_wiki→read_page로 관련 기존 페이지 본문을 받아 상충 여부를 대조하고, 상충 시 '> [!warning] 상충' 콜아웃으로 양쪽 주장·출처를 병기(기존 내용 삭제 금지).",
       "관계·비교·주변 맥락을 묻는 질의에는 search_wiki 에 graph=true 를 줘서 지식그래프 이웃까지 받아라.",
@@ -326,6 +328,7 @@ server.registerTool(
 );
 
 const documentType = z.enum(["general", "worklog", "troubleshooting", "decision", "reference", "plan", "spec"]);
+const searchableDocumentType = z.enum(["general", "worklog", "troubleshooting", "decision", "reference", "plan", "spec", "research"]);
 
 server.registerTool(
   "record_document",
@@ -344,6 +347,29 @@ server.registerTool(
   async (args) => {
     try {
       return asResult(await api("POST", "/documents", args));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
+
+server.registerTool(
+  "record_research_report",
+  {
+    description: "보존된 Source를 근거로 장문 연구 보고서를 즉시 게시한다. 본문 인용 [@source-slug]의 첫 등장 순서와 sourceSlugs가 정확히 같아야 한다. 기존 research slug 갱신에만 expectedVersion을 사용하며 사람/혼합 보고서는 staged review로 전환된다.",
+    inputSchema: {
+      slug: z.string().optional().describe("기존 research 보고서 갱신 시 slug; 생략하면 새 보고서 생성"),
+      title: z.string().describe("보고서 제목"),
+      body: z.string().describe("인용을 [@source-slug]로 표기한 마크다운 본문"),
+      sourceSlugs: z.array(z.string()).min(1).max(30).describe("본문 인용의 첫 등장 순서와 같은 preserved Source slug"),
+      documentAt: z.string().optional().describe("ISO 8601 조사 기준 시각(생략 시 현재)"),
+      category: z.string().optional().describe("선택 카테고리(기본 research)"),
+      expectedVersion: z.number().int().min(1).optional().describe("기존 research 보고서 갱신 시 현재 version"),
+    },
+  },
+  async (args) => {
+    try {
+      return asResult(await api("POST", "/documents", { ...args, type: "research" }));
     } catch (e) {
       return asError(e);
     }
@@ -392,7 +418,7 @@ server.registerTool(
     inputSchema: {
       query: z.string().optional(),
       k: z.number().int().min(1).max(50).optional(),
-      type: documentType.optional(),
+      type: searchableDocumentType.optional(),
       from: z.string().optional().describe("ISO 날짜/시각"),
       to: z.string().optional().describe("ISO 날짜/시각"),
     },
@@ -404,6 +430,7 @@ server.registerTool(
         qs.set("q", query);
         qs.set("scope", "documents");
         if (k) qs.set("k", String(k));
+        if (type) qs.set("type", type);
         return asResult(await api("GET", `/search?${qs}`));
       }
       if (type) qs.set("type", type);

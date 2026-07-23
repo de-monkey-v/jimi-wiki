@@ -25,6 +25,10 @@ import type {
   SourceRevision,
 } from "@/generated/prisma/client";
 import type { Prisma } from "@/generated/prisma/client";
+import {
+  MAX_RESEARCH_SOURCES,
+  inspectResearchMarkdown,
+} from "@/lib/research-markdown";
 
 export type ContentTransaction = Prisma.TransactionClient;
 
@@ -182,6 +186,7 @@ export interface CreatePageSnapshotInput {
   suppressedAt?: Date | null;
   staleAt?: Date | null;
   sourceRevisionIds?: string[];
+  requireResearchSourcesPreserved?: boolean;
   context: RevisionContext;
 }
 
@@ -210,6 +215,9 @@ export interface UpdatePageSnapshotInput {
   changes: PageSnapshotChanges;
   /** undefined면 직전 revision의 provenance를 그대로 승계한다. */
   sourceRevisionIds?: string[];
+  /** research revision restore에서 영구 삭제된 근거 tombstone까지 그대로 복제한다. */
+  sourceEvidence?: RevisionSourceEvidence[];
+  requireResearchSourcesPreserved?: boolean;
   acceptedAiDraft?: boolean;
   allowPolicyRelaxation?: boolean;
   /** lifecycle/policy metadata write와 전체 build restore에서 저작 origin을 보존한다. */
@@ -220,6 +228,10 @@ export interface UpdatePageSnapshotInput {
 interface ResolvedSourceRevision {
   id: string;
   sourceId: string;
+  sourceSlug: string;
+  sourceVersion: number;
+  sourceContentHash: string;
+  sourceCurationState: SourceCurationState;
   modelAccess: ModelAccess;
   revisionArchivedAt: Date | null;
   sourceArchivedAt: Date | null;
@@ -227,6 +239,16 @@ interface ResolvedSourceRevision {
 
 const own = (value: object, key: PropertyKey) => Object.prototype.hasOwnProperty.call(value, key);
 const unique = (values: string[] | undefined) => [...new Set((values ?? []).filter(Boolean))];
+
+export type RevisionSourceEvidence = {
+  sourceRevisionId: string | null;
+  sourceRevisionRef: string | null;
+  sourceVersion: number | null;
+  sourceContentHash: string | null;
+  sourceSlug: string | null;
+  ordinal: number | null;
+  purgedAt: Date | null;
+};
 
 async function assertParent(tx: ContentTransaction, wikiId: string, pageId: string | null): Promise<void> {
   if (!pageId) return;
@@ -244,10 +266,19 @@ async function resolveSourceRevisions(
     where: { id: { in: sourceRevisionIds }, source: { wikiId } },
     select: {
       id: true,
+      version: true,
+      contentHash: true,
       sourceId: true,
       modelAccess: true,
       archivedAt: true,
-      source: { select: { modelAccess: true, archivedAt: true } },
+      source: {
+        select: {
+          slug: true,
+          modelAccess: true,
+          curationState: true,
+          archivedAt: true,
+        },
+      },
     },
   });
   if (rows.length !== sourceRevisionIds.length) {
@@ -256,6 +287,10 @@ async function resolveSourceRevisions(
   const byId = new Map(rows.map((row) => [row.id, {
     id: row.id,
     sourceId: row.sourceId,
+    sourceSlug: row.source.slug,
+    sourceVersion: row.version,
+    sourceContentHash: row.contentHash,
+    sourceCurationState: row.source.curationState,
     modelAccess: stricterModelAccess(row.modelAccess, row.source.modelAccess),
     revisionArchivedAt: row.archivedAt,
     sourceArchivedAt: row.source.archivedAt,
@@ -301,18 +336,57 @@ function primarySourceId(
   return null;
 }
 
-function assertDocumentPageState(state: Pick<PageState, "kind" | "documentType" | "documentAt" | "sourceId">, sourceRevisionIds: string[]): void {
+function assertDocumentPageState(
+  state: Pick<PageState, "kind" | "documentType" | "documentAt" | "sourceId" | "body">,
+  evidence: Pick<RevisionSourceEvidence, "sourceSlug">[],
+  opts?: { requireResearchSourcesPreserved?: boolean; resolved?: ResolvedSourceRevision[] },
+): void {
   if (state.kind === "document") {
     if (!state.documentType || !state.documentAt) {
       throw new ContentProvenanceError("document pages require documentType and documentAt");
     }
-    if (state.sourceId || sourceRevisionIds.length > 0) {
+    if (state.sourceId) {
       throw new ContentProvenanceError("document pages cannot attach Source provenance");
+    }
+    if (state.documentType !== "research") {
+      if (evidence.length > 0) {
+        throw new ContentProvenanceError("non-research document pages cannot attach Source provenance");
+      }
+      return;
+    }
+    if (evidence.length < 1 || evidence.length > MAX_RESEARCH_SOURCES) {
+      throw new ContentProvenanceError(`research documents require 1-${MAX_RESEARCH_SOURCES} evidence sources`);
+    }
+    const slugs = evidence.map((item) => item.sourceSlug).filter((slug): slug is string => Boolean(slug));
+    if (slugs.length !== evidence.length || new Set(slugs).size !== slugs.length) {
+      throw new ContentProvenanceError("research evidence must identify distinct source slugs");
+    }
+    const inspected = inspectResearchMarkdown(state.body);
+    if (inspected.invalidCitations.length > 0) {
+      throw new ContentProvenanceError("research citations contain an invalid source slug");
+    }
+    if (
+      inspected.citationSlugs.length !== slugs.length ||
+      inspected.citationSlugs.some((slug, index) => slug !== slugs[index])
+    ) {
+      throw new ContentProvenanceError("research citations must match evidence in first-appearance order");
+    }
+    if (inspected.mermaidIssues.length > 0) {
+      throw new ContentProvenanceError(inspected.mermaidIssues[0].code);
+    }
+    if (
+      opts?.requireResearchSourcesPreserved &&
+      opts.resolved?.some((source) => source.sourceCurationState !== "preserved")
+    ) {
+      throw new ContentProvenanceError("research evidence sources must be preserved");
     }
     return;
   }
   if (state.documentType || state.documentAt) {
     throw new ContentProvenanceError("document metadata is only valid for document pages");
+  }
+  if (evidence.length > 0 && state.kind === "personal") {
+    throw new ContentProvenanceError("personal pages cannot attach Source provenance");
   }
 }
 
@@ -344,14 +418,60 @@ function revisionData(state: PageState, pageId: string, version: number, context
   } satisfies Prisma.PageRevisionUncheckedCreateInput;
 }
 
+function evidenceFromResolved(resolved: ResolvedSourceRevision[]): RevisionSourceEvidence[] {
+  return resolved.map((source, ordinal) => ({
+    sourceRevisionId: source.id,
+    sourceRevisionRef: source.id,
+    sourceVersion: source.sourceVersion,
+    sourceContentHash: source.sourceContentHash,
+    sourceSlug: source.sourceSlug,
+    ordinal,
+    purgedAt: null,
+  }));
+}
+
+function materializeEvidence(
+  seed: RevisionSourceEvidence[] | undefined,
+  resolved: ResolvedSourceRevision[],
+): RevisionSourceEvidence[] {
+  if (!seed) return evidenceFromResolved(resolved);
+  const byId = new Map(resolved.map((source) => [source.id, source]));
+  return seed
+    .slice()
+    .sort((a, b) => (a.ordinal ?? Number.MAX_SAFE_INTEGER) - (b.ordinal ?? Number.MAX_SAFE_INTEGER))
+    .map((item, ordinal) => {
+      if (!item.sourceRevisionId) return { ...item, ordinal };
+      const source = byId.get(item.sourceRevisionId);
+      if (!source) throw new ContentProvenanceError("research evidence SourceRevision no longer exists");
+      return {
+        sourceRevisionId: source.id,
+        sourceRevisionRef: source.id,
+        sourceVersion: source.sourceVersion,
+        sourceContentHash: source.sourceContentHash,
+        sourceSlug: source.sourceSlug,
+        ordinal,
+        purgedAt: null,
+      };
+    });
+}
+
 async function attachRevisionSources(
   tx: ContentTransaction,
   pageRevisionId: string,
-  sourceRevisionIds: string[],
+  evidence: RevisionSourceEvidence[],
 ): Promise<void> {
-  if (sourceRevisionIds.length === 0) return;
+  if (evidence.length === 0) return;
   await tx.pageRevisionSource.createMany({
-    data: sourceRevisionIds.map((sourceRevisionId) => ({ pageRevisionId, sourceRevisionId })),
+    data: evidence.map((item, ordinal) => ({
+      pageRevisionId,
+      sourceRevisionId: item.sourceRevisionId,
+      sourceRevisionRef: item.sourceRevisionRef,
+      sourceVersion: item.sourceVersion,
+      sourceContentHash: item.sourceContentHash,
+      sourceSlug: item.sourceSlug,
+      ordinal,
+      purgedAt: item.purgedAt,
+    })),
     skipDuplicates: true,
   });
 }
@@ -397,6 +517,7 @@ export async function createPageSnapshotTx(
 ): Promise<PageSnapshotWriteResult> {
   const sourceRevisionIds = unique(input.sourceRevisionIds);
   const sourceRevisions = await resolveSourceRevisions(tx, input.wikiId, sourceRevisionIds);
+  const evidence = evidenceFromResolved(sourceRevisions);
   await assertParent(tx, input.wikiId, input.parentId ?? null);
 
   const kind = input.kind;
@@ -418,7 +539,10 @@ export async function createPageSnapshotTx(
     suppressedAt: input.suppressedAt ?? null,
     staleAt: input.staleAt ?? null,
   };
-  assertDocumentPageState(state, sourceRevisionIds);
+  assertDocumentPageState(state, evidence, {
+    requireResearchSourcesPreserved: input.requireResearchSourcesPreserved,
+    resolved: sourceRevisions,
+  });
   assertActivePageSourceEligibility(state.archivedAt, sourceRevisions);
 
   const projection = await tx.page.create({
@@ -431,7 +555,7 @@ export async function createPageSnapshotTx(
     },
   });
   const revision = await tx.pageRevision.create({ data: revisionData(state, projection.id, 1, input.context) });
-  await attachRevisionSources(tx, revision.id, sourceRevisionIds);
+  await attachRevisionSources(tx, revision.id, evidence);
   return { page: projection, projection, revision };
 }
 
@@ -443,18 +567,37 @@ async function inheritedPageSources(
   tx: ContentTransaction,
   pageId: string,
   version: number,
-): Promise<{ revisionIds: string[]; sourceIds: Set<string> }> {
+): Promise<{ revisionIds: string[]; sourceIds: Set<string>; evidence: RevisionSourceEvidence[] }> {
   const previous = await tx.pageRevision.findUnique({
     where: { pageId_version: { pageId, version } },
     select: {
       sources: {
-        select: { sourceRevisionId: true, sourceRevision: { select: { sourceId: true } } },
+        orderBy: [{ ordinal: "asc" }, { id: "asc" }],
+        select: {
+          sourceRevisionId: true,
+          sourceRevisionRef: true,
+          sourceVersion: true,
+          sourceContentHash: true,
+          sourceSlug: true,
+          ordinal: true,
+          purgedAt: true,
+          sourceRevision: { select: { sourceId: true } },
+        },
       },
     },
   });
   return {
-    revisionIds: previous?.sources.map((source) => source.sourceRevisionId) ?? [],
-    sourceIds: new Set(previous?.sources.map((source) => source.sourceRevision.sourceId) ?? []),
+    revisionIds: previous?.sources.flatMap((source) => source.sourceRevisionId ? [source.sourceRevisionId] : []) ?? [],
+    sourceIds: new Set(previous?.sources.flatMap((source) => source.sourceRevision ? [source.sourceRevision.sourceId] : []) ?? []),
+    evidence: previous?.sources.map((source) => ({
+      sourceRevisionId: source.sourceRevisionId,
+      sourceRevisionRef: source.sourceRevisionRef,
+      sourceVersion: source.sourceVersion,
+      sourceContentHash: source.sourceContentHash,
+      sourceSlug: source.sourceSlug,
+      ordinal: source.ordinal,
+      purgedAt: source.purgedAt,
+    })) ?? [],
   };
 }
 
@@ -474,6 +617,10 @@ export async function updatePageSnapshotTx(
   const inheritedSources = await inheritedPageSources(tx, current.id, current.currentVersion);
   const sourceRevisionIds = unique(input.sourceRevisionIds ?? inheritedSources.revisionIds);
   const sourceRevisions = await resolveSourceRevisions(tx, input.wikiId, sourceRevisionIds);
+  const evidence = materializeEvidence(
+    input.sourceEvidence ?? (input.sourceRevisionIds === undefined ? inheritedSources.evidence : undefined),
+    sourceRevisions,
+  );
   const kind = input.changes.kind ?? current.kind;
   if (kind !== current.kind && (kind === "document" || current.kind === "document")) {
     throw new ContentProvenanceError("document pages cannot be converted to or from another page kind");
@@ -525,7 +672,10 @@ export async function updatePageSnapshotTx(
     suppressedAt: own(input.changes, "suppressedAt") ? (input.changes.suppressedAt ?? null) : current.suppressedAt,
     staleAt: own(input.changes, "staleAt") ? (input.changes.staleAt ?? null) : current.staleAt,
   };
-  assertDocumentPageState(state, sourceRevisionIds);
+  assertDocumentPageState(state, evidence, {
+    requireResearchSourcesPreserved: input.requireResearchSourcesPreserved,
+    resolved: sourceRevisions,
+  });
   const version = current.currentVersion + 1;
   const policyVersion = current.policyVersion + (state.modelAccess === current.modelAccess ? 0 : 1);
   const changed = await tx.page.updateMany({
@@ -543,7 +693,7 @@ export async function updatePageSnapshotTx(
   });
 
   const revision = await tx.pageRevision.create({ data: revisionData(state, current.id, version, input.context) });
-  await attachRevisionSources(tx, revision.id, sourceRevisionIds);
+  await attachRevisionSources(tx, revision.id, evidence);
   const projection = await tx.page.findUniqueOrThrow({ where: { id: current.id } });
   return { page: projection, projection, revision };
 }
@@ -609,18 +759,33 @@ export async function restorePageRevisionTx(tx: ContentTransaction, input: Resto
       archivedAt: true,
       suppressedAt: true,
       staleAt: true,
-      sources: { select: { sourceRevisionId: true } },
+      sources: {
+        orderBy: [{ ordinal: "asc" }, { id: "asc" }],
+        select: {
+          sourceRevisionId: true,
+          sourceRevisionRef: true,
+          sourceVersion: true,
+          sourceContentHash: true,
+          sourceSlug: true,
+          ordinal: true,
+          purgedAt: true,
+        },
+      },
     },
   });
   if (!selected) throw new ContentNotFoundError("revision");
-  if (!selected.archivedAt && selected.sources.length) {
+  const selectedLiveRevisionIds = selected.sources.flatMap((source) =>
+    source.sourceRevisionId ? [source.sourceRevisionId] : []
+  );
+  const selectedHasPurgedEvidence = selected.sources.some((source) => source.sourceRevisionId === null);
+  if (!selected.archivedAt && selectedLiveRevisionIds.length) {
     const activeSourceCount = await tx.sourceRevision.count({
       where: {
-        id: { in: selected.sources.map((source) => source.sourceRevisionId) },
+        id: { in: selectedLiveRevisionIds },
         source: { wikiId: input.wikiId, archivedAt: null },
       },
     });
-    if (activeSourceCount !== selected.sources.length) {
+    if (activeSourceCount !== selectedLiveRevisionIds.length && selected.documentType !== "research") {
       throw new Error("cannot restore an active Page whose provenance Source is archived or purged");
     }
   }
@@ -643,9 +808,24 @@ export async function restorePageRevisionTx(tx: ContentTransaction, input: Resto
       modelAccess: selected.modelAccess,
       archivedAt: selected.archivedAt,
       suppressedAt: selected.suppressedAt,
-      staleAt: selected.staleAt,
+      staleAt:
+        selected.documentType === "research" && selectedHasPurgedEvidence
+          ? selected.staleAt ?? new Date()
+          : selected.staleAt,
     },
-    sourceRevisionIds: selected.sources.map((source) => source.sourceRevisionId),
+    sourceRevisionIds: selectedLiveRevisionIds,
+    sourceEvidence:
+      selected.documentType === "research"
+        ? selected.sources.map((source) => ({
+            sourceRevisionId: source.sourceRevisionId,
+            sourceRevisionRef: source.sourceRevisionRef,
+            sourceVersion: source.sourceVersion,
+            sourceContentHash: source.sourceContentHash,
+            sourceSlug: source.sourceSlug,
+            ordinal: source.ordinal,
+            purgedAt: source.purgedAt,
+          }))
+        : undefined,
     acceptedAiDraft: true,
     preserveOriginOnRestore: input.preserveOrigin === true,
     context: { ...input.context, actor: "restore" },
@@ -675,7 +855,9 @@ export async function restoreArchivedPageTx(tx: ContentTransaction, input: Resto
       },
     },
   });
-  const sourceRevisionIds = current?.revisions[0]?.sources.map((source) => source.sourceRevisionId) ?? [];
+  const sourceRevisionIds = current?.revisions[0]?.sources.flatMap((source) =>
+    source.sourceRevisionId ? [source.sourceRevisionId] : []
+  ) ?? [];
   if (sourceRevisionIds.length) {
     const activeSourceCount = await tx.sourceRevision.count({
       where: {
@@ -1080,29 +1262,51 @@ export async function purgeSourceTx(
     },
     select: {
       version: true,
-      page: { select: { id: true, currentVersion: true, sourceId: true, origin: true } },
-      sources: { select: { sourceRevisionId: true, sourceRevision: { select: { sourceId: true } } } },
+      page: {
+        select: {
+          id: true,
+          currentVersion: true,
+          sourceId: true,
+          origin: true,
+          documentType: true,
+        },
+      },
+      sources: {
+        select: {
+          sourceRevisionId: true,
+          sourceRevision: { select: { sourceId: true } },
+        },
+      },
     },
   });
   const currentDependents = dependentRevisions
     .filter((revision) => revision.version === revision.page.currentVersion)
     .sort((a, b) => a.page.id.localeCompare(b.page.id));
   for (const dependent of currentDependents) {
+    const research = dependent.page.documentType === "research";
     await updatePageSnapshotTx(tx, {
       wikiId: input.wikiId,
       pageId: dependent.page.id,
       expectedVersion: dependent.page.currentVersion,
       changes: {
         ...(dependent.page.sourceId === source.id ? { sourceId: null } : {}),
-        ...(dependent.page.origin === "generated" ? { staleAt: new Date() } : {}),
+        ...(research || dependent.page.origin === "generated" ? { staleAt: new Date() } : {}),
       },
-      sourceRevisionIds: dependent.sources
-        .filter((entry) => entry.sourceRevision.sourceId !== source.id)
-        .map((entry) => entry.sourceRevisionId),
+      // Research는 본문이 인용한 exact revision을 새 stale revision에도 그대로 복제한다.
+      // Source 삭제 직후 FK만 null tombstone으로 바뀌며 citation identity/order는 남는다.
+      sourceRevisionIds: research
+        ? undefined
+        : dependent.sources
+            .filter((entry) => entry.sourceRevision?.sourceId !== source.id)
+            .flatMap((entry) => entry.sourceRevisionId ? [entry.sourceRevisionId] : []),
       preserveOriginOnRestore: true,
       context: { actor: "system", reason: `Source permanently purged: ${source.slug}` },
     });
   }
+  await tx.pageRevisionSource.updateMany({
+    where: { sourceRevision: { sourceId: source.id } },
+    data: { purgedAt: new Date() },
+  });
   // Source 전용 note는 projection이 아니라 Source 내용의 파생 복사다. Source만 지우고 note
   // revision/body를 남기면 영구 삭제 뒤에도 로컬 FTS와 history에서 원문 요약이 생존한다.
   const sourceNotes = await tx.page.findMany({

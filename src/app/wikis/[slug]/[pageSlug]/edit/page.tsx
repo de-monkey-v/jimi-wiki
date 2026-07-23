@@ -62,9 +62,18 @@ export default async function EditPage({
           <div className="grid gap-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 sm:grid-cols-2">
             <label className="text-sm text-stone-600">
               <span className="mb-1 block font-medium">{t("documentTypeLabel")}</span>
-              <select name="documentType" defaultValue={page.documentType ?? "general"} className="w-full rounded border bg-white px-3 py-2">
-                {DOCUMENT_TYPES.map((type) => <option key={type} value={type}>{t(`documentType.${type}`)}</option>)}
-              </select>
+              {page.documentType === "research" ? (
+                <>
+                  <input type="hidden" name="documentType" value="research" />
+                  <span className="block w-full rounded border border-indigo-100 bg-indigo-50 px-3 py-2 font-medium text-indigo-700">
+                    {t("documentType.research")}
+                  </span>
+                </>
+              ) : (
+                <select name="documentType" defaultValue={page.documentType ?? "general"} className="w-full rounded border bg-white px-3 py-2">
+                  {DOCUMENT_TYPES.map((type) => <option key={type} value={type}>{t(`documentType.${type}`)}</option>)}
+                </select>
+              )}
             </label>
             <label className="text-sm text-stone-600">
               <span className="mb-1 block font-medium">{t("documentAtLabel")}</span>

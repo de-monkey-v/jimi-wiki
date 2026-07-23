@@ -43,7 +43,7 @@ function parseTarget(raw: string): { target: string; label: string } {
 }
 
 /** [[target]] / [[target|label]] 를 링크 노드로. text 노드만 방문하므로 코드블록·인라인코드는 자동 제외 */
-function remarkWikiLink(opts: {
+export function remarkWikiLink(opts: {
   hrefFor: (target: string) => string;
   exists?: (target: string) => boolean;
 }) {

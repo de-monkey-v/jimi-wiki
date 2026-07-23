@@ -106,6 +106,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (body.documentAt !== undefined && !documentAt) {
     return NextResponse.json({ error: "invalid_document_at" }, { status: 400 });
   }
+  let sourceSlugs: string[] | undefined;
+  if (body.sourceSlugs !== undefined) {
+    if (!Array.isArray(body.sourceSlugs) || body.sourceSlugs.some((slug) => typeof slug !== "string")) {
+      return NextResponse.json({ error: "invalid_research_source_slugs" }, { status: 400 });
+    }
+    sourceSlugs = body.sourceSlugs as string[];
+  }
+  if (sourceSlugs !== undefined && documentType !== "research") {
+    return NextResponse.json({ error: "document_source_provenance_forbidden" }, { status: 400 });
+  }
   const expectedVersion = body.expectedVersion === undefined ? undefined : parseExpectedVersion(body.expectedVersion) ?? undefined;
   if (body.expectedVersion !== undefined && expectedVersion === undefined) {
     return NextResponse.json({ error: "invalid_expected_version" }, { status: 400 });
@@ -134,6 +144,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       documentAt,
       category,
       expectedVersion,
+      sourceSlugs,
     });
     if (result.staged) return NextResponse.json(result, { status: 202 });
     return NextResponse.json(

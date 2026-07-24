@@ -7,8 +7,8 @@ usage() {
 }
 
 action="${1:-}"
-profile_command="${HERMES_PERSONAL_COMMAND:-personal}"
-profile_dir="${HERMES_PERSONAL_PROFILE_DIR:-$HOME/.hermes/profiles/personal}"
+profile_command="${HERMES_PERSONAL_COMMAND:-wiki-personal}"
+profile_dir="${HERMES_PERSONAL_PROFILE_DIR:-$HOME/.hermes/profiles/wiki-personal}"
 profile_env="$profile_dir/.env"
 profile_config="$profile_dir/config.yaml"
 state_dir="${JIMI_CONFIG_DIR:-$HOME/.config/jimi-wiki}"

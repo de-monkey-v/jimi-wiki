@@ -43,7 +43,7 @@ claude mcp add --scope local jimi-wiki \
 }
 ```
 
-**Hermes Agent** — 개인 위키 전용 키를 `wiki scope + maxRole=editor + 90일 만료`로 발급하고 개인 프로필의 `~/.hermes/profiles/personal/.env`에 `JIMI_WIKI_PERSONAL_KEY=...`로 보관한다. 개인 프로필 `config.yaml`에는 원문 키 대신 placeholder를 쓰고, production에서는 release의 `mcp/server.mjs` 절대 경로를 가리킨다:
+**Hermes Agent** — 위키마다 전용 프로필(`wiki-<slug>`, 예: `wiki-personal`, `wiki-work`)을 두고, 위키 전용 키를 `wiki scope + maxRole=editor + 90일 만료`로 발급해 해당 프로필의 `~/.hermes/profiles/wiki-<slug>/.env`에 `JIMI_WIKI_<SLUG>_KEY=...`로 보관한다(발급은 `pnpm apikey:issue-hermes -- --wiki <slug> --confirm ROTATE_HERMES_<SLUG>_KEY`, 키 이름은 `hermes-<slug>`로 저장되고 같은 이름만 rotate된다). 프로필 `config.yaml`에는 원문 키 대신 placeholder를 쓰고, production에서는 release의 `mcp/server.mjs` 절대 경로를 가리킨다:
 ```yaml
 mcp_servers:
   jimi-wiki:
@@ -51,7 +51,7 @@ mcp_servers:
     args: ["<repo>/mcp/server.mjs"]
     env:
       JIMI_WIKI_URL: "<앱주소>"
-      JIMI_WIKI_API_KEY: "${JIMI_WIKI_PERSONAL_KEY}"
+      JIMI_WIKI_API_KEY: "${JIMI_WIKI_<SLUG>_KEY}"
       JIMI_WIKI_SLUG: "<대상-위키-slug>"
     tools:
       # 비서 프로필 — 찾고·넣고·담아두는 일상 사용
@@ -80,7 +80,7 @@ curl -sH "Authorization: Bearer $KEY" "$BASE/pages"   # 연결 확인
 스킬 본체는 `SKILL.md` + `references/`다. 폴더째로 옮겨야 참조(ontology-rules·tools·setup)가 유지된다.
 
 - **Claude Code** — 이 폴더를 `.claude/skills/wiki-ingest/`(프로젝트) 또는 `~/.claude/skills/wiki-ingest/`(전역)에 둔다. frontmatter의 `name`/`description`으로 자동 발견되고 `/wiki-ingest`로 호출된다.
-- **Hermes Agent** — 기본 프로필은 `~/.hermes/skills/wiki-ingest/`, 개인 프로필은 `~/.hermes/profiles/personal/skills/wiki-ingest/`에 복사한다. Hermes는 `SKILL.md` 형식을 그대로 읽는다. 위임형 편입만 쓸 거라면 스킬 없이 MCP 도구 설명만으로도 동작한다 — 직접 큐레이션을 시킬 때 스킬이 필요하다.
+- **Hermes Agent** — 기본 프로필은 `~/.hermes/skills/wiki-ingest/`, 위키 프로필은 `~/.hermes/profiles/wiki-<slug>/skills/wiki-ingest/`(예: `wiki-personal`)에 복사한다. Hermes는 `SKILL.md` 형식을 그대로 읽는다. 위임형 편입만 쓸 거라면 스킬 없이 MCP 도구 설명만으로도 동작한다 — 직접 큐레이션을 시킬 때 스킬이 필요하다.
 - **Codex 등 invoke 도구 없는 하네스** — invoke 개념이 없다. 에이전트에게 `SKILL.md` 경로를 알려주고 "이 SKILL.md를 읽고 그 워크플로우를 따르라"고 지시하면 된다. frontmatter는 무시돼도 무방하다.
 - **그 외** — SKILL.md는 순수 마크다운 지침이다. 어떤 에이전트든 이 파일과 `references/`를 읽을 수 있으면 사용 가능하다.
 

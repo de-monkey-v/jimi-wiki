@@ -87,7 +87,7 @@ After the browser claim succeeds, rotate the personal agent key directly into th
 
 ```bash
 pnpm apikey:issue-hermes -- \
-  --env-file "$HOME/.hermes/profiles/personal/.env" \
+  --env-file "$HOME/.hermes/profiles/wiki-personal/.env" \
   --wiki personal \
   --confirm ROTATE_HERMES_PERSONAL_KEY
 ops/hermes-jimi-mcp.sh connect

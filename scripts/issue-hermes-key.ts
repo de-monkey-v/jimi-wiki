@@ -11,6 +11,11 @@ function option(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+// slug → 환경변수/확인토큰 조각. "personal" → PERSONAL (기존 JIMI_WIKI_PERSONAL_KEY 하위호환)
+function slugSuffix(slug: string): string {
+  return slug.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
 async function writeProtectedFile(absolute: string, contents: string) {
   const temp = `${absolute}.${process.pid}.tmp`;
   await writeFile(temp, contents, { mode: 0o600 });
@@ -27,11 +32,8 @@ async function replaceEnvValue(absolute: string, current: string, key: string, v
 
 async function main() {
   if (authMode() !== "tailscale") throw new Error("AUTH_MODE=tailscale is required");
-  if (option("--confirm") !== "ROTATE_HERMES_PERSONAL_KEY") {
-    throw new Error("Refusing key rotation: pass --confirm ROTATE_HERMES_PERSONAL_KEY");
-  }
   const envFile = option("--env-file");
-  if (!envFile) throw new Error("--env-file <Hermes personal .env> is required");
+  if (!envFile) throw new Error("--env-file <Hermes profile .env> is required");
   const login = process.env.TAILSCALE_ALLOWED_LOGIN;
   if (!login) throw new Error("TAILSCALE_ALLOWED_LOGIN is required");
   const wikiSlug = option("--wiki");
@@ -54,26 +56,36 @@ async function main() {
         select: { wiki: { select: { id: true, slug: true } } },
       });
       if (memberships.length !== 1) throw new Error("Exactly one writable personal wiki must match; pass --wiki when needed");
+      const slug = memberships[0].wiki.slug;
+      const suffix = slugSuffix(slug);
+      if (!suffix) throw new Error(`Wiki slug "${slug}" yields an empty env-var suffix`);
+      const confirmToken = `ROTATE_HERMES_${suffix}_KEY`;
+      if (option("--confirm") !== confirmToken) {
+        throw new Error(`Refusing key rotation for wiki "${slug}": pass --confirm ${confirmToken}`);
+      }
+      const keyName = `hermes-${slug}`;
+      const envKey = `JIMI_WIKI_${suffix}_KEY`;
       previousEnv = await readFile(absoluteEnvFile, "utf8");
       const created = await tx.apiKey.create({
         data: {
           userId: account.userId,
           wikiId: memberships[0].wiki.id,
-          name: "hermes-personal",
+          name: keyName,
           hashedKey: generated.hashedKey,
           prefix: generated.prefix,
           maxRole: "editor",
           expiresAt,
         },
-        select: { id: true, userId: true, prefix: true, expiresAt: true, wiki: { select: { slug: true } } },
+        select: { id: true, userId: true, name: true, prefix: true, expiresAt: true, wiki: { select: { slug: true } } },
       });
-      await replaceEnvValue(absoluteEnvFile, previousEnv, "JIMI_WIKI_PERSONAL_KEY", generated.token);
+      await replaceEnvValue(absoluteEnvFile, previousEnv, envKey, generated.token);
       envWritten = true;
+      // 같은 이름(= 같은 위키의 Hermes 키)만 rotate — 다른 위키의 활성 키는 건드리지 않는다
       await tx.apiKey.updateMany({
-        where: { userId: account.userId, name: "hermes-personal", revokedAt: null, id: { not: created.id } },
+        where: { userId: account.userId, name: keyName, revokedAt: null, id: { not: created.id } },
         data: { revokedAt: new Date() },
       });
-      return created;
+      return { ...created, envKey };
     }, { maxWait: 15_000, timeout: 15_000 });
   } catch (error) {
     if (envWritten && previousEnv !== undefined) {
@@ -85,7 +97,7 @@ async function main() {
     }
     throw error;
   }
-  console.log(JSON.stringify({ ok: true, prefix: record.prefix, wiki: record.wiki?.slug, expiresAt: record.expiresAt, envFile: absoluteEnvFile }));
+  console.log(JSON.stringify({ ok: true, name: record.name, prefix: record.prefix, wiki: record.wiki?.slug, envKey: record.envKey, expiresAt: record.expiresAt, envFile: absoluteEnvFile }));
 }
 
 main().catch(async (error) => {

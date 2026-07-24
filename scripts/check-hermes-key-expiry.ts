@@ -4,11 +4,11 @@ import { prisma } from "../src/lib/db";
 async function main() {
   const warningAt = new Date(Date.now() + 14 * 86_400_000);
   const keys = await prisma.apiKey.findMany({
-    where: { name: "hermes-personal", revokedAt: null, expiresAt: { lte: warningAt } },
-    select: { prefix: true, expiresAt: true, wiki: { select: { slug: true } } },
+    where: { name: { startsWith: "hermes-" }, revokedAt: null, expiresAt: { lte: warningAt } },
+    select: { name: true, prefix: true, expiresAt: true, wiki: { select: { slug: true } } },
   });
   if (keys.length > 0) {
-    for (const key of keys) console.error(`Hermes API key ${key.prefix}… (${key.wiki?.slug ?? "unscoped"}) expires at ${key.expiresAt?.toISOString()}`);
+    for (const key of keys) console.error(`Hermes API key ${key.name} ${key.prefix}… (${key.wiki?.slug ?? "unscoped"}) expires at ${key.expiresAt?.toISOString()}`);
     process.exitCode = 1;
   } else {
     console.log("Hermes API key expiry check OK");

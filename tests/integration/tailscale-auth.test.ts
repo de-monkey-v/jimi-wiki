@@ -105,6 +105,33 @@ test("Tailscale claim, scoped Hermes key rotation, and auth reset preserve conte
     assert.equal(ownerGate.ok, false);
     if (!ownerGate.ok) assert.equal(ownerGate.res.status, 403);
 
+    const work = await prisma.wiki.create({
+      data: { slug: "work", title: "Work", kind: "personal", createdById: owner.id, memberships: { create: { userId: owner.id, role: "owner" } } },
+    });
+    const workEnv = path.join(temp, "hermes-work.env");
+    await writeFile(workEnv, "", { mode: 0o600 });
+    await assert.rejects(() => execFileAsync(process.execPath, [
+      "--require", "./scripts/server-only-shim.cjs", "--import", "tsx", "./scripts/issue-hermes-key.ts",
+      "--env-file", workEnv, "--wiki", work.slug, "--confirm", "ROTATE_HERMES_PERSONAL_KEY",
+    ], { cwd: process.cwd(), env }), /ROTATE_HERMES_WORK_KEY/);
+    const issueWork = await execFileAsync(process.execPath, [
+      "--require", "./scripts/server-only-shim.cjs", "--import", "tsx", "./scripts/issue-hermes-key.ts",
+      "--env-file", workEnv, "--wiki", work.slug, "--confirm", "ROTATE_HERMES_WORK_KEY",
+    ], { cwd: process.cwd(), env });
+    assert.match(issueWork.stdout, /"ok":true/);
+    const workToken = (await readFile(workEnv, "utf8")).match(/^JIMI_WIKI_WORK_KEY=(.+)$/m)?.[1];
+    assert.ok(workToken);
+    const workRecord = await prisma.apiKey.findFirstOrThrow({ where: { name: "hermes-work", revokedAt: null } });
+    assert.equal(workRecord.wikiId, work.id);
+    // 다른 위키의 키 rotate가 personal 키를 revoke하지 않아야 한다
+    assert.equal((await prisma.apiKey.findUniqueOrThrow({ where: { id: record.id } })).revokedAt, null);
+    const workRequest = new Request("http://localhost", { headers: { Authorization: `Bearer ${workToken}` } });
+    const workGate = await gate.apiWikiGate(workRequest, work.slug, { minRole: "editor" });
+    assert.equal(workGate.ok, true);
+    const crossGate = await gate.apiWikiGate(workRequest, personal.slug);
+    assert.equal(crossGate.ok, false);
+    if (!crossGate.ok) assert.equal(crossGate.res.status, 404);
+
     await prisma.account.deleteMany();
     const second = await prisma.user.create({ data: { email: "second@example.invalid" } });
     await prisma.membership.create({ data: { wikiId: project.id, userId: second.id, role: "owner" } });

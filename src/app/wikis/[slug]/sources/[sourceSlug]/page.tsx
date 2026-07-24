@@ -45,7 +45,7 @@ export default async function SourceView({
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-3xl xl:max-w-4xl 2xl:max-w-5xl px-6 py-10">
       <div className="mb-1 text-sm text-stone-400">
         <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link> / {t("source")}
       </div>

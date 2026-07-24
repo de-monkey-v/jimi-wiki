@@ -27,7 +27,7 @@ export default async function ReadingPage({ params }: { params: Promise<{ slug: 
   });
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main className="mx-auto max-w-3xl xl:max-w-4xl 2xl:max-w-5xl px-6 py-8">
       <Link href={`/wikis/${slug}`} className="text-xs text-stone-400 hover:text-stone-600">← {wiki.title}</Link>
       <div className="flex items-center justify-between"><h1 className="mb-1 mt-1 text-2xl font-bold">{t("title")}</h1><Link href={`/wikis/${encodeURIComponent(slug)}/settings/trash`} className="rounded-sm text-sm text-stone-500 hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("trash")}</Link></div>
       <p className="mb-4 text-sm text-stone-400">{t("subtitle")}</p>

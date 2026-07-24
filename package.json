@@ -46,7 +46,7 @@
   "dependencies": {
     "@ai-sdk/google": "^3.0.88",
     "@ai-sdk/openai": "^3.0.80",
-    "@ai-sdk/react": "^3.0.220",
+    "@ai-sdk/react": "^4.0.40",
     "@anthropic-ai/sdk": "^0.114.0",
     "@auth/prisma-adapter": "^2.11.3",
     "@extractus/article-extractor": "^8.1.0",

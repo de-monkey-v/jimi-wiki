@@ -50,7 +50,7 @@ export default async function WikisPage({
       <ul className="space-y-2 mb-8">
         {owned.length === 0 && hasAnyWikis && <li className="text-gray-500">{t("noOwnedWikis")}</li>}
         {owned.map((w) => (
-          <li key={w.id} className="border rounded-lg p-4 hover:bg-gray-50">
+          <li key={w.id} className="card-hover border rounded-lg p-4 bg-white">
             <Link href={`/wikis/${w.slug}`} className="flex items-center justify-between">
               <div>
                 <div className="font-semibold">{w.title}</div>
@@ -70,7 +70,7 @@ export default async function WikisPage({
           <h2 className="text-sm font-semibold text-gray-500 mb-2">{t("sharedWikis")}</h2>
           <ul className="space-y-2">
             {shared.map((w) => (
-              <li key={w.id} className="border rounded-lg p-4 hover:bg-gray-50">
+              <li key={w.id} className="card-hover border rounded-lg p-4 bg-white">
                 <Link href={`/wikis/${w.slug}`} className="flex items-center justify-between">
                   <div>
                     <div className="font-semibold">{w.title}</div>

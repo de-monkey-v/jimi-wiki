@@ -250,6 +250,7 @@ export default async function PageView({
           title={page.title}
           body={page.body}
           wikiSlug={slug}
+          pageSlug={pageSlug}
           category={page.category}
           existingSlugs={[...existing]}
           evidence={researchEvidence}
@@ -275,6 +276,7 @@ export default async function PageView({
         translateControl={page.body.trim() && !page.archivedAt && page.modelAccess === "external" ? <TranslateMenu current={translatedTo} pageLang={pageLang} /> : undefined}
         pinControl={page.archivedAt ? undefined : <PinButton wikiSlug={slug} pageSlug={pageSlug} pinned={pinned} />}
         create={canWrite && !page.archivedAt ? { wikiSlug: slug, category: isNote ? null : page.category } : undefined}
+        selection={{ pageSlug, canWrite: canWrite && !page.archivedAt }}
         emptyText={canWrite ? t("emptyEditable") : t("empty")}
         isNote={isNote}
         provenance={provenance}

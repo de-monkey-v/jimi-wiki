@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * 일반 모달 셸. portal 오버레이 + 바깥 클릭/Escape 닫기 + body 스크롤 잠금 + 첫 입력 포커스/복귀.
@@ -102,14 +103,16 @@ export function Modal({
         <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-5 py-3">
           <h2 className="truncate text-base font-semibold">{title}</h2>
           <div className="flex shrink-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t("close")}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-xl leading-none text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-            >
-              ×
-            </button>
+            <Tooltip label={t("close")}>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={t("close")}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-xl leading-none text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
+                ×
+              </button>
+            </Tooltip>
           </div>
         </div>
         <div data-modal-content className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-5">{children}</div>

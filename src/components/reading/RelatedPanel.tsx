@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { PreviewLink } from "@/components/ui/PreviewLink";
 
 type Item = { slug: string; title: string };
 
@@ -11,12 +11,13 @@ function LinkGroup({ label, items, hrefFor }: { label: string; items: Item[]; hr
       <ul className="flex flex-wrap gap-1.5">
         {items.map((b) => (
           <li key={b.slug}>
-            <Link
+            <PreviewLink
+              pageSlug={b.slug}
               href={hrefFor(b.slug)}
-              className="inline-block rounded-md border border-stone-200 bg-white px-2 py-1 text-sm text-stone-700 hover:border-blue-400 hover:text-blue-700"
+              className="chip-hover inline-block rounded-md border border-stone-200 bg-white px-2 py-1 text-sm text-stone-700 hover:text-indigo-700"
             >
               {b.title}
-            </Link>
+            </PreviewLink>
           </li>
         ))}
       </ul>

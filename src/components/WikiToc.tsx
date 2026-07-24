@@ -9,6 +9,7 @@ import { useWikiActions } from "@/app/wikis/[slug]/WikiActions";
 import { useQuickNav } from "@/app/wikis/[slug]/QuickNav";
 import { RecentList } from "@/app/wikis/[slug]/RecentList";
 import { EmptyState } from "@/components/EmptyState";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type { TocSection, TocEntry } from "@/lib/kinds";
 import { isReservedWikiPageSlug } from "@/lib/wiki-routes";
 
@@ -53,18 +54,19 @@ function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: No
           {entry.title}
         </Link>
         {ctx.movable && quick && (
-          <button
-            type="button"
-            title={ctx.moveLabel}
-            aria-label={ctx.moveLabel}
-            onClick={(e) => {
-              e.stopPropagation();
-              quick.openMove(entry.slug, parentPath || null, entry.currentVersion);
-            }}
-            className="absolute right-1 top-1/2 block -translate-y-1/2 rounded px-1 text-xs text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-          >
-            ⋯
-          </button>
+          <Tooltip label={ctx.moveLabel}>
+            <button
+              type="button"
+              aria-label={ctx.moveLabel}
+              onClick={(e) => {
+                e.stopPropagation();
+                quick.openMove(entry.slug, parentPath || null, entry.currentVersion);
+              }}
+              className="absolute right-1 top-1/2 block -translate-y-1/2 rounded px-1 text-xs text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+              ⋯
+            </button>
+          </Tooltip>
         )}
       </li>
     );
@@ -92,15 +94,16 @@ function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "f
           <span className="text-xs text-stone-300">{leafCount(entry)}</span>
         </button>
         {ctx.newKind && actions && (
-          <button
-            type="button"
-            title={ctx.newInFolderLabel(entry.name)}
-            aria-label={ctx.newInFolderLabel(entry.name)}
-            onClick={() => actions.openNewPage({ category: entry.path, kind: ctx.newKind })}
-            className="block shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-          >
-            +
-          </button>
+          <Tooltip label={ctx.newInFolderLabel(entry.name)}>
+            <button
+              type="button"
+              aria-label={ctx.newInFolderLabel(entry.name)}
+              onClick={() => actions.openNewPage({ category: entry.path, kind: ctx.newKind })}
+              className="block shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+              +
+            </button>
+          </Tooltip>
         )}
       </div>
       {open && (
@@ -269,15 +272,16 @@ export function WikiToc({
                   <div className="flex items-center px-1 pb-1">
                     <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-stone-400">{t(`section.${s.key}`)}</span>
                     {newKind && actions && (
-                      <button
-                        type="button"
-                        title={t(`newKind.${s.key}`)}
-                        aria-label={t(`newKind.${s.key}`)}
-                        onClick={() => actions.openNewPage({ kind: newKind })}
-                        className="block shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                      >
-                        +
-                      </button>
+                      <Tooltip label={t(`newKind.${s.key}`)}>
+                        <button
+                          type="button"
+                          aria-label={t(`newKind.${s.key}`)}
+                          onClick={() => actions.openNewPage({ kind: newKind })}
+                          className="block shrink-0 rounded px-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                        >
+                          +
+                        </button>
+                      </Tooltip>
                     )}
                   </div>
                   <ul className="space-y-0.5">

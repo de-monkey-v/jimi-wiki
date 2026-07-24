@@ -7,6 +7,8 @@ import { useEffect, useMemo, useRef, useTransition } from "react";
 import { defaultRemarkPlugins, Streamdown, type MermaidErrorComponentProps } from "streamdown";
 import type { PluggableList } from "unified";
 import { createFromWikilinkAction } from "@/app/wikis/actions";
+import { SelectionToolbar } from "@/components/SelectionToolbar";
+import { useHoverPreview } from "@/components/ui/HoverPreview";
 import { remarkWikiLink } from "@/lib/markdown";
 import {
   guardResearchMermaid,
@@ -40,6 +42,10 @@ function MermaidFallback({ chart, error }: MermaidErrorComponentProps) {
 const targetOf = (anchor: HTMLAnchorElement) =>
   decodeURIComponent((anchor.getAttribute("href") ?? "").split("/").pop() ?? "");
 
+// streamdown 재렌더에도 안정적인 외부 래퍼에서 위키링크 hover를 위임으로 잡는다.
+const previewAnchorFrom = (target: EventTarget | null) =>
+  (target instanceof Element ? target.closest("a.wikilink:not(.wikilink-missing)") : null) as HTMLAnchorElement | null;
+
 export function ResearchMarkdown({
   body,
   sourceSlugs,
@@ -47,6 +53,7 @@ export function ResearchMarkdown({
   category,
   existingSlugs,
   canCreate,
+  selection,
 }: {
   body: string;
   sourceSlugs: string[];
@@ -54,9 +61,11 @@ export function ResearchMarkdown({
   category: string | null;
   existingSlugs: string[];
   canCreate: boolean;
+  selection?: { pageSlug: string; canWrite: boolean }; // 있으면 본문 텍스트 선택 툴바 활성(비공개 뷰)
 }) {
   const t = useTranslations("ResearchArticle");
   const router = useRouter();
+  const preview = useHoverPreview();
   const [pending, startTransition] = useTransition();
   const root = useRef<HTMLDivElement>(null);
   const existing = useMemo(() => new Set(existingSlugs), [existingSlugs]);
@@ -111,12 +120,33 @@ export function ResearchMarkdown({
     });
   };
 
+  const onPreviewOver = (event: React.SyntheticEvent) => {
+    if (!preview) return;
+    const anchor = previewAnchorFrom(event.target);
+    if (!anchor) return;
+    const slug = targetOf(anchor);
+    if (slug) preview.show(anchor, slug);
+  };
+  const onPreviewOut = (event: React.MouseEvent) => {
+    if (!preview) return;
+    const anchor = previewAnchorFrom(event.target);
+    if (anchor && !(event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget))) preview.hide();
+  };
+  const onPreviewBlur = (event: React.FocusEvent) => {
+    if (!preview) return;
+    if (previewAnchorFrom(event.target)) preview.hide();
+  };
+
   return (
     <div
       ref={root}
       className={`research-content wiki-content${canCreate ? " wiki-content--create" : ""}`}
       data-creating={pending ? "" : undefined}
       onClick={onClick}
+      onMouseOver={onPreviewOver}
+      onMouseOut={onPreviewOut}
+      onFocus={onPreviewOver}
+      onBlur={onPreviewBlur}
     >
       <Streamdown
         mode="static"
@@ -173,6 +203,7 @@ export function ResearchMarkdown({
       >
         {guarded}
       </Streamdown>
+      {selection && <SelectionToolbar containerRef={root} pageSlug={selection.pageSlug} canWrite={selection.canWrite} />}
     </div>
   );
 }

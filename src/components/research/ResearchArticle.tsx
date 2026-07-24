@@ -22,6 +22,7 @@ export function ResearchArticle({
   title,
   body,
   wikiSlug,
+  pageSlug,
   category,
   existingSlugs,
   evidence,
@@ -42,6 +43,7 @@ export function ResearchArticle({
   title: string;
   body: string;
   wikiSlug: string;
+  pageSlug?: string; // 있으면 본문 텍스트 선택 툴바 활성(비공개 뷰)
   category: string | null;
   existingSlugs: string[];
   evidence: ResearchEvidence[];
@@ -94,6 +96,7 @@ export function ResearchArticle({
             category={category}
             existingSlugs={existingSlugs}
             canCreate={canCreate}
+            selection={pageSlug ? { pageSlug, canWrite: canCreate } : undefined}
           />
         </article>
         <aside className="research-evidence" aria-labelledby="research-evidence-heading">

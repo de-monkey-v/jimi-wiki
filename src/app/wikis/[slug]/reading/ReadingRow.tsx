@@ -3,6 +3,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { deleteSavedLinkAction, promoteSavedLinkAction } from "@/app/wikis/actions";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /** 읽을거리 한 행: 열기(새 탭) · 정식 편입(ingest) · 삭제. 외부 링크라 마크다운 대신 직접 target=_blank. */
 export function ReadingRow({
@@ -15,6 +16,7 @@ export function ReadingRow({
   savedAt,
   promoted,
   canPromote,
+  navProps,
 }: {
   wikiSlug: string;
   id: string;
@@ -25,6 +27,7 @@ export function ReadingRow({
   savedAt: string;
   promoted: boolean;
   canPromote: boolean;
+  navProps?: React.LiHTMLAttributes<HTMLLIElement>; // useListNav 컨테이너가 주입(키보드 탐색 활성 표시)
 }) {
   const t = useTranslations("WikisSlugReadingPage");
   const [pending, start] = useTransition();
@@ -38,7 +41,8 @@ export function ReadingRow({
 
   return (
     <li
-      className={`grid gap-3 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-4 ${
+      {...navProps}
+      className={`group/row -mx-3 grid gap-3 rounded-lg px-3 py-4 transition-colors hover:bg-stone-50 data-active:bg-stone-50 motion-reduce:transition-none lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-4 ${
         promoted ? "opacity-60" : ""
       }`}
     >
@@ -63,7 +67,8 @@ export function ReadingRow({
         )}
         <p className="mt-2 truncate text-xs text-stone-400">{host} · {savedAt}</p>
       </div>
-      <div className="flex w-full shrink-0 items-center gap-2 border-t border-stone-100 pt-3 lg:w-auto lg:gap-1 lg:border-t-0 lg:pt-0">
+      {/* 데스크톱(lg+)은 hover/focus 시에만 액션 노출(opacity 전환 — display 숨김이 아니라 키보드 포커스 도달 가능). 모바일은 항상 표시. */}
+      <div className="flex w-full shrink-0 items-center gap-2 border-t border-stone-100 pt-3 transition-opacity motion-reduce:transition-none lg:w-auto lg:gap-1 lg:border-t-0 lg:pt-0 lg:opacity-0 lg:group-focus-within/row:opacity-100 lg:group-hover/row:opacity-100">
         <a
           href={url}
           target="_blank"
@@ -73,10 +78,10 @@ export function ReadingRow({
           {t("open")}
         </a>
         {canPromote && !promoted && (
+          <Tooltip label={t("promoteHint")}>
           <button
             type="button"
             disabled={pending}
-            title={t("promoteHint")}
             onClick={() =>
               start(async () => {
                 const runId = await promoteSavedLinkAction(wikiSlug, id);
@@ -87,6 +92,7 @@ export function ReadingRow({
           >
             {t("promote")}
           </button>
+          </Tooltip>
         )}
         <button
           type="button"

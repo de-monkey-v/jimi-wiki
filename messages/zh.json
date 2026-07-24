@@ -233,6 +233,17 @@
     "close": "关闭",
     "fullPage": "完整页面"
   },
+  "HoverPreview": {
+    "updated": "更新于 {date}"
+  },
+  "SelectionToolbar": {
+    "toolbarLabel": "选中文本操作",
+    "copy": "复制",
+    "copied": "已复制",
+    "copyQuote": "复制为引用",
+    "searchInWiki": "在维基中搜索",
+    "capture": "捕捉为笔记"
+  },
   "PageNav": {
     "prev": "← 上一页",
     "next": "下一页 →"

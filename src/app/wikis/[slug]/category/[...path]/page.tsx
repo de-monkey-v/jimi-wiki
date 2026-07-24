@@ -6,6 +6,7 @@ import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, isFolderPinned } from "@/lib/wiki";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
 import { FolderPinButton } from "./FolderPinButton";
+import { CategoryList } from "./CategoryList";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +27,10 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   const pages = await prisma.page.findMany({
     where: { wikiId: wiki.id, OR: [{ category: prefix }, { category: { startsWith: likePrefix } }] },
     orderBy: [{ category: "asc" }, { title: "asc" }],
-    select: { slug: true, title: true, kind: true, category: true },
+    select: { slug: true, title: true, kind: true, category: true, currentVersion: true },
   });
+  const canWrite = wiki.role !== "viewer";
+  const moveLabel = (await getTranslations("WikiToc"))("movePage");
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
@@ -43,17 +46,19 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
       {pages.length === 0 ? (
         <p className="text-stone-400">{t("emptyCategory")}</p>
       ) : (
-        <ul className="space-y-1">
-          {pages.map((p) => (
-            <li key={p.slug} className="flex flex-wrap items-center gap-2">
-              <Link href={`/wikis/${slug}/${encodeURIComponent(p.slug)}`} className="text-blue-600 hover:underline">
-                {p.title}
-              </Link>
-              {p.category && p.category !== prefix && <span className="text-xs text-stone-400">{p.category}</span>}
-              <span className="text-xs text-stone-300">{tk(p.kind)}</span>
-            </li>
-          ))}
-        </ul>
+        <CategoryList
+          rows={pages.map((p) => ({
+            wikiSlug: slug,
+            pageSlug: p.slug,
+            title: p.title,
+            categoryLabel: p.category && p.category !== prefix ? p.category : null,
+            kindLabel: tk(p.kind),
+            movable: canWrite && p.kind === "personal",
+            currentCategory: p.category,
+            currentVersion: p.currentVersion,
+            moveLabel,
+          }))}
+        />
       )}
     </main>
   );

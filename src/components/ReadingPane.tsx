@@ -33,6 +33,7 @@ export function ReadingPane({
   translateControl,
   pinControl,
   create,
+  selection,
   headerMeta,
   notice,
   controls,
@@ -56,6 +57,7 @@ export function ReadingPane({
   translateControl?: ReactNode;
   pinControl?: ReactNode; // 개인 즐겨찾기 별 토글(비공개 뷰만)
   create?: { wikiSlug: string; category: string | null }; // 있으면 미해결 [[link]] 클릭 → 생성(비공개 쓰기 뷰만)
+  selection?: { pageSlug: string; canWrite: boolean }; // 있으면 본문 텍스트 선택 툴바 활성(비공개 뷰만)
   headerMeta?: ReactNode; // origin/modelAccess/version 등 비공개 뷰 전용 헤더 메타
   notice?: ReactNode; // archive 등 현재 문서 상태 안내
   controls?: ReactNode; // 비공개 화면의 정책·수명주기 제어
@@ -94,10 +96,10 @@ export function ReadingPane({
 
       {isEmpty ? (
         <p className="text-stone-400">{emptyText}</p>
-      ) : create ? (
-        <WikiArticle html={html} create={create} />
       ) : (
-        <article className="wiki-content" dangerouslySetInnerHTML={{ __html: html }} />
+        // create 유무와 무관하게 클라이언트 렌더러 경유 — 위키링크 hover 미리보기 위임을 한 곳에 둔다.
+        // 공개 뷰는 HoverPreviewProvider 밖이라 미리보기가 자동으로 무동작이다.
+        <WikiArticle html={html} create={create} selection={selection} />
       )}
 
       <PageNav prev={prev} next={next} hrefFor={hrefFor} />

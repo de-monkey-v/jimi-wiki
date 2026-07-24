@@ -233,6 +233,17 @@
     "close": "닫기",
     "fullPage": "전체 페이지"
   },
+  "HoverPreview": {
+    "updated": "업데이트 {date}"
+  },
+  "SelectionToolbar": {
+    "toolbarLabel": "선택한 텍스트 작업",
+    "copy": "복사",
+    "copied": "복사됨",
+    "copyQuote": "인용으로 복사",
+    "searchInWiki": "위키에서 검색",
+    "capture": "노트로 캡처"
+  },
   "PageNav": {
     "prev": "← 이전",
     "next": "다음 →"

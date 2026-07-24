@@ -8,8 +8,8 @@ import { quickCaptureAction, movePageAction } from "@/app/wikis/actions";
 import { quickNavSearchAction, type QuickNavSearchItem } from "./quick-nav-actions";
 
 type Ctx = {
-  openSwitcher: () => void;
-  openCapture: () => void;
+  openSwitcher: (initialQuery?: string) => void;
+  openCapture: (initialBody?: string) => void;
   openMove: (pageSlug: string, currentCategory: string | null, currentVersion: number) => void;
 };
 const QuickNavCtx = createContext<Ctx | null>(null);
@@ -43,6 +43,7 @@ export function QuickNavProvider({
 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureInitial, setCaptureInitial] = useState(""); // 선택 툴바 등에서 넘어온 프리필 본문
   const [move, setMove] = useState<{ pageSlug: string; category: string; currentVersion: number } | null>(null);
 
   // 빈 질의는 Page 목록, 입력 중엔 서버 local FTS 결과(Page+Source).
@@ -53,15 +54,18 @@ export function QuickNavProvider({
   const [error, setError] = useState(false);
   const [requestNonce, setRequestNonce] = useState(0);
 
-  const openSwitcher = useCallback(() => {
-    setQuery("");
+  const openSwitcher = useCallback((initialQuery?: string) => {
+    setQuery(initialQuery ?? "");
     setSel(0);
     setResults([]);
     setLoading(true);
     setError(false);
     setSwitcherOpen(true);
   }, []);
-  const openCapture = useCallback(() => setCaptureOpen(true), []);
+  const openCapture = useCallback((initialBody?: string) => {
+    setCaptureInitial(initialBody ?? "");
+    setCaptureOpen(true);
+  }, []);
   const openMove = useCallback((pageSlug: string, currentCategory: string | null, currentVersion: number) => {
     setMove({ pageSlug, category: currentCategory ?? "", currentVersion });
   }, []);
@@ -77,12 +81,12 @@ export function QuickNavProvider({
         openSwitcher();
       } else if (canWrite && mod && e.shiftKey && (e.code === "KeyN" || e.key.toLowerCase() === "n")) {
         e.preventDefault();
-        setCaptureOpen(true);
+        openCapture();
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [openSwitcher, canWrite]);
+  }, [openSwitcher, openCapture, canWrite]);
 
   // 질의 입력은 debounce, 응답은 sequence로 구버전을 폐기해 느린 응답이 최신 결과를 덮지 않게 한다.
   useEffect(() => {
@@ -277,6 +281,7 @@ export function QuickNavProvider({
               name="body"
               aria-label={t("captureTitle")}
               autoFocus
+              defaultValue={captureInitial}
               rows={8}
               placeholder={t("capturePlaceholder")}
               className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"

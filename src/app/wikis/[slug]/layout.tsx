@@ -5,6 +5,7 @@ import { WikiToc } from "@/components/WikiToc";
 import { ChatModalProvider } from "./chat/ChatModal";
 import { WikiActionsProvider } from "./WikiActions";
 import { QuickNavProvider } from "./QuickNav";
+import { HoverPreviewProvider } from "@/components/ui/HoverPreview";
 import { JobsIndicator } from "./JobsIndicator";
 import { authMode, unauthenticatedPath } from "@/lib/auth-mode";
 
@@ -39,6 +40,7 @@ export default async function WikiLayout({
     <ChatModalProvider slug={slug} title={wiki.title}>
       <WikiActionsProvider slug={slug} canWrite={canWrite}>
         <QuickNavProvider slug={slug} canWrite={canWrite}>
+          <HoverPreviewProvider wikiSlug={slug}>
           <div className="flex h-dvh overflow-hidden">
             <WikiToc slug={slug} title={wiki.title} email={user.email} role={wiki.role} sections={sections} pinned={pinned} showLogout={authMode() !== "tailscale"} />
             {/* min-w-0: flex 자식 기본 min-width:auto 를 해제 — 없으면 넓은 콘텐츠(코드/표/긴 URL)가
@@ -48,6 +50,7 @@ export default async function WikiLayout({
           </div>
           {modal}
           <JobsIndicator slug={slug} />
+          </HoverPreviewProvider>
         </QuickNavProvider>
       </WikiActionsProvider>
     </ChatModalProvider>

@@ -233,6 +233,17 @@
     "close": "閉じる",
     "fullPage": "全画面で開く"
   },
+  "HoverPreview": {
+    "updated": "更新 {date}"
+  },
+  "SelectionToolbar": {
+    "toolbarLabel": "選択テキストの操作",
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "copyQuote": "引用としてコピー",
+    "searchInWiki": "ウィキ内を検索",
+    "capture": "ノートにキャプチャ"
+  },
   "PageNav": {
     "prev": "← 前へ",
     "next": "次へ →"

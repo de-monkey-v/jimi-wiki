@@ -60,6 +60,32 @@ body {
 }
 a.accent, .accent { color: var(--accent); }
 
+/* hover 피드백 토큰 — 목록 행/카드/칩이 화면마다 제각각 반응하지 않도록 공통 클래스로 통일 */
+.row-hover {
+  border-radius: 0.5rem;
+  transition: background 0.15s;
+}
+.row-hover:hover { background: #f5f5f4; } /* stone-100 */
+.card-hover {
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.15s;
+}
+.card-hover:hover {
+  border-color: #d6d3d1; /* stone-300 */
+  box-shadow: 0 4px 6px -1px rgb(28 25 23 / 0.08), 0 2px 4px -2px rgb(28 25 23 / 0.06);
+  transform: translateY(-2px);
+}
+.chip-hover {
+  transition: background 0.15s, border-color 0.15s;
+}
+.chip-hover:hover {
+  background: #eef2ff; /* indigo-50 */
+  border-color: #c7d2fe; /* indigo-200 */
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-hover { transition: box-shadow 0.15s, border-color 0.15s; }
+  .card-hover:hover { transform: none; }
+}
+
 /* 위키링크 — 존재하는 페이지: 본문색 + 세련된 밑줄.
    .wiki-content a(특이도 0,1,1)를 이기려 .wiki-content a.wikilink(0,2,1)로 스코프한다. */
 .wiki-content a.wikilink {

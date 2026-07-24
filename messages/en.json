@@ -233,6 +233,17 @@
     "close": "Close",
     "fullPage": "Full page"
   },
+  "HoverPreview": {
+    "updated": "Updated {date}"
+  },
+  "SelectionToolbar": {
+    "toolbarLabel": "Text selection actions",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyQuote": "Copy as quote",
+    "searchInWiki": "Search in wiki",
+    "capture": "Capture as note"
+  },
   "PageNav": {
     "prev": "← Prev",
     "next": "Next →"

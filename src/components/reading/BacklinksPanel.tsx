@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { PreviewLink } from "@/components/ui/PreviewLink";
 
 /** 백링크/관련 문서 목록. note는 "이 소스에서 파생된 문서", 파생은 "관련 문서"로 라벨만 다름. */
 export function BacklinksPanel({
@@ -21,9 +21,9 @@ export function BacklinksPanel({
         <ul className="space-y-1">
           {items.map((b) => (
             <li key={b.slug}>
-              <Link href={hrefFor(b.slug)} className="text-sm text-blue-600 hover:underline">
+              <PreviewLink pageSlug={b.slug} href={hrefFor(b.slug)} className="text-sm text-blue-600 hover:underline">
                 {b.title}
-              </Link>
+              </PreviewLink>
             </li>
           ))}
         </ul>

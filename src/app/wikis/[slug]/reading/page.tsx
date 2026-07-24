@@ -6,7 +6,7 @@ import { getWikiForUser } from "@/lib/wiki";
 import { hasRole } from "@/lib/api-gate";
 import { prisma } from "@/lib/db";
 import { AddLinkForm } from "./AddLinkForm";
-import { ReadingRow } from "./ReadingRow";
+import { ReadingList } from "./ReadingList";
 
 export const dynamic = "force-dynamic";
 
@@ -37,22 +37,19 @@ export default async function ReadingPage({ params }: { params: Promise<{ slug: 
       {links.length === 0 ? (
         <p className="mt-8 text-sm text-stone-400">{t("empty")}</p>
       ) : (
-        <ul className="mt-4 divide-y divide-stone-100">
-          {links.map((l) => (
-            <ReadingRow
-              key={l.id}
-              wikiSlug={slug}
-              id={l.id}
-              url={l.url}
-              title={l.title}
-              description={l.description}
-              summary={l.summary}
-              savedAt={l.createdAt.toISOString().slice(0, 10)}
-              promoted={!!l.promotedAt}
-              canPromote={canWrite}
-            />
-          ))}
-        </ul>
+        <ReadingList
+          wikiSlug={slug}
+          canPromote={canWrite}
+          items={links.map((l) => ({
+            id: l.id,
+            url: l.url,
+            title: l.title,
+            description: l.description,
+            summary: l.summary,
+            savedAt: l.createdAt.toISOString().slice(0, 10),
+            promoted: !!l.promotedAt,
+          }))}
+        />
       )}
     </main>
   );

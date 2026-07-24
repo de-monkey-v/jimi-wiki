@@ -1,5 +1,5 @@
 # jimi-wiki 멀티스테이지 이미지 — web(next start)·worker(tsx) 공용. command 로 역할 구분.
-FROM node:20-slim AS base
+FROM node:26-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable && apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*

@@ -20,7 +20,9 @@ export function PageNav({
       {prev ? (
         <Link
           href={hrefFor(prev.slug)}
-          className="flex-1 rounded-lg border border-stone-200 px-4 py-3 hover:bg-stone-50"
+          // min-w-0: flex 아이템 기본 min-width:auto 해제 — 없으면 truncate(nowrap) 제목의
+          // 최소 내용 폭이 링크를 뷰포트 밖까지 밀어 모바일 가로 드래그를 만든다.
+          className="min-w-0 flex-1 rounded-lg border border-stone-200 px-4 py-3 hover:bg-stone-50"
         >
           <div className="text-xs text-stone-400">{t("prev")}</div>
           <div className="truncate text-sm font-medium text-stone-800">{prev.title}</div>
@@ -31,7 +33,7 @@ export function PageNav({
       {next ? (
         <Link
           href={hrefFor(next.slug)}
-          className="flex-1 rounded-lg border border-stone-200 px-4 py-3 text-right hover:bg-stone-50"
+          className="min-w-0 flex-1 rounded-lg border border-stone-200 px-4 py-3 text-right hover:bg-stone-50"
         >
           <div className="text-xs text-stone-400">{t("next")}</div>
           <div className="truncate text-sm font-medium text-stone-800">{next.title}</div>

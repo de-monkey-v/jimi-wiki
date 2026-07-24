@@ -45,8 +45,11 @@ export default async function WikiLayout({
             <WikiToc slug={slug} title={wiki.title} email={user.email} role={wiki.role} sections={sections} pinned={pinned} showLogout={authMode() !== "tailscale"} />
             {/* min-w-0: flex 자식 기본 min-width:auto 를 해제 — 없으면 넓은 콘텐츠(코드/표/긴 URL)가
                 컬럼을 못 줄여 레이아웃 전체가 가로로 밀린다(모바일 좌우 드래그의 1차 원인).
+                overflow-x-clip: overflow-y-auto 만 주면 x축이 auto 로 계산돼(spec) 이 컨테이너가
+                자체 가로 스크롤러가 된다 — html 의 overflow-x:clip 백스톱이 내부 스크롤러에는 안 통하므로
+                여기서도 넘친 픽셀만 자른다(원인 요소 수정과 함께 쓰는 안전망).
                 pt-12 md:pt-0: 모바일 상단 토글 버튼(fixed) 공간 확보. */}
-            <div className="flex-1 min-w-0 overflow-y-auto pt-12 md:pt-0">{children}</div>
+            <div className="flex-1 min-w-0 overflow-y-auto overflow-x-clip pt-12 md:pt-0">{children}</div>
           </div>
           {modal}
           <JobsIndicator slug={slug} />

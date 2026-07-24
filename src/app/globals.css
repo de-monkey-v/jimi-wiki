@@ -163,6 +163,9 @@ a.accent, .accent { color: var(--accent); }
   font-weight: 750;
   line-height: 1.12;
   letter-spacing: -0.025em;
+  /* 제목의 무공백 긴 토큰(예: Stateless/Sessionless 합성어)이 텍스트로 넘쳐
+     모바일 가로 오버플로우를 만들지 않게 필요한 곳에서만 강제 개행 (.wiki-content 와 동일 방침) */
+  overflow-wrap: anywhere;
 }
 .research-kicker {
   margin-bottom: 0.45rem;

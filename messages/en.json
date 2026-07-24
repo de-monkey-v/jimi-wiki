@@ -464,10 +464,8 @@
     "emptyBody": "Once you add pages, the links and concept connections between documents will show up here."
   },
   "WikisSlugHomeActions": {
-    "ingestTitle": "Ingest Source",
     "ingestDesc": "Give it a URL or text and the LLM reads it, then organizes it into notes and concept pages.",
     "ingestOpen": "Open Ingest",
-    "newPageTitle": "New Page (Manual)",
     "newPageDesc": "Set a title, kind, and category to create a blank page and edit it right away.",
     "newPageCreate": "Create New Page →"
   },
@@ -594,12 +592,17 @@
     "emptyTitle": "No pages yet",
     "emptyBodyWrite": "Collect sources below or create a new page, and your documents and concept links will come together here.",
     "emptyBodyRead": "Once pages are added, readable documents and concept links will show up here.",
-    "recentProjectDocuments": "Recent project documents",
-    "recentResearchReports": "Recent research reports",
-    "researchLabel": "Research",
+    "pinnedHeading": "Pinned",
+    "recentHeading": "Recently viewed",
+    "readingHeading": "Reading list",
+    "readingAll": "All reading →",
+    "readingEmpty": "No saved links yet.",
+    "recentDocuments": "Recent documents",
+    "moreDocuments": "+{count} more",
+    "knowledgeHeading": "Knowledge",
     "researchStale": "Needs review",
     "systemActivity": "System activity",
-    "documentType": { "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision" }
+    "documentType": { "general": "General", "worklog": "Work log", "troubleshooting": "Troubleshooting", "decision": "Decision", "reference": "Reference", "plan": "Plan", "spec": "Spec", "research": "Research" }
   },
   "WikisSlugPageSlugEditPage": {
     "backTo": "Back to {title}",

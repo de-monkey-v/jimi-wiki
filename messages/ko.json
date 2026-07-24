@@ -464,10 +464,8 @@
     "emptyBody": "페이지가 추가되면 문서 사이의 링크와 개념 연결이 이곳에 표시됩니다."
   },
   "WikisSlugHomeActions": {
-    "ingestTitle": "소스 편입 (Ingest)",
     "ingestDesc": "URL이나 텍스트를 주면 LLM이 읽고 노트·개념 페이지로 정리합니다.",
     "ingestOpen": "소스 편입 열기",
-    "newPageTitle": "새 페이지 (수동)",
     "newPageDesc": "제목·종류·카테고리를 정해 빈 페이지를 만들고 바로 편집합니다.",
     "newPageCreate": "새 페이지 만들기 →"
   },
@@ -594,12 +592,17 @@
     "emptyTitle": "아직 페이지가 없습니다",
     "emptyBodyWrite": "아래에서 소스를 수집하거나 새 페이지를 만들면 문서와 개념 연결이 이곳에 정리됩니다.",
     "emptyBodyRead": "페이지가 추가되면 읽을 수 있는 문서와 개념 연결이 이곳에 표시됩니다.",
-    "recentProjectDocuments": "최근 프로젝트 문서",
-    "recentResearchReports": "최근 연구 보고서",
-    "researchLabel": "Research",
+    "pinnedHeading": "핀 고정",
+    "recentHeading": "최근 본 문서",
+    "readingHeading": "읽을거리",
+    "readingAll": "읽을거리 전체 →",
+    "readingEmpty": "담아둔 읽을거리가 없습니다.",
+    "recentDocuments": "최근 문서",
+    "moreDocuments": "+{count}개 더",
+    "knowledgeHeading": "지식",
     "researchStale": "검토 필요",
     "systemActivity": "시스템 활동",
-    "documentType": { "worklog": "작업 기록", "troubleshooting": "문제 해결", "decision": "결정" }
+    "documentType": { "general": "일반", "worklog": "작업 기록", "troubleshooting": "문제 해결", "decision": "결정", "reference": "참고 자료", "plan": "계획", "spec": "스펙", "research": "연구 보고서" }
   },
   "WikisSlugPageSlugEditPage": {
     "backTo": "{title}로 돌아가기",

@@ -24,7 +24,7 @@ function SubmitButton() {
 export function ReindexForm({ wikiSlug }: { wikiSlug: string }) {
   const t = useTranslations("WikisSlugReindexForm");
   return (
-    <form action={reindexAction} className="mt-4 flex items-center gap-3">
+    <form action={reindexAction} className="flex items-center gap-3">
       <input type="hidden" name="wikiSlug" value={wikiSlug} />
       <SubmitButton />
       <span className="text-xs text-gray-400">

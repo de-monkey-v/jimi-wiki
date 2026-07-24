@@ -464,10 +464,8 @@
     "emptyBody": "添加页面后，文档之间的链接和概念关联将显示在这里。"
   },
   "WikisSlugHomeActions": {
-    "ingestTitle": "导入来源 (Ingest)",
     "ingestDesc": "提供 URL 或文本，LLM 会读取并整理成笔记和概念页面。",
     "ingestOpen": "打开导入来源",
-    "newPageTitle": "新建页面（手动）",
     "newPageDesc": "设置标题、类型和分类，创建空白页面并立即编辑。",
     "newPageCreate": "创建新页面 →"
   },
@@ -594,12 +592,17 @@
     "emptyTitle": "还没有页面",
     "emptyBodyWrite": "在下方收集来源或新建页面，文档与概念的关联将在此汇总。",
     "emptyBodyRead": "添加页面后，可阅读的文档与概念关联将显示在此处。",
-    "recentProjectDocuments": "最近的项目文档",
-    "recentResearchReports": "最近的研究报告",
-    "researchLabel": "研究",
+    "pinnedHeading": "置顶",
+    "recentHeading": "最近浏览",
+    "readingHeading": "稍后阅读",
+    "readingAll": "全部稍后阅读 →",
+    "readingEmpty": "还没有保存的链接。",
+    "recentDocuments": "最近文档",
+    "moreDocuments": "还有 {count} 篇",
+    "knowledgeHeading": "知识",
     "researchStale": "需要复核",
     "systemActivity": "系统活动",
-    "documentType": { "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策" }
+    "documentType": { "general": "通用", "worklog": "工作记录", "troubleshooting": "问题解决", "decision": "决策", "reference": "参考资料", "plan": "计划", "spec": "规格", "research": "研究报告" }
   },
   "WikisSlugPageSlugEditPage": {
     "backTo": "返回{title}",

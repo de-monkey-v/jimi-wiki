@@ -464,10 +464,8 @@
     "emptyBody": "ページを追加すると、ドキュメント間のリンクや概念のつながりがここに表示されます。"
   },
   "WikisSlugHomeActions": {
-    "ingestTitle": "ソースの取り込み (Ingest)",
     "ingestDesc": "URLやテキストを渡すとLLMが読み込み、ノートやコンセプトページに整理します。",
     "ingestOpen": "取り込みを開く",
-    "newPageTitle": "新規ページ（手動）",
     "newPageDesc": "タイトル・種類・カテゴリを決めて空のページを作り、すぐに編集します。",
     "newPageCreate": "新規ページを作成 →"
   },
@@ -594,12 +592,17 @@
     "emptyTitle": "ページはまだありません",
     "emptyBodyWrite": "下からソースを収集するか新しいページを作成すると、ドキュメントと概念のつながりがここに整理されます。",
     "emptyBodyRead": "ページが追加されると、読めるドキュメントと概念のつながりがここに表示されます。",
-    "recentProjectDocuments": "最近のプロジェクト文書",
-    "recentResearchReports": "最近の調査レポート",
-    "researchLabel": "調査",
+    "pinnedHeading": "ピン留め",
+    "recentHeading": "最近見た文書",
+    "readingHeading": "リーディングリスト",
+    "readingAll": "リーディングリスト全体 →",
+    "readingEmpty": "保存したリンクはありません。",
+    "recentDocuments": "最近の文書",
+    "moreDocuments": "他 {count} 件",
+    "knowledgeHeading": "ナレッジ",
     "researchStale": "要確認",
     "systemActivity": "システム活動",
-    "documentType": { "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定" }
+    "documentType": { "general": "一般", "worklog": "作業記録", "troubleshooting": "問題解決", "decision": "決定", "reference": "参考資料", "plan": "計画", "spec": "仕様", "research": "調査レポート" }
   },
   "WikisSlugPageSlugEditPage": {
     "backTo": "{title}に戻る",

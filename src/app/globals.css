@@ -155,17 +155,17 @@ a.accent, .accent { color: var(--accent); }
 
 /* 연구 보고서 — 종이 본문 + 근거 장부의 리서치 노트북 레이아웃 */
 .research-shell {
-  width: min(100%, 1180px);
+  width: min(100%, 110rem);
   margin-inline: auto;
   padding: 2.5rem 1.5rem 4rem;
 }
 .research-header,
 .research-footer {
-  width: min(100%, 1124px);
+  width: 100%;
   margin-inline: auto;
 }
 .research-header h1 {
-  max-width: 30ch;
+  max-width: 34ch;
   font-size: clamp(1.9rem, 4vw, 2.65rem);
   font-weight: 750;
   line-height: 1.12;
@@ -184,7 +184,7 @@ a.accent, .accent { color: var(--accent); }
 }
 .research-notebook {
   display: grid;
-  grid-template-columns: minmax(0, 820px) minmax(240px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
   gap: 1.5rem;
   align-items: start;
   margin: 2rem auto 0;
@@ -198,7 +198,7 @@ a.accent, .accent { color: var(--accent); }
   padding: clamp(1.35rem, 4vw, 3rem);
 }
 .research-content {
-  width: min(100%, 760px);
+  width: min(100%, 55rem);
   margin-inline: auto;
   color: #292524;
   font-size: 1.01rem;
@@ -362,8 +362,7 @@ a.accent, .accent { color: var(--accent); }
 .research-evidence-links { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-top: 0.38rem; }
 .research-evidence-links a { color: #4f46e5; font-size: 0.7rem; font-weight: 600; }
 
-@media (max-width: 959px) {
-  .research-shell { padding-inline: 1rem; }
+@media (max-width: 1399px) {
   .research-notebook { grid-template-columns: minmax(0, 1fr); }
   .research-evidence { order: 2; }
   .research-evidence-sticky { position: static; max-height: none; }
@@ -371,6 +370,10 @@ a.accent, .accent { color: var(--accent); }
   .research-content [data-streamdown="mermaid"] {
     width: min(100%, calc(100vw - 4rem));
   }
+}
+
+@media (max-width: 959px) {
+  .research-shell { padding-inline: 1rem; }
 }
 
 @media (max-width: 520px) {

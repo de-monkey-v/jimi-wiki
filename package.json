@@ -58,7 +58,7 @@
     "@prisma/client-runtime-utils": "^7.9.0",
     "@sigma/node-border": "3.0.0",
     "@streamdown/mermaid": "1.0.2",
-    "ai": "^6.0.218",
+    "ai": "^7.0.37",
     "diff": "9.0.0",
     "dotenv": "^17.4.2",
     "github-slugger": "^2.0.0",

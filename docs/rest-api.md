@@ -5,7 +5,7 @@
 ## 베이스 URL
 
 ```
-http://localhost:3007/api/wikis/{slug}
+http://localhost:3006/api/wikis/{slug}
 ```
 
 `{slug}`는 대상 위키의 slug. 배포 환경에서는 호스트만 바뀐다.
@@ -210,7 +210,7 @@ ingest 잡은 즉시 `{ runId }`를 반환하고 백그라운드(worker)로 돈�
 ## curl 예제
 
 ```bash
-KEY="jw_..."; BASE="http://localhost:3007/api/wikis/ai-스터디"
+KEY="jw_..."; BASE="http://localhost:3006/api/wikis/ai-스터디"
 
 # 페이지 목록
 curl -sH "Authorization: Bearer $KEY" "$BASE/pages"

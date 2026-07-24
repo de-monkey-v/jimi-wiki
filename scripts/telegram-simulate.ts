@@ -7,7 +7,7 @@ import { webhookSecret } from "../src/lib/telegram-config";
 async function main() {
   const text = process.argv[2];
   const chatId = process.argv[3] ?? process.env.TELEGRAM_TEST_CHAT_ID;
-  const base = (process.env.APP_URL ?? "http://localhost:3007").replace(/\/$/, "");
+  const base = (process.env.APP_URL ?? "http://localhost:3006").replace(/\/$/, "");
   if (!text || !chatId) {
     console.error('사용법: npm run telegram:simulate "<메시지>" <chatId>  (또는 TELEGRAM_TEST_CHAT_ID)');
     process.exit(1);

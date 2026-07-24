@@ -36,14 +36,14 @@ pnpm db:up:embedding
 # 4. 스키마 마이그레이션 적용
 pnpm db:migrate
 
-# 5. 개발 서버 (포트 3007)
+# 5. 개발 서버 (포트 3006)
 pnpm dev
 
 # 6. 별도 터미널에서 ingest worker
 pnpm worker:dev
 ```
 
-http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리자 계정을 만든다**(아래 인증 참조). 원격/다른 호스트에서 접속하려면 `next.config`의 `allowedDevOrigins`를 확인한다.
+http://localhost:3006 접속 → **최초 접속 시 `/setup`에서 첫 관리자 계정을 만든다**(아래 인증 참조). 원격/다른 호스트에서 접속하려면 `next.config`의 `allowedDevOrigins`를 확인한다.
 
 ### 인증 · 계정 (`AUTH_MODE`)
 
@@ -100,7 +100,7 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 
 | 명령 | 설명 |
 |---|---|
-| `pnpm dev` | 개발 서버 (포트 3007) |
+| `pnpm dev` | 개발 서버 (포트 3006) |
 | `pnpm dev:all` | web + worker 한 번에 기동(로그 합침, Ctrl-C로 둘 다 종료) |
 | `pnpm start:all` | 프로덕션 web(`start`) + worker 한 번에 기동 |
 | `pnpm worker` | production pending ingest 잡 처리 worker |
@@ -147,7 +147,7 @@ Health check:
 
    ```bash
    claude mcp add --scope local jimi-wiki \
-     -e JIMI_WIKI_URL=http://localhost:3007 \
+     -e JIMI_WIKI_URL=http://localhost:3006 \
      -e JIMI_WIKI_API_KEY=<키> \
      -e JIMI_WIKI_SLUG=<위키슬러그> \
      -- node <repo>/mcp/server.mjs

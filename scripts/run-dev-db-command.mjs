@@ -38,8 +38,10 @@ if (databaseUrl.pathname !== DEV_DATABASE_NAME) {
   fail(`개발 DB 이름 jimi가 아닙니다: ${databaseUrl.pathname.replace(/^\//, "") || "(없음)"}`);
 }
 
+// 개발 서버는 3006 고정 — 운영(release checkout의 next start, 포트 3007)과 절대 겹치지 않는다.
+// Tailscale Serve가 443→3007을 프록시하므로, dev가 3007을 물면 개발 중 코드가 운영 주소로 노출된다.
 const commands = {
-  dev: ["exec", "next", "dev", "-p", "3007"],
+  dev: ["exec", "next", "dev", "-p", "3006"],
   "dev-all": ["exec", "tsx", "scripts/dev-all.ts"],
   migrate: ["exec", "prisma", "migrate", "deploy"],
   "migrate:create": ["exec", "prisma", "migrate", "dev"],

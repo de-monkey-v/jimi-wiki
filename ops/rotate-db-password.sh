@@ -4,7 +4,9 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 env_file="${JIMI_ENV_FILE:-$HOME/.config/jimi-wiki/app.env}"
 db_container="${JIMI_DB_CONTAINER:-jimi-wiki-db}"
+production_compose="$repo/docker-compose.production.yml"
 [[ -f "$env_file" ]] || { echo "missing $env_file" >&2; exit 1; }
+[[ -f "$production_compose" ]] || { echo "missing $production_compose" >&2; exit 1; }
 [[ "$(stat -c %a "$env_file")" == "600" ]] || { echo "$env_file must be mode 600" >&2; exit 1; }
 
 new_password="$(openssl rand -hex 32)"
@@ -27,6 +29,6 @@ SQL
 mv "$temp" "$env_file"
 (
   cd "$repo"
-  docker compose --env-file "$env_file" up -d --force-recreate db embeddings
+  docker compose --env-file "$env_file" --file "$production_compose" up -d --force-recreate db embeddings
 )
 echo "PostgreSQL role, container environment, production DATABASE_URL, and DB/embedding loopback bindings were applied together"

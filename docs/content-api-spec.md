@@ -87,7 +87,7 @@ Option B에서 수동 저장 직후 벡터는 즉시 갱신되지 않고 다음 
 ### 2.1 마이그레이션 (해야 할 일)
 `ApiKey` 모델은 schema에 있으나 마이그레이션 미생성. 실행:
 ```bash
-pnpm db:migrate   # = prisma migrate dev — ApiKey 테이블 + unique(hashedKey) + index(userId) 생성
+pnpm db:migrate:create   # = prisma migrate dev — schema 변경용 migration 생성
 ```
 `@@index([userId])`, `hashedKey @unique`는 스키마에 이미 선언됨 → **수동 인덱스 추가 불필요**.
 

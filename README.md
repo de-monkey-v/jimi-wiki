@@ -26,8 +26,12 @@ pnpm install
 # 2. 환경변수 — .env.example을 복사해 값 채우기 (최소 GEMINI_API_KEY)
 cp .env.example .env
 
-# 3. Postgres(pgvector) 기동 — 컨테이너 jimi-wiki-db, 로컬 포트 5433
-pnpm db:up
+# 3. 개발 Postgres + local embedding 기동 — 운영과 분리된 5434/8081
+# (.env.example의 EMBED_PROVIDER=local 기준)
+pnpm db:up:embedding
+
+# Gemini embedding이나 이미 실행 중인 별도 TEI를 쓸 때는 DB만 기동
+# pnpm db:up
 
 # 4. 스키마 마이그레이션 적용
 pnpm db:migrate
@@ -36,7 +40,7 @@ pnpm db:migrate
 pnpm dev
 
 # 6. 별도 터미널에서 ingest worker
-pnpm worker
+pnpm worker:dev
 ```
 
 http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리자 계정을 만든다**(아래 인증 참조). 원격/다른 호스트에서 접속하려면 `next.config`의 `allowedDevOrigins`를 확인한다.
@@ -99,11 +103,15 @@ http://localhost:3007 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 | `pnpm dev` | 개발 서버 (포트 3007) |
 | `pnpm dev:all` | web + worker 한 번에 기동(로그 합침, Ctrl-C로 둘 다 종료) |
 | `pnpm start:all` | 프로덕션 web(`start`) + worker 한 번에 기동 |
-| `pnpm worker` | pending ingest 잡 처리 worker |
+| `pnpm worker` | production pending ingest 잡 처리 worker |
+| `pnpm worker:dev` | 개발 DB 가드가 적용된 pending ingest worker |
 | `pnpm build` / `pnpm start` | 프로덕션 빌드 / 서버 |
-| `pnpm db:up` | Postgres 컨테이너 기동 |
-| `pnpm db:migrate` | `prisma migrate dev` |
-| `pnpm db:seed` | first-run 관리자 부트스트랩 (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) |
+| `pnpm db:up` | 개발 Postgres 기동 (`jimi-wiki-dev-db`, `127.0.0.1:5434`) |
+| `pnpm db:up:embedding` | 개발 Postgres + local embedding 기동 (`127.0.0.1:8081`) |
+| `pnpm db:down` | 개발 Compose project만 종료·제거(volume은 보존) |
+| `pnpm db:migrate` | 기존 migration을 개발 DB에 비대화식 적용 (`prisma migrate deploy`) |
+| `pnpm db:migrate:create` | Prisma schema 변경용 새 migration 작성 (`prisma migrate dev`) |
+| `pnpm db:seed` | 개발 DB에 first-run 관리자 부트스트랩 (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) |
 | `pnpm apikey:issue` | CLI로 API 키 발급 |
 | `pnpm openai:login` | (개인용) ChatGPT 구독 OAuth 로그인 — `OPENAI_OAUTH_PERSONAL=1`과 함께 사용 |
 | `pnpm smoke` | 스모크 테스트 |
@@ -120,7 +128,7 @@ self-host를 전제로 한다 — 내부 서버(또는 자체 호스트)에 올�
 
 `web`·`worker`는 같은 `DATABASE_URL`, `AUTH_SECRET`, `GEMINI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `AUTH_MODE`를 공유한다. 첫 배포 시 `ADMIN_EMAIL`/`ADMIN_PASSWORD`로 관리자를 부트스트랩하거나 `web`의 `/setup`에서 만든다. 인터넷에 노출한다면 리버스 프록시로 HTTPS를 두거나 Tailscale 같은 사설 네트워크 뒤에 둔다.
 
-production에서 Docker Compose는 PostgreSQL과 embedding만 담당하며 두 포트는 loopback에만 bind한다. web·worker·Codex proxy는 atomic release + `systemd --user`로 실행한다. 개인 Tailscale 운영, 계정 claim, 암호화 backup/restore 절차는 [`docs/personal-production.md`](docs/personal-production.md)를 따른다. 개발 중이면 `pnpm dev:all`(web+worker 동시)로 충분하다.
+기본 `docker-compose.yml`은 개발 전용 project(`jimi-wiki-dev`)이며 운영 DB와 다른 container·volume·포트(5434)를 쓴다. `dev`·`dev:all`·`worker:dev`·`smoke`와 `db:migrate`·`db:migrate:create`·`db:seed`는 `DATABASE_URL`이 loopback의 5434가 아니면 실행을 거부한다. production에서는 `docker-compose.production.yml`의 PostgreSQL·embedding만 사용하고 두 포트(5433·8080)는 loopback에만 bind한다. web·worker·Codex proxy는 atomic release + `systemd --user`로 실행한다. 개인 Tailscale 운영, 계정 claim, 암호화 backup/restore 절차는 [`docs/personal-production.md`](docs/personal-production.md)를 따른다. 개발 중이면 `pnpm dev:all`(web+worker 동시)로 충분하다.
 
 **모델 선택 · ChatGPT 로그인**: 관리자는 **`/admin/settings`**에서 채팅·ingest·query/lint 모델을 provider별 목록에서 골라 저장하고(재시작 없이 반영), ChatGPT 구독 OAuth를 브라우저 없이 device-code 로 로그인/로그아웃할 수 있다. env(`CHAT_MODEL` 등)는 미설정 시 폴백. 자세한 OAuth 흐름은 [`docs/openai-oauth.md`](docs/openai-oauth.md).
 

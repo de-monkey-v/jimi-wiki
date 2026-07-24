@@ -31,8 +31,12 @@ pnpm install
 # 2. Env vars — copy .env.example and fill values (at minimum GEMINI_API_KEY)
 cp .env.example .env
 
-# 3. Start Postgres (pgvector) — container jimi-wiki-db, local port 5433
-pnpm db:up
+# 3. Start development Postgres + local embedding on isolated ports 5434/8081
+# (matches EMBED_PROVIDER=local in .env.example)
+pnpm db:up:embedding
+
+# Start only the DB when using Gemini embedding or an existing TEI
+# pnpm db:up
 
 # 4. Apply schema migrations
 pnpm db:migrate
@@ -41,7 +45,7 @@ pnpm db:migrate
 pnpm dev
 
 # 6. In another terminal, the ingest worker
-pnpm worker
+pnpm worker:dev
 ```
 
 Open http://localhost:3007 → **on first visit, create the first admin account at `/setup`** (see Auth
@@ -108,11 +112,15 @@ On startup the `worker` logs the **active provider keys and their source (`.env`
 | `pnpm dev` | dev server (port 3007) |
 | `pnpm dev:all` | web + worker together (merged logs, Ctrl-C stops both) |
 | `pnpm start:all` | production web (`start`) + worker together |
-| `pnpm worker` | worker that processes pending ingest jobs |
+| `pnpm worker` | production worker that processes pending ingest jobs |
+| `pnpm worker:dev` | pending ingest worker protected by the development DB guard |
 | `pnpm build` / `pnpm start` | production build / server |
-| `pnpm db:up` | start Postgres container |
-| `pnpm db:migrate` | `prisma migrate dev` |
-| `pnpm db:seed` | first-run admin bootstrap (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) |
+| `pnpm db:up` | start development Postgres (`jimi-wiki-dev-db`, `127.0.0.1:5434`) |
+| `pnpm db:up:embedding` | start development Postgres + local embedding (`127.0.0.1:8081`) |
+| `pnpm db:down` | stop/remove only the development Compose project (volumes are kept) |
+| `pnpm db:migrate` | apply existing migrations non-interactively (`prisma migrate deploy`) |
+| `pnpm db:migrate:create` | author a migration after changing the Prisma schema (`prisma migrate dev`) |
+| `pnpm db:seed` | first-run admin bootstrap in the development DB (`ADMIN_EMAIL`/`ADMIN_PASSWORD`) |
 | `pnpm test` | unit tests (pure logic; no DB required) |
 | `pnpm smoke` | smoke test (requires a running DB) |
 | `pnpm apikey:issue` | issue an API key via CLI |
@@ -134,8 +142,12 @@ directly with `AUTH_MODE=local`. Split into three processes (same repo):
 `ADMIN_EMAIL`/`ADMIN_PASSWORD` or create it at `web`'s `/setup`. If exposed to the internet, front it
 with a reverse proxy for HTTPS or place it behind a private network like Tailscale.
 
-In production, Docker Compose runs only PostgreSQL and the embedding server, both bound to loopback.
-The web, worker, and Codex proxy run from atomic releases under `systemd --user`. See
+The default `docker-compose.yml` is the `jimi-wiki-dev` project and uses a development-only
+container, volume, and port 5434. `dev`, `dev:all`, `worker:dev`, `smoke`, `db:migrate`,
+`db:migrate:create`, and `db:seed` refuse to run unless `DATABASE_URL` points to loopback port
+5434. Production explicitly selects `docker-compose.production.yml`; its PostgreSQL and embedding
+ports (5433/8080) remain loopback-only. The web, worker, and Codex proxy run from atomic releases
+under `systemd --user`. See
 [`docs/personal-production.md`](docs/personal-production.md) for the private Tailscale deployment,
 owner claim, encrypted backup, and real restore workflow. For development, `pnpm dev:all` is enough.
 

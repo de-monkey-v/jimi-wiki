@@ -15,8 +15,8 @@ Prerequisites: Node 20+, pnpm, Docker.
 ```bash
 pnpm install
 cp .env.example .env          # fill in at least GEMINI_API_KEY
-pnpm db:up                    # start Postgres (pgvector) on port 5433
-pnpm db:migrate               # apply schema + generate Prisma client
+pnpm db:up                    # start development Postgres (pgvector) on port 5434
+pnpm db:migrate               # apply existing migrations non-interactively
 pnpm dev:all                  # web (:3007) + ingest worker together
 ```
 
@@ -84,8 +84,8 @@ By contributing you agree that your contributions are licensed under the [MIT Li
 ```bash
 pnpm install
 cp .env.example .env          # 최소 GEMINI_API_KEY 채우기
-pnpm db:up                    # Postgres(pgvector) 5433 포트로 기동
-pnpm db:migrate               # 스키마 적용 + Prisma 클라이언트 생성
+pnpm db:up                    # 개발 Postgres(pgvector) 5434 포트로 기동
+pnpm db:migrate               # 기존 migration 비대화식 적용
 pnpm dev:all                  # web(:3007) + ingest worker 동시 기동
 ```
 

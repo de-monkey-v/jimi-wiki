@@ -9,10 +9,11 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 
-const webArgs = process.argv[2] === "start" ? ["start"] : ["dev"];
+const isProduction = process.argv[2] === "start";
+const webArgs = isProduction ? ["start"] : ["dev"];
 const specs = [
   { name: "web", args: webArgs },
-  { name: "worker", args: ["worker"] },
+  { name: "worker", args: [isProduction ? "worker" : "worker:dev"] },
 ];
 
 const children: ChildProcess[] = [];

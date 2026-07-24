@@ -1,39 +1,36 @@
-name: jimi-wiki-dev
+name: jimi-wiki-app
 
 services:
   db:
     image: pgvector/pgvector:pg17
-    container_name: jimi-wiki-dev-db
+    container_name: jimi-wiki-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: jimi
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: jimi
     ports:
-      - "127.0.0.1:5434:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
-      - jimi-wiki-dev-pgdata:/var/lib/postgresql/data
+      - jimi-wiki-pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U jimi -d jimi"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  # 개발 전용 임베딩은 명시적으로 `pnpm db:up:embedding`을 실행할 때만 기동한다.
-  # 운영 TEI와 GPU를 공유하는 호스트에서 실수로 두 모델을 동시에 올리는 일을 막기 위해
-  # 기본 `pnpm db:up`에는 포함하지 않는다.
+  # 운영 자가호스팅 임베딩. web·worker는 host loopback의 8080으로 접근한다.
   embeddings:
-    profiles: ["embedding"]
     image: ghcr.io/huggingface/text-embeddings-inference:86-1.9
-    container_name: jimi-wiki-dev-embeddings
+    container_name: jimi-wiki-embeddings
     restart: unless-stopped
     command: ["--model-id", "${EMBED_MODEL:-BAAI/bge-m3}", "--auto-truncate"]
     environment:
       HUGGINGFACE_HUB_CACHE: /data
     ports:
-      - "127.0.0.1:8081:80"
+      - "127.0.0.1:8080:80"
     volumes:
-      - jimi-wiki-dev-embed-models:/data
+      - jimi-embed-models:/data
     deploy:
       resources:
         reservations:
@@ -43,5 +40,5 @@ services:
               capabilities: [gpu]
 
 volumes:
-  jimi-wiki-dev-pgdata:
-  jimi-wiki-dev-embed-models:
+  jimi-wiki-pgdata:
+  jimi-embed-models:

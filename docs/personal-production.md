@@ -1,6 +1,6 @@
 # Personal production runbook
 
-This runbook moves a single-owner Jimi Wiki from tmux development processes to a private Tailscale HTTPS endpoint backed by `systemd --user` services. PostgreSQL and the embedding server remain in Docker; the web, worker, and pinned Codex OAuth proxy run on the host.
+This runbook moves a single-owner Jimi Wiki from tmux development processes to a private Tailscale HTTPS endpoint backed by `systemd --user` services. PostgreSQL and the embedding server remain in Docker through the explicit `docker-compose.production.yml`; the default `docker-compose.yml` is development-only. The web, worker, and pinned Codex OAuth proxy run on the host.
 
 ## Security contract
 
@@ -46,7 +46,7 @@ rsync -a --checksum .blobs/ "$HOME/.local/share/jimi-wiki/shared/blobs/"
 pnpm content:manifest -- --blob-dir "$HOME/.local/share/jimi-wiki/shared/blobs" --output /tmp/jimi-before.json
 ```
 
-Rotate PostgreSQL only after `app.env` exists. The script changes the live role password, `DATABASE_URL`, and the Compose container environment together, and force-recreates DB/embedding so their loopback-only bindings take effect:
+Rotate PostgreSQL only after `app.env` exists. The script always selects `docker-compose.production.yml`; it changes the live role password, `DATABASE_URL`, and the production Compose container environment together, and force-recreates DB/embedding so their loopback-only bindings take effect:
 
 ```bash
 ops/rotate-db-password.sh

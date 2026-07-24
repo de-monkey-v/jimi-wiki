@@ -16,14 +16,15 @@ jobs:
           POSTGRES_PASSWORD: jimi
           POSTGRES_DB: jimi
         ports:
-          - 5433:5432
+          # 5434 = 개발 DB 포트 계약 — scripts/run-dev-db-command.mjs 가드가 loopback:5434/jimi만 허용
+          - 5434:5432
         options: >-
           --health-cmd "pg_isready -U jimi -d jimi"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://jimi:jimi@localhost:5433/jimi?schema=public
+      DATABASE_URL: postgresql://jimi:jimi@localhost:5434/jimi?schema=public
       AUTH_SECRET: ci-secret
       GEMINI_API_KEY: ""
       GOOGLE_GENERATIVE_AI_API_KEY: ""
@@ -38,6 +39,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma generate
       - run: pnpm prisma migrate deploy
       - run: pnpm check:rules
       - run: pnpm check:i18n

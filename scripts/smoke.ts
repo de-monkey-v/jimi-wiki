@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { createPageSnapshot } from "../src/lib/content-store";
+import { EMBED_DIM } from "../src/lib/embed-config";
 
 // 기반 검증: 어댑터 연결 + 관계 + pgvector 삽입/코사인 검색이 실제로 도는지
 async function main() {
@@ -26,8 +27,8 @@ async function main() {
     context: { actor: "system", reason: "smoke fixture" },
   });
 
-  // pgvector: 임베딩 삽입(768차원 더미) + 코사인 거리 검색
-  const dim = 768;
+  // pgvector: 임베딩 삽입(EMBED_DIM 차원 더미 — DB 컬럼 vector(N)과 결합) + 코사인 거리 검색
+  const dim = EMBED_DIM;
   const vec = `[${Array.from({ length: dim }, (_, i) => (i === 0 ? 1 : 0)).join(",")}]`;
   await prisma.$executeRawUnsafe(
     `INSERT INTO "SearchChunk" (id, "wikiId", "refType", "refId", heading, text, hash, embedding)

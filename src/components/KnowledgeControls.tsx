@@ -110,10 +110,22 @@ export function KnowledgeControls({
 
   return (
     <section aria-labelledby={`${resourceType}-controls-heading`} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-      <div>
-        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-600">{t("eyebrow")}</div>
-        <h2 id={`${resourceType}-controls-heading`} className="mt-1 text-base font-semibold text-stone-900">{t("title")}</h2>
-      </div>
+      {/* 자주 쓰는 제어가 아니라 기본 접힘 — 네이티브 details라 JS 상태 없이 키보드·스크린리더 동작 확보 */}
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 [&::-webkit-details-marker]:hidden">
+          <div>
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-600">{t("eyebrow")}</div>
+            <h2 id={`${resourceType}-controls-heading`} className="mt-1 text-base font-semibold text-stone-900">{t("title")}</h2>
+          </div>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="h-4 w-4 shrink-0 text-stone-400 transition-transform duration-150 group-open:rotate-180"
+          >
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+          </svg>
+        </summary>
 
       <form action={policyAction} className="mt-4 space-y-3">
         <HiddenIdentity wikiSlug={wikiSlug} resourceSlug={resourceSlug} currentVersion={currentVersion} />
@@ -258,6 +270,7 @@ export function KnowledgeControls({
           </form>
         </div>
       ) : null}
+      </details>
     </section>
   );
 }

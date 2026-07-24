@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { GoogleGenAI, FunctionCallingConfigMode, Type } from "@google/genai";
+import { EMBED_DIM } from "../src/lib/embed-config";
 
 // SDK 표면 실측: 임베딩(배열→다중), function calling 응답 형태
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -9,7 +10,7 @@ async function main() {
   const emb = await ai.models.embedContent({
     model: "gemini-embedding-001",
     contents: ["안녕 세계, 하이브리드 검색 테스트", "second document"],
-    config: { outputDimensionality: 768, taskType: "RETRIEVAL_DOCUMENT" },
+    config: { outputDimensionality: EMBED_DIM, taskType: "RETRIEVAL_DOCUMENT" },
   });
   console.log("EMB count:", emb.embeddings?.length, "dim:", emb.embeddings?.[0]?.values?.length);
 

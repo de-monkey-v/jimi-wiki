@@ -6,7 +6,7 @@ This runbook moves a single-owner Jimi Wiki from tmux development processes to a
 
 - Humans use only `https://<device>.<tailnet>.ts.net`. Tailscale Funnel stays off.
 - `AUTH_MODE=tailscale` trusts only `Tailscale-User-Login`, with an exact `TAILSCALE_ALLOWED_LOGIN` match.
-- Port 3007 listens on `127.0.0.1`. A direct request without the Serve header is unauthenticated. This intentionally limits header spoofing to processes already running on the host.
+- Port 23007 listens on `127.0.0.1`. A direct request without the Serve header is unauthenticated. This intentionally limits header spoofing to processes already running on the host.
 - Bearer API keys remain independent of browser identity. Keep every agent key wiki-scoped, role-capped, and expiring.
 - `~/.config/jimi-wiki/app.env` and `backup-passphrase` must remain mode `0600`.
 
@@ -76,7 +76,7 @@ pnpm auth:reset-personal -- \
   --confirm RESET_JIMI_PERSONAL_AUTH
 ops/deploy.sh activate "$release"
 tailscale funnel reset
-tailscale serve --bg --https=443 http://127.0.0.1:3007
+tailscale serve --bg --https=443 http://127.0.0.1:23007
 ```
 
 Open the MagicDNS HTTPS URL from a Tailscale device and explicitly claim the single existing owner. If there are zero or multiple owner candidates, the page fails closed and prints the recovery command shape. Supply an immutable existing User ID; recovery never changes memberships or wiki ownership.
@@ -122,9 +122,9 @@ Docker Desktop must also be configured to start at login. Test this with a real 
 ## Verification and rollback
 
 ```bash
-curl -fsS http://127.0.0.1:3007/api/readyz
+curl -fsS http://127.0.0.1:23007/api/readyz
 systemctl --user start jimi-wiki-health.service
-ss -ltnp | grep -E ':(3007|5433|8080|10531)\b'
+ss -ltnp | grep -E ':(23007|5433|8080|10531)\b'
 tailscale serve status
 tailscale funnel status
 ```

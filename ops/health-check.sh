@@ -6,11 +6,11 @@ for unit in "${units[@]}"; do
   systemctl --user is-active --quiet "$unit" || { echo "$unit is not active" >&2; exit 1; }
 done
 
-curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3007/api/readyz >/dev/null
+curl --fail --silent --show-error --max-time 15 http://127.0.0.1:23007/api/readyz >/dev/null
 curl --fail --silent --show-error --max-time 15 http://127.0.0.1:10531/v1/models >/dev/null
 
 bad_bindings="$(ss -H -ltn | awk '
-  $4 ~ /:(3007|5433|8080|10531)$/ && $4 !~ /^127\.0\.0\.1:/ && $4 !~ /^\[::1\]:/ { print $4 }
+  $4 ~ /:(23007|5433|8080|10531)$/ && $4 !~ /^127\.0\.0\.1:/ && $4 !~ /^\[::1\]:/ { print $4 }
 ')"
 if [[ -n "$bad_bindings" ]]; then
   echo "Jimi port exposed outside loopback: $bad_bindings" >&2
@@ -28,8 +28,8 @@ const hostPort = `${appUrl.hostname}:443`;
 const tcp = config.TCP?.["443"];
 const proxy = config.Web?.[hostPort]?.Handlers?.["/"]?.Proxy;
 const target = typeof proxy === "string" ? new URL(proxy) : null;
-if (tcp?.HTTPS !== true || !target || target.protocol !== "http:" || target.hostname !== "127.0.0.1" || target.port !== "3007" || target.pathname !== "/" || target.search || target.hash) {
-  throw new Error(`Tailscale Serve ${hostPort} must proxy / to http://127.0.0.1:3007`);
+if (tcp?.HTTPS !== true || !target || target.protocol !== "http:" || target.hostname !== "127.0.0.1" || target.port !== "23007" || target.pathname !== "/" || target.search || target.hash) {
+  throw new Error(`Tailscale Serve ${hostPort} must proxy / to http://127.0.0.1:23007`);
 }
 if (Object.values(config.AllowFunnel ?? {}).some(Boolean)) {
   throw new Error("Tailscale Funnel must remain disabled");

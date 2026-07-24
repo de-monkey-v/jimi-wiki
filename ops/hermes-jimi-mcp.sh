@@ -56,7 +56,7 @@ case "$action" in
       --command /usr/bin/node \
       --connect-timeout 60 \
       --env \
-        JIMI_WIKI_URL=http://127.0.0.1:3007 \
+        JIMI_WIKI_URL=http://127.0.0.1:23007 \
         'JIMI_WIKI_API_KEY=${JIMI_WIKI_PERSONAL_KEY}' \
         JIMI_WIKI_SLUG=personal \
       --args "$runtime_dir/mcp/server.mjs"

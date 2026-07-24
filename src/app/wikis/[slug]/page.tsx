@@ -96,7 +96,7 @@ export default async function WikiHome({
     .slice(0, 8);
 
   return (
-    <main className="mx-auto max-w-3xl xl:max-w-4xl 2xl:max-w-5xl px-6 py-10">
+    <main className="mx-auto reading-measure px-6 py-10">
       <h1 className="text-2xl font-bold mb-6">{wiki.title}</h1>
 
       {/* ingest 잡 상태 배지: 진행 중이면 자동 폴링, 완료 시 결과 요약 + 목록 갱신 */}

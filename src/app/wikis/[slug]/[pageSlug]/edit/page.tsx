@@ -27,7 +27,7 @@ export default async function EditPage({
   if (!page) notFound();
 
   return (
-    <main className="mx-auto max-w-3xl xl:max-w-4xl 2xl:max-w-5xl px-6 py-10">
+    <main className="mx-auto reading-measure px-6 py-10">
       <div className="mb-6 text-sm text-gray-400">
         <Link href={`/wikis/${slug}/${pageSlug}`} className="hover:underline">← {t("backTo", { title: page.title })}</Link>
       </div>

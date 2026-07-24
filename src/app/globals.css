@@ -123,6 +123,13 @@ a.accent, .accent { color: var(--accent); }
   text-decoration-color: #4f46e5;
 }
 
+/* 읽기 화면 본문 측정폭: 컨테이너(사이드바 제외 영역)의 85%에 비례하되
+   768px(좁은 화면 기존 폭) 아래로 줄지 않고, 초광폭에서는 1536px에서 멈춰 가독성을 지킨다.
+   % 는 containing block 기준 — 위키 레이아웃의 flex-1 스크롤 컨테이너 / 공개 뷰는 뷰포트. */
+.reading-measure {
+  max-width: clamp(48rem, 85%, 96rem);
+}
+
 /* 렌더된 페이지 본문 기본 타이포 */
 .wiki-content {
   line-height: 1.7;

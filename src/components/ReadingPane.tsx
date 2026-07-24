@@ -64,7 +64,7 @@ export function ReadingPane({
 }) {
   const t = useTranslations("ReadingPane");
   return (
-    <main className="mx-auto max-w-3xl xl:max-w-4xl 2xl:max-w-5xl px-6 py-10">
+    <main className="mx-auto reading-measure px-6 py-10">
       {crumb}
       {notice && <div className="mt-3">{notice}</div>}
       <div className="mb-6 mt-3">

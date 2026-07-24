@@ -101,7 +101,7 @@ export async function PublicWikiView({
 
   const { sections } = await getWikiToc(wikiId, { includePersonal: false }); // 공개 사이드바에 개인 노트 미노출
   return (
-    <main className="mx-auto max-w-3xl xl:max-w-4xl 2xl:max-w-5xl px-6 py-10">
+    <main className="mx-auto reading-measure px-6 py-10">
       {crumb}
       <h1 className="mb-6 text-2xl font-bold">{title}</h1>
       {sections.length === 0 ? (

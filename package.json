@@ -44,9 +44,9 @@
     "mcp": "node mcp/server.mjs"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.88",
-    "@ai-sdk/openai": "^3.0.80",
-    "@ai-sdk/react": "^3.0.220",
+    "@ai-sdk/google": "^4.0.12",
+    "@ai-sdk/openai": "^4.0.20",
+    "@ai-sdk/react": "^4.0.23",
     "@anthropic-ai/sdk": "^0.114.0",
     "@auth/prisma-adapter": "^2.11.3",
     "@extractus/article-extractor": "^8.1.0",
@@ -58,7 +58,7 @@
     "@prisma/client-runtime-utils": "^7.9.0",
     "@sigma/node-border": "3.0.0",
     "@streamdown/mermaid": "1.0.2",
-    "ai": "^6.0.218",
+    "ai": "^7.0.37",
     "diff": "9.0.0",
     "dotenv": "^17.4.2",
     "github-slugger": "^2.0.0",
@@ -92,7 +92,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/mdast": "^4.0.4",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -101,6 +101,6 @@
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
-    "typescript": "^5"
+    "typescript": "^6"
   }
 }

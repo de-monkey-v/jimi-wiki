@@ -30,8 +30,8 @@ jobs:
       GOOGLE_GENERATIVE_AI_API_KEY: ""
       DEV_USER_EMAIL: dev@jimi.local
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
       - uses: actions/setup-node@v7

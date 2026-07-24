@@ -44,7 +44,7 @@
     "mcp": "node mcp/server.mjs"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.88",
+    "@ai-sdk/google": "^4.0.24",
     "@ai-sdk/openai": "^3.0.80",
     "@ai-sdk/react": "^3.0.220",
     "@anthropic-ai/sdk": "^0.114.0",

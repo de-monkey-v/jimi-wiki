@@ -63,11 +63,15 @@ test("model dispatch lease는 transaction timeout보다 60초 먼저 만료된�
 
 test("model dispatch lease 만료는 active provider turn과 후속 dispatch를 fail-closed로 막는다", async () => {
   const lease = createModelPolicyDispatchLease(20);
+  // lease 타이머는 운영에서 프로세스를 붙잡지 않도록 unref돼 있어, 이 대기를 ref된
+  // 타이머로 받쳐주지 않으면 이벤트 루프가 먼저 비는 Node 버전에서 abort 전에 러너가 종료된다.
+  const keepalive = setTimeout(() => {}, 5_000);
   try {
     const reason = await waitForAbort(lease.signal);
     assert.ok(reason instanceof ModelPolicyLeaseExpiredError);
     assert.throws(() => lease.assertActive(), ModelPolicyLeaseExpiredError);
   } finally {
+    clearTimeout(keepalive);
     lease.dispose();
   }
 });

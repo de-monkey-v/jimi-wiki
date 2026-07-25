@@ -369,7 +369,6 @@
     "newNoteAtRoot": "New note",
     "newKind": { "personal": "New protected note", "documents": "New document", "knowledge": "New knowledge page", "sources": "New source" },
     "newKindInFolder": "{kind} in ‘{name}’",
-    "movePage": "Move to folder",
     "newNoteInFolder": "New note in ‘{name}’",
     "quickSwitch": "Quick switch",
     "quickCapture": "Quick capture",
@@ -755,6 +754,11 @@
     "movePlaceholder": "e.g. life/notes (empty = Inbox)",
     "moveToInboxHint": "Leave empty to move to Inbox",
     "moveSubmit": "Move"
+  },
+  "PageMenu": {
+    "open": "Page menu",
+    "moveToFolder": "Move to folder",
+    "trash": "Move to trash"
   },
   "PinButton": {
     "pin": "Pin",

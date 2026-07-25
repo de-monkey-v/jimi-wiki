@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, isFolderPinned } from "@/lib/wiki";
+import { isPageTrashEligible } from "@/lib/kinds";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
 import { FolderPinButton } from "./FolderPinButton";
 import { CategoryList } from "./CategoryList";
@@ -24,13 +25,13 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
 
   // 정확 일치(prefix) + 하위(prefix/*). Prisma startsWith는 LIKE 메타문자(_ %)를 이스케이프하지 않으므로 직접 이스케이프(과매칭 방지: gpt_4가 gpt-4를 매칭하는 문제).
   const likePrefix = prefix.replace(/[\\%_]/g, (c) => "\\" + c) + "/";
+  // TOC·홈과 동일하게 활성 페이지만 — 아카이브/휴지통 페이지가 목록에 잔존하지 않게(케밥 삭제 후 행 제거).
   const pages = await prisma.page.findMany({
-    where: { wikiId: wiki.id, OR: [{ category: prefix }, { category: { startsWith: likePrefix } }] },
+    where: { wikiId: wiki.id, archivedAt: null, trashedAt: null, OR: [{ category: prefix }, { category: { startsWith: likePrefix } }] },
     orderBy: [{ category: "asc" }, { title: "asc" }],
-    select: { slug: true, title: true, kind: true, category: true, currentVersion: true },
+    select: { slug: true, title: true, kind: true, category: true, currentVersion: true, origin: true, sourceId: true },
   });
   const canWrite = wiki.role !== "viewer";
-  const moveLabel = (await getTranslations("WikiToc"))("movePage");
 
   return (
     <main className="mx-auto reading-measure px-6 py-10">
@@ -54,9 +55,9 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             categoryLabel: p.category && p.category !== prefix ? p.category : null,
             kindLabel: tk(p.kind),
             movable: canWrite && p.kind === "personal",
+            canTrash: canWrite && isPageTrashEligible(p),
             currentCategory: p.category,
             currentVersion: p.currentVersion,
-            moveLabel,
           }))}
         />
       )}

@@ -3,6 +3,8 @@
 
 export type FloatingPlacement = "top" | "bottom";
 
+export type FloatingAlign = "center" | "start" | "end";
+
 export type Rect = { top: number; left: number; width: number; height: number };
 
 export type FloatingPosition = { top: number; left: number; placement: FloatingPlacement };
@@ -12,11 +14,13 @@ export function computeFloatingPosition(
   size: { width: number; height: number },
   {
     placement = "top",
+    align = "center",
     offset = 6,
     margin = 8,
     viewport,
   }: {
     placement?: FloatingPlacement;
+    align?: FloatingAlign;
     offset?: number;
     margin?: number;
     viewport: { width: number; height: number };
@@ -41,7 +45,12 @@ export function computeFloatingPosition(
   }
 
   const top = resolved === "top" ? Math.max(margin, topIfAbove) : topIfBelow;
-  const centered = anchor.left + anchor.width / 2 - size.width / 2;
-  const left = Math.min(Math.max(margin, centered), Math.max(margin, viewport.width - margin - size.width));
+  const aligned =
+    align === "start"
+      ? anchor.left
+      : align === "end"
+        ? anchor.left + anchor.width - size.width
+        : anchor.left + anchor.width / 2 - size.width / 2;
+  const left = Math.min(Math.max(margin, aligned), Math.max(margin, viewport.width - margin - size.width));
   return { top, left, placement: resolved };
 }

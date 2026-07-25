@@ -7,6 +7,8 @@ import { ONTOLOGY_SLUG } from "@/lib/ontology";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { EmptyState } from "@/components/EmptyState";
+import { PageKebabMenu } from "@/components/PageKebabMenu";
+import { isPageTrashEligible } from "@/lib/kinds";
 import { HomeActions } from "./HomeActions";
 import { ReindexForm } from "./ReindexForm";
 import { RunStatusBadge } from "./RunStatusBadge";
@@ -68,14 +70,14 @@ export default async function WikiHome({
         where: documentsWhere,
         orderBy: [{ documentAt: "desc" }, { createdAt: "desc" }],
         take: 10,
-        select: { id: true, slug: true, title: true, documentType: true, documentAt: true, staleAt: true },
+        select: { id: true, slug: true, title: true, documentType: true, documentAt: true, staleAt: true, kind: true, origin: true, sourceId: true, currentVersion: true },
       }),
       prisma.page.count({ where: documentsWhere }),
       prisma.page.findMany({
         where: knowledgeWhere,
         orderBy: { updatedAt: "desc" },
         take: 12,
-        select: { id: true, slug: true, title: true, kind: true },
+        select: { id: true, slug: true, title: true, kind: true, origin: true, sourceId: true, currentVersion: true },
       }),
       prisma.page.findMany({
         where: { ...knowledgeWhere, category: { not: null } },
@@ -220,6 +222,15 @@ export default async function WikiHome({
                   {document.title}
                 </Link>
                 {document.staleAt && <span className="text-[11px] font-medium text-amber-700">{t("researchStale")}</span>}
+                <PageKebabMenu
+                  wikiSlug={slug}
+                  pageSlug={document.slug}
+                  currentVersion={document.currentVersion}
+                  currentCategory={null}
+                  canMove={false}
+                  canTrash={canWrite && isPageTrashEligible(document)}
+                  triggerClassName="ml-auto shrink-0 self-center rounded px-1.5 text-sm text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                />
               </li>
             ))}
           </ol>
@@ -251,6 +262,15 @@ export default async function WikiHome({
                 <Link href={`/wikis/${slug}/${p.slug}`} className="min-w-0 truncate text-sm text-stone-700 hover:text-indigo-700 hover:underline">
                   {p.title}
                 </Link>
+                <PageKebabMenu
+                  wikiSlug={slug}
+                  pageSlug={p.slug}
+                  currentVersion={p.currentVersion}
+                  currentCategory={null}
+                  canMove={false}
+                  canTrash={canWrite && isPageTrashEligible(p)}
+                  triggerClassName="ml-auto shrink-0 self-center rounded px-1.5 text-sm text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                />
               </li>
             ))}
           </ul>

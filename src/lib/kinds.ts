@@ -1,5 +1,6 @@
 // 클라이언트/서버 공용(server-only 없음). 페이지 kind 라벨 + TOC 트리 타입.
-import type { PageKind } from "@/generated/prisma/client";
+import type { PageKind, PageOrigin } from "@/generated/prisma/client";
+import { isReservedWikiPageSlug } from "@/lib/wiki-routes";
 
 export const KIND_LABEL: Record<PageKind, string> = {
   note: "소스 노트",
@@ -48,8 +49,23 @@ export interface TocGroup {
 /** 사이드바/목록에 노출하는 kind 순서. */
 export const KIND_ORDER: PageKind[] = ["personal", "document", "note", "concept", "entity", "meta"];
 
+/** 휴지통 이동 가능 여부(UI 노출 판정). lib/trash.ts trashPage()의 거부 조건과 1:1 —
+ *  system 페이지·예약 slug·Source 연결 note(원문 쪽에서 삭제)는 제외. 역할(editor+)은 호출측에서 AND. */
+export function isPageTrashEligible(page: {
+  slug: string;
+  kind: PageKind;
+  origin: PageOrigin;
+  sourceId: string | null;
+}): boolean {
+  return (
+    page.origin !== "system" &&
+    !(page.kind === "note" && page.sourceId !== null) &&
+    !isReservedWikiPageSlug(page.slug)
+  );
+}
+
 // ---------- P2: 탐색기(VSCode식) 폴더 트리 ----------
-export type TocLeaf = { type: "page"; slug: string; title: string; kind: PageKind; currentVersion: number };
+export type TocLeaf = { type: "page"; slug: string; title: string; kind: PageKind; currentVersion: number; trashable: boolean };
 export type TocFolder = { type: "folder"; name: string; path: string; children: TocEntry[] };
 export type TocEntry = TocLeaf | TocFolder;
 /** 사용자용 목차 섹션. sources는 하위 호환 타입으로 남지만 기본 목차에서는

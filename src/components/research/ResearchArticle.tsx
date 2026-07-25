@@ -34,6 +34,7 @@ export function ResearchArticle({
   notice,
   controls,
   pinControl,
+  pageMenu,
   backlinks,
   outlinks,
   prev,
@@ -55,6 +56,7 @@ export function ResearchArticle({
   notice?: ReactNode;
   controls?: ReactNode;
   pinControl?: ReactNode;
+  pageMenu?: ReactNode;
   backlinks: { slug: string; title: string }[];
   outlinks: { slug: string; title: string }[];
   prev: NavItem;
@@ -82,6 +84,7 @@ export function ResearchArticle({
                 {t("edit")}
               </Link>
             )}
+            {pageMenu}
           </div>
         </div>
         {controls && <div className="mt-5">{controls}</div>}

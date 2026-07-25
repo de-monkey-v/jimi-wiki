@@ -59,6 +59,34 @@ test("computeFloatingPosition: bottom 선호 + 아래 공간 충분이면 bottom
   assert.equal(pos.top, 100 + 20 + 8);
 });
 
+test("computeFloatingPosition: align end는 앵커 오른쪽 끝 정렬", () => {
+  const pos = computeFloatingPosition(
+    { top: 400, left: 450, width: 100, height: 20 },
+    { width: 200, height: 40 },
+    { placement: "bottom", align: "end", offset: 4, viewport },
+  );
+  assert.equal(pos.placement, "bottom");
+  assert.equal(pos.left, 450 + 100 - 200); // 앵커 우측 끝 - 폭
+});
+
+test("computeFloatingPosition: align end도 뷰포트 왼쪽 margin으로 클램프", () => {
+  const pos = computeFloatingPosition(
+    { top: 400, left: 10, width: 30, height: 20 },
+    { width: 200, height: 40 },
+    { placement: "bottom", align: "end", viewport },
+  );
+  assert.equal(pos.left, 8); // 10+30-200 = -160 → margin 클램프
+});
+
+test("computeFloatingPosition: align start는 앵커 왼쪽 끝 정렬", () => {
+  const pos = computeFloatingPosition(
+    { top: 400, left: 450, width: 100, height: 20 },
+    { width: 200, height: 40 },
+    { placement: "bottom", align: "start", viewport },
+  );
+  assert.equal(pos.left, 450);
+});
+
 test("computeFloatingPosition: 커스텀 margin이 좌우 클램프에 반영", () => {
   const pos = computeFloatingPosition(
     { top: 400, left: 0, width: 20, height: 20 },

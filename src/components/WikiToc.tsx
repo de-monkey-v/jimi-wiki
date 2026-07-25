@@ -9,6 +9,7 @@ import { useWikiActions } from "@/app/wikis/[slug]/WikiActions";
 import { useQuickNav } from "@/app/wikis/[slug]/QuickNav";
 import { RecentPopover } from "@/app/wikis/[slug]/RecentList";
 import { EmptyState } from "@/components/EmptyState";
+import { PageKebabMenu } from "@/components/PageKebabMenu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { TocSection, TocEntry } from "@/lib/kinds";
 import { isReservedWikiPageSlug } from "@/lib/wiki-routes";
@@ -35,39 +36,34 @@ function leafCount(e: TocEntry): number {
 // 페이지 리프와 폴더를 컴포넌트로 분리 — 훅이 early return 뒤에 오면(rules-of-hooks 위반)
 // hydration이 통째로 죽어 사이드바 전체가 클릭 불능이 된다.
 // newKind: 이 섹션에서 "+ 새 노트" 버튼이 만들 kind(personal|concept). undefined면 "+" 없음(원문/소스).
-// movable: 개인 노트처럼 폴더 이동 버튼을 붙일지. parentPath: 이동 시 프리필할 현재 폴더 경로.
+// movable: 개인 노트처럼 폴더 이동 항목을 붙일지. canTrash: 휴지통 항목(역할 조건, 행별 trashable과 AND).
+// parentPath: 이동 시 프리필할 현재 폴더 경로.
 type NodeCtx = {
   slug: string;
   current: string | undefined;
   newKind?: string;
   movable?: boolean;
-  moveLabel: string;
+  canTrash: boolean;
   newInFolderLabel: (name: string) => string;
 };
 
 function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: NodeCtx; depth: number; parentPath: string }) {
-  const quick = useQuickNav();
   if (entry.type === "page") {
     return (
       <li className="group/leaf relative">
         <Link href={`/wikis/${ctx.slug}/${entry.slug}`} className={linkCls(entry.slug === ctx.current)} style={{ paddingLeft: depth * 12 + 20 }}>
           {entry.title}
         </Link>
-        {ctx.movable && quick && (
-          <Tooltip label={ctx.moveLabel}>
-            <button
-              type="button"
-              aria-label={ctx.moveLabel}
-              onClick={(e) => {
-                e.stopPropagation();
-                quick.openMove(entry.slug, parentPath || null, entry.currentVersion);
-              }}
-              className="absolute right-1 top-1/2 block -translate-y-1/2 rounded px-1 text-xs text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-            >
-              ⋯
-            </button>
-          </Tooltip>
-        )}
+        <PageKebabMenu
+          wikiSlug={ctx.slug}
+          pageSlug={entry.slug}
+          currentVersion={entry.currentVersion}
+          currentCategory={parentPath || null}
+          canMove={!!ctx.movable}
+          canTrash={ctx.canTrash && entry.trashable}
+          afterTrash={entry.slug === ctx.current ? "goHome" : "refresh"}
+          triggerClassName="absolute right-1 top-1/2 block -translate-y-1/2 rounded px-1 text-xs text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        />
       </li>
     );
   }
@@ -365,7 +361,7 @@ export function WikiToc({
                 current,
                 newKind,
                 movable: canWrite && s.key === "personal",
-                moveLabel: t("movePage"),
+                canTrash: canWrite,
                 newInFolderLabel: (name) => t("newKindInFolder", { kind: t(`newKind.${s.key}`), name }),
               };
               return (
@@ -412,7 +408,7 @@ export function WikiToc({
                         current,
                         newKind: canWrite ? SECTION_NEW_KIND.personal : undefined,
                         movable: canWrite,
-                        moveLabel: t("movePage"),
+                        canTrash: canWrite,
                         newInFolderLabel: (name) => t("newKindInFolder", { kind: t("newKind.personal"), name }),
                       }}
                       depth={0}

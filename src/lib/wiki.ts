@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { normalizeSlug } from "@/lib/markdown";
-import { KIND_LABEL } from "@/lib/kinds";
+import { KIND_LABEL, isPageTrashEligible } from "@/lib/kinds";
 import type { TocSection, TocEntry, TocFolder, TocLeaf, WikiGraph, GraphNode, GraphEdge } from "@/lib/kinds";
 import { isReservedSlug, ONTOLOGY_SLUG } from "@/lib/ontology";
 import {
@@ -18,6 +18,7 @@ import type {
   DocumentType,
   ModelAccess,
   PageKind,
+  PageOrigin,
   WikiKind,
   Visibility,
   RelationType,
@@ -165,7 +166,9 @@ export { KIND_LABEL };
 export type { TocSection, TocEntry };
 
 /** category 경로("ai/architectures")로 페이지들을 폴더 트리(TocEntry[])로 배치. 미분류는 루트 leaf(=Inbox). */
-function buildCategoryTree(pages: { slug: string; title: string; kind: PageKind; category: string | null; currentVersion: number }[]): TocEntry[] {
+function buildCategoryTree(
+  pages: { slug: string; title: string; kind: PageKind; category: string | null; currentVersion: number; origin: PageOrigin; sourceId: string | null }[],
+): TocEntry[] {
   const rootChildren: TocEntry[] = [];
   const folderByPath = new Map<string, TocFolder>();
   const ensureFolder = (path: string): TocFolder => {
@@ -180,7 +183,14 @@ function buildCategoryTree(pages: { slug: string; title: string; kind: PageKind;
     return folder;
   };
   for (const p of pages) {
-    const leaf: TocLeaf = { type: "page", slug: p.slug, title: p.title, kind: p.kind, currentVersion: p.currentVersion };
+    const leaf: TocLeaf = {
+      type: "page",
+      slug: p.slug,
+      title: p.title,
+      kind: p.kind,
+      currentVersion: p.currentVersion,
+      trashable: isPageTrashEligible(p),
+    };
     // 빈 세그먼트 정규화("ai/models/"·"ai//models" → "ai/models")로 빈 폴더/분열 방지
     const cat = p.category?.split("/").map((s) => s.trim()).filter(Boolean).join("/");
     if (cat) ensureFolder(cat).children.push(leaf);
@@ -202,7 +212,7 @@ export async function getWikiToc(
   const pages = await prisma.page.findMany({
     where: { wikiId, archivedAt: null, slug: { not: ONTOLOGY_SLUG } }, // O1: system 온톨로지 페이지 숨김
     orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
-    select: { slug: true, title: true, kind: true, category: true, currentVersion: true },
+    select: { slug: true, title: true, kind: true, category: true, currentVersion: true, origin: true, sourceId: true },
   });
 
   const personalPages = includePersonal ? pages.filter((p) => p.kind === "personal") : [];

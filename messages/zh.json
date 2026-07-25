@@ -369,7 +369,6 @@
     "newNoteAtRoot": "新建笔记",
     "newKind": { "personal": "新建受保护笔记", "documents": "新建文档", "knowledge": "新建知识页面", "sources": "新建原文" },
     "newKindInFolder": "在“{name}”文件夹中{kind}",
-    "movePage": "移动到文件夹",
     "newNoteInFolder": "在“{name}”文件夹中新建笔记",
     "quickSwitch": "快速跳转",
     "quickCapture": "快速记录",
@@ -755,6 +754,11 @@
     "movePlaceholder": "例如 生活/笔记（留空=收件箱）",
     "moveToInboxHint": "留空则移入收件箱",
     "moveSubmit": "移动"
+  },
+  "PageMenu": {
+    "open": "页面菜单",
+    "moveToFolder": "移动到文件夹",
+    "trash": "移到回收站"
   },
   "PinButton": {
     "pin": "固定",

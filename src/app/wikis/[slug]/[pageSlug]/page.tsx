@@ -9,7 +9,8 @@ import { renderMarkdown } from "@/lib/markdown";
 import { detectLang } from "@/lib/lang";
 import { getPageTranslation } from "@/lib/translate";
 import { checkDailyQuota } from "@/lib/usage";
-import { isAiExcludedKind } from "@/lib/kinds";
+import { isAiExcludedKind, isPageTrashEligible } from "@/lib/kinds";
+import { PageKebabMenu } from "@/components/PageKebabMenu";
 import { isLocale } from "@/i18n/locales";
 import { ReadingPane } from "@/components/ReadingPane";
 import TranslateMenu from "@/components/TranslateMenu";
@@ -182,6 +183,19 @@ export default async function PageView({
 
   const canWrite = wiki.role !== "viewer";
   const pinned = await isPagePinned(userId, page.id);
+  // 케밥(⋮) 메뉴 — 접힌 수명주기 카드에 묻힌 휴지통 액션의 발견성 담당. 삭제 후엔 홈으로.
+  const pageMenu = canWrite ? (
+    <PageKebabMenu
+      wikiSlug={slug}
+      pageSlug={pageSlug}
+      currentVersion={page.currentVersion}
+      currentCategory={page.category}
+      canMove={page.kind === "personal" && !page.archivedAt}
+      canTrash={!page.trashedAt && isPageTrashEligible(page)}
+      afterTrash="goHome"
+      triggerClassName="btn-secondary btn-compact text-stone-500"
+    />
+  ) : undefined;
   const knowledgeLabels: KnowledgeBadgeLabels = {
     group: ts("group"),
     origin: {
@@ -270,6 +284,7 @@ export default async function PageView({
           notice={researchStatusNotice}
           controls={knowledgeControls}
           pinControl={page.archivedAt ? undefined : <PinButton wikiSlug={slug} pageSlug={pageSlug} pinned={pinned} />}
+          pageMenu={pageMenu}
           backlinks={backlinks}
           outlinks={outlinks}
           prev={prev}
@@ -283,6 +298,7 @@ export default async function PageView({
         isEmpty={page.body.trim() === ""}
         translateControl={page.body.trim() && !page.archivedAt && page.modelAccess === "external" ? <TranslateMenu current={translatedTo} pageLang={pageLang} /> : undefined}
         pinControl={page.archivedAt ? undefined : <PinButton wikiSlug={slug} pageSlug={pageSlug} pinned={pinned} />}
+        pageMenu={pageMenu}
         create={canWrite && !page.archivedAt ? { wikiSlug: slug, category: isNote ? null : page.category } : undefined}
         selection={{ pageSlug, canWrite: canWrite && !page.archivedAt }}
         emptyText={canWrite ? t("emptyEditable") : t("empty")}

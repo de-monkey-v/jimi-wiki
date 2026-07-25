@@ -32,6 +32,7 @@ export function ReadingPane({
   localGraph,
   translateControl,
   pinControl,
+  pageMenu,
   create,
   selection,
   headerMeta,
@@ -56,6 +57,7 @@ export function ReadingPane({
   localGraph?: ReactNode;
   translateControl?: ReactNode;
   pinControl?: ReactNode; // 개인 즐겨찾기 별 토글(비공개 뷰만)
+  pageMenu?: ReactNode; // 케밥(⋮) 메뉴 — 이동/휴지통(비공개 쓰기 뷰만)
   create?: { wikiSlug: string; category: string | null }; // 있으면 미해결 [[link]] 클릭 → 생성(비공개 쓰기 뷰만)
   selection?: { pageSlug: string; canWrite: boolean }; // 있으면 본문 텍스트 선택 툴바 활성(비공개 뷰만)
   headerMeta?: ReactNode; // origin/modelAccess/version 등 비공개 뷰 전용 헤더 메타
@@ -82,6 +84,7 @@ export function ReadingPane({
                 {t("edit")}
               </Link>
             )}
+            {pageMenu}
           </div>
         </div>
       </div>

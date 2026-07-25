@@ -186,6 +186,17 @@ export async function archivePageAction(
   }
 }
 
+// trashPageAction(KnowledgeControls 폼)과 trashPageFromMenuAction(케밥 메뉴)이 공유하는 코어.
+async function trashPageChecked(wikiSlug: string, pageSlug: string, version: number): Promise<void> {
+  const { user, wiki } = await requireRole(wikiSlug, "editor");
+  const page = await prisma.page.findUnique({
+    where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } },
+    select: { id: true, origin: true },
+  });
+  if (!page || page.origin === "system" || isReservedSlug(pageSlug)) throw new Error("page not eligible");
+  await trashPage({ wikiId: wiki.id, pageId: page.id, expectedVersion: version, userId: user.id });
+}
+
 export async function trashPageAction(
   _previous: KnowledgeControlState,
   formData: FormData,
@@ -193,23 +204,28 @@ export async function trashPageAction(
   const wikiSlug = String(formData.get("wikiSlug") ?? "");
   const pageSlug = String(formData.get("resourceSlug") ?? "");
   try {
-    const { user, wiki } = await requireRole(wikiSlug, "editor");
-    const page = await prisma.page.findUnique({
-      where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } },
-      select: { id: true, origin: true },
-    });
-    if (!page || page.origin === "system" || isReservedSlug(pageSlug)) throw new Error("page not eligible");
-    await trashPage({
-      wikiId: wiki.id,
-      pageId: page.id,
-      expectedVersion: expectedVersion(formData),
-      userId: user.id,
-    });
+    await trashPageChecked(wikiSlug, pageSlug, expectedVersion(formData));
   } catch (error) {
     return failure(error);
   }
   revalidatePath(`/wikis/${wikiSlug}`, "layout");
   redirect(`/wikis/${encodeURIComponent(wikiSlug)}`);
+}
+
+/** 목록 행·상세 헤더의 케밥 메뉴용 — redirect 없이 상태만 반환하고, 이동 여부는 호출측이 정한다. */
+export async function trashPageFromMenuAction(
+  wikiSlug: string,
+  pageSlug: string,
+  version: number,
+): Promise<KnowledgeControlState> {
+  try {
+    if (!Number.isInteger(version) || version < 1) throw new Error("invalid expected version");
+    await trashPageChecked(wikiSlug, pageSlug, version);
+  } catch (error) {
+    return failure(error);
+  }
+  revalidatePath(`/wikis/${wikiSlug}`, "layout");
+  return { status: "success" };
 }
 
 export async function restorePageAction(

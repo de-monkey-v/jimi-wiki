@@ -369,7 +369,6 @@
     "newNoteAtRoot": "새 노트",
     "newKind": { "personal": "새 보호 메모", "documents": "새 문서", "knowledge": "새 지식 페이지", "sources": "새 원문" },
     "newKindInFolder": "‘{name}’ 폴더에 {kind}",
-    "movePage": "폴더로 이동",
     "newNoteInFolder": "‘{name}’ 폴더에 새 노트",
     "quickSwitch": "빠른 이동",
     "quickCapture": "빠른 메모",
@@ -755,6 +754,11 @@
     "movePlaceholder": "예: 생활/메모 (비우면 받은정리함)",
     "moveToInboxHint": "비우면 받은정리함(Inbox)으로",
     "moveSubmit": "이동"
+  },
+  "PageMenu": {
+    "open": "페이지 메뉴",
+    "moveToFolder": "폴더로 이동",
+    "trash": "휴지통으로 이동"
   },
   "PinButton": {
     "pin": "고정",

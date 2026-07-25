@@ -369,7 +369,6 @@
     "newNoteAtRoot": "新規ノート",
     "newKind": { "personal": "新しい保護メモ", "documents": "新しいドキュメント", "knowledge": "新しい知識ページ", "sources": "新しい原文" },
     "newKindInFolder": "「{name}」フォルダーに{kind}",
-    "movePage": "フォルダーへ移動",
     "newNoteInFolder": "「{name}」フォルダーに新規ノート",
     "quickSwitch": "クイック移動",
     "quickCapture": "クイックメモ",
@@ -755,6 +754,11 @@
     "movePlaceholder": "例: 生活/メモ (空欄で受信トレイ)",
     "moveToInboxHint": "空欄で受信トレイへ",
     "moveSubmit": "移動"
+  },
+  "PageMenu": {
+    "open": "ページメニュー",
+    "moveToFolder": "フォルダーへ移動",
+    "trash": "ゴミ箱へ移動"
   },
   "PinButton": {
     "pin": "ピン留め",

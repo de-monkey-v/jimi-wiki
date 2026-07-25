@@ -242,7 +242,9 @@ export function QuickNavProvider({
                         ? t("protectedGroup")
                         : item.group === "knowledge"
                           ? t("knowledgeGroup")
-                          : t("documentsGroup")}
+                          : item.group === "sources"
+                            ? t("sourcesGroup")
+                            : t("documentsGroup")}
                     </li>
                   )}
                   <li role="none">

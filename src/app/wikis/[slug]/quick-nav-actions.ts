@@ -15,7 +15,7 @@ export type QuickNavSearchItem = {
   documentType: string | null;
   heading: string | null;
   snippet: string | null;
-  group: "protected" | "knowledge" | "documents" | null;
+  group: "protected" | "knowledge" | "documents" | "sources" | null;
 };
 
 const RESULT_LIMIT = 40;
@@ -33,7 +33,13 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
   const query = rawQuery.trim().slice(0, QUERY_MAX);
   if (!query) {
     const pages = await prisma.page.findMany({
-      where: { wikiId: wiki.id, archivedAt: null, slug: { not: ONTOLOGY_SLUG } },
+      where: {
+        wikiId: wiki.id,
+        archivedAt: null,
+        trashedAt: null,
+        slug: { not: ONTOLOGY_SLUG },
+        kind: { not: "note" },
+      },
       orderBy: [{ kind: "asc" }, { title: "asc" }],
       take: RESULT_LIMIT,
       select: { slug: true, title: true, kind: true, documentType: true },
@@ -67,26 +73,57 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
   const [pages, sources] = await Promise.all([
     pageIds.length
       ? prisma.page.findMany({
-          where: { wikiId: wiki.id, archivedAt: null, id: { in: pageIds } },
-          select: { id: true, slug: true, title: true, kind: true, documentType: true },
+          where: { wikiId: wiki.id, archivedAt: null, trashedAt: null, id: { in: pageIds } },
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            kind: true,
+            documentType: true,
+            source: { select: { slug: true, title: true } },
+          },
         })
       : [],
     sourceIds.length
       ? prisma.source.findMany({
-          where: { wikiId: wiki.id, archivedAt: null, id: { in: sourceIds } },
+          where: { wikiId: wiki.id, archivedAt: null, trashedAt: null, id: { in: sourceIds } },
           select: { id: true, slug: true, title: true },
         })
       : [],
   ]);
   const pageById = new Map(pages.map((page) => [page.id, page]));
   const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const rawSourceSlugs = new Set(sources.map((source) => source.slug));
 
-  return hits.flatMap(({ hit, group }): QuickNavSearchItem[] => {
+  const items: QuickNavSearchItem[] = [];
+  const seen = new Set<string>();
+  for (const { hit, group } of hits) {
     if (hit.refType === "page") {
       const page = pageById.get(hit.refId);
-      if (!page || page.slug === ONTOLOGY_SLUG) return [];
-      return [
-        {
+      if (!page || page.slug === ONTOLOGY_SLUG) continue;
+      if (page.kind === "note") {
+        if (!page.source) continue;
+        // 같은 Source 원문 hit가 있으면 그것을 우선해 projection note의 기술 스니펫을 노출하지 않는다.
+        if (rawSourceSlugs.has(page.source.slug)) continue;
+        const key = `source:${page.source.slug}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({
+          key,
+          refType: "source",
+          slug: page.source.slug,
+          title: page.source.title,
+          kind: "source",
+          documentType: null,
+          heading: null,
+          snippet: null,
+          group: "sources",
+        });
+      } else {
+        const key = `page:${page.slug}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({
           key: `page:${page.slug}`,
           refType: "page",
           slug: page.slug,
@@ -96,26 +133,36 @@ export async function quickNavSearchAction(wikiSlug: string, rawQuery: string): 
           heading: hit.heading || null,
           snippet: hit.snippet || null,
           group,
-        },
-      ];
+        });
+      }
     }
     if (hit.refType === "source") {
       const source = sourceById.get(hit.refId);
-      if (!source) return [];
-      return [
-        {
-          key: `source:${source.slug}`,
-          refType: "source",
-          slug: source.slug,
-          title: source.title,
-          kind: "source",
-          documentType: null,
-          heading: hit.heading || null,
-          snippet: hit.snippet || null,
-          group,
-        },
-      ];
+      if (!source) continue;
+      const key = `source:${source.slug}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({
+        key,
+        refType: "source",
+        slug: source.slug,
+        title: source.title,
+        kind: "source",
+        documentType: null,
+        heading: hit.heading || null,
+        snippet: hit.snippet || null,
+        group: "sources",
+      });
     }
-    return [];
+  }
+  const groupOrder: Record<Exclude<QuickNavSearchItem["group"], null>, number> = {
+    protected: 0,
+    knowledge: 1,
+    documents: 2,
+    sources: 3,
+  };
+  return items.sort((a, b) => {
+    if (!a.group || !b.group) return 0;
+    return groupOrder[a.group] - groupOrder[b.group];
   });
 }

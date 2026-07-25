@@ -7,7 +7,7 @@ import { logoutAction } from "@/app/login/actions";
 import { useChatModal, useShortcutLabel } from "@/app/wikis/[slug]/chat/ChatModal";
 import { useWikiActions } from "@/app/wikis/[slug]/WikiActions";
 import { useQuickNav } from "@/app/wikis/[slug]/QuickNav";
-import { RecentList } from "@/app/wikis/[slug]/RecentList";
+import { RecentPopover } from "@/app/wikis/[slug]/RecentList";
 import { EmptyState } from "@/components/EmptyState";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { TocSection, TocEntry } from "@/lib/kinds";
@@ -123,7 +123,7 @@ function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "f
   );
 }
 
-// 섹션별 "+" 새 노트 kind. 원문/소스(sources)는 ingest 전용이라 "+" 없음.
+// 섹션별 "+" 새 페이지 kind. sources는 전용 보관함이라 사용자 목차에는 나오지 않는다.
 const SECTION_NEW_KIND: Record<TocSection["key"], string | undefined> = {
   personal: "personal",
   documents: "document",
@@ -160,10 +160,14 @@ export function WikiToc({
   const shortcut = useShortcutLabel();
   const isMac = shortcut.startsWith("⌘");
   const canWrite = role !== "viewer";
+  const personalSection = sections.find((section) => section.key === "personal");
+  const primarySections = sections.filter((section) => section.key === "documents" || section.key === "knowledge");
 
   // 모바일: 목차를 off-canvas 드로어로. 데스크톱(md+)은 기존 고정 사이드바.
   const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -180,14 +184,94 @@ export function WikiToc({
     return () => media.removeEventListener("change", sync);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const media = window.matchMedia("(min-width: 768px)");
+    const drawer = drawerRef.current;
+    const toggle = toggleRef.current;
+    if (media.matches || !drawer) return;
+
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+    const focusable = () =>
+      [...drawer.querySelectorAll<HTMLElement>(focusableSelector)].filter(
+        (element) => element.getClientRects().length > 0,
+      );
+    const focusFrame = window.requestAnimationFrame(() => {
+      (focusable()[0] ?? drawer).focus();
+    });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !drawer.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !drawer.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const onMediaChange = () => {
+      if (media.matches) setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    media.addEventListener("change", onMediaChange);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", onKeyDown);
+      media.removeEventListener("change", onMediaChange);
+      if (!media.matches) toggle?.focus();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const storageKey = `jimi:toc-scroll:${slug}`;
+    try {
+      const saved = Number(sessionStorage.getItem(storageKey) ?? "0");
+      if (Number.isFinite(saved) && saved >= 0) nav.scrollTop = saved;
+    } catch {
+      // 저장소가 차단된 브라우저에서도 목차 자체는 계속 동작한다.
+    }
+    const remember = () => {
+      try {
+        sessionStorage.setItem(storageKey, String(nav.scrollTop));
+      } catch {
+        // 저장 실패는 탐색 동작을 막지 않는다.
+      }
+    };
+    nav.addEventListener("scroll", remember, { passive: true });
+    return () => {
+      remember();
+      nav.removeEventListener("scroll", remember);
+    };
+  }, [slug]);
+
   return (
     <>
       {/* 모바일 전용 토글(☰/✕) — 사이드바 위(z-50)에 뜬다 */}
       <button
+        ref={toggleRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={t("toggleToc")}
         aria-expanded={open}
+        aria-controls="wiki-toc-drawer"
+        tabIndex={open ? -1 : 0}
         className="fixed left-2 top-2 z-50 rounded-md border border-stone-200 bg-white/90 px-2.5 py-1.5 text-lg leading-none text-stone-700 shadow-sm backdrop-blur focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 md:hidden"
       >
         {open ? "✕" : "☰"}
@@ -203,7 +287,12 @@ export function WikiToc({
         />
       )}
       <aside
+        id="wiki-toc-drawer"
         ref={drawerRef}
+        role={open ? "dialog" : undefined}
+        aria-modal={open ? true : undefined}
+        aria-label={open ? title : undefined}
+        tabIndex={open ? -1 : undefined}
         // 모바일 드로어에서 내부 링크(<a>)를 누르면 네비게이션과 함께 닫는다(폴더 토글 <button>은 유지).
         onClick={(e) => {
           if (open && (e.target as HTMLElement).closest("a")) setOpen(false);
@@ -214,13 +303,26 @@ export function WikiToc({
       >
       <div className="border-b border-stone-100 px-3 py-3">
         <Link href="/wikis" className="text-xs text-stone-400 hover:text-stone-600">← {t("myWikis")}</Link>
-        <Link href={`/wikis/${slug}`} className="mt-1 block truncate text-base font-bold tracking-tight">
-          {title}
-        </Link>
+        <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
+          <Link href={`/wikis/${slug}`} className="min-w-0 truncate text-base font-bold tracking-tight">
+            {title}
+          </Link>
+          <RecentPopover
+            slug={slug}
+            current={current}
+            heading={t("recentHeading")}
+            emptyText={t("recentEmpty")}
+            kindLabel={{
+              document: t("recentKind.document"),
+              concept: t("recentKind.concept"),
+              entity: t("recentKind.entity"),
+            }}
+          />
+        </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 py-3">
-        {/* 고정(핀) + 최근 본 문서 — 직접 접근 블록 */}
+      <nav ref={navRef} className="flex-1 overflow-y-auto px-2 py-3">
+        {/* 고정 문서와 안정적인 사용자용 목차. 최근 기록은 헤더 팝오버에 격리한다. */}
         {pinned.length > 0 && (
           <div className="mb-3">
             <div className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-stone-400">{t("pinnedHeading")}</div>
@@ -249,15 +351,14 @@ export function WikiToc({
             </ul>
           </div>
         )}
-        <RecentList slug={slug} current={current} heading={t("recentHeading")} />
 
-        {sections.length === 0 && pinned.length === 0 ? (
+        {primarySections.length === 0 && !personalSection && pinned.length === 0 ? (
           <div className="px-2 py-2">
             <EmptyState asset="empty-pages" title={t("emptyTitle")} body={t("emptyBody")} compact />
           </div>
         ) : (
           <div className="space-y-4">
-            {sections.map((s) => {
+            {primarySections.map((s) => {
               const newKind = canWrite ? SECTION_NEW_KIND[s.key] : undefined;
               const ctx: NodeCtx = {
                 slug,
@@ -292,6 +393,35 @@ export function WikiToc({
                 </div>
               );
             })}
+            {personalSection ? (
+              <details className="group/secondary">
+                <summary className="flex cursor-pointer list-none items-center rounded-md px-1 py-1 text-xs font-semibold uppercase tracking-wide text-stone-400 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 [&::-webkit-details-marker]:hidden">
+                  <span className="mr-1 text-[10px] transition-transform motion-reduce:transition-none group-open/secondary:rotate-90" aria-hidden="true">▸</span>
+                  <span className="min-w-0 flex-1">{t("section.personal")}</span>
+                  <span className="font-mono text-[10px] font-normal">
+                    {personalSection.entries.reduce((count, entry) => count + leafCount(entry), 0)}
+                  </span>
+                </summary>
+                <ul className="mt-1 space-y-0.5">
+                  {personalSection.entries.map((entry) => (
+                    <EntryNode
+                      key={entry.type === "folder" ? `f:${entry.path}` : `p:${entry.slug}`}
+                      entry={entry}
+                      ctx={{
+                        slug,
+                        current,
+                        newKind: canWrite ? SECTION_NEW_KIND.personal : undefined,
+                        movable: canWrite,
+                        moveLabel: t("movePage"),
+                        newInFolderLabel: (name) => t("newKindInFolder", { kind: t("newKind.personal"), name }),
+                      }}
+                      depth={0}
+                      parentPath=""
+                    />
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </div>
         )}
       </nav>
@@ -373,32 +503,48 @@ export function WikiToc({
             </li>
           )}
           <li>
-            <Link href={`/wikis/${slug}/graph`} className={`px-2 ${linkCls(sub === "graph")}`}>{t("graph")}</Link>
-          </li>
-          <li>
             <Link href={`/wikis/${slug}/reading`} className={`px-2 ${linkCls(sub === "reading")}`}>{t("readingList")}</Link>
           </li>
-          {role !== "viewer" && (
-            <li>
-              <Link href={`/wikis/${slug}/builds`} className={`px-2 ${linkCls(sub === "builds")}`}>{t("builds")}</Link>
-            </li>
-          )}
-          {role !== "viewer" && (
-            <li>
-              <Link href={`/wikis/${slug}/lint`} className={`px-2 ${linkCls(sub === "lint")}`}>{t("healthCheck")}</Link>
-            </li>
-          )}
           <li>
-            <Link href={`/wikis/${encodeURIComponent(slug)}/docs`} className={`px-2 ${linkCls(sub === "docs")}`}>{t("integrationGuide")}</Link>
+            <Link href={`/wikis/${slug}/sources`} className={`px-2 ${linkCls(sub === "sources")}`}>{t("sourceArchive")}</Link>
           </li>
-          <li>
-            <Link href={`/wikis/${encodeURIComponent(slug)}/settings/trash`} className={`px-2 ${linkCls(inTrash)}`}>{t("trash")}</Link>
+          <li className="pt-1">
+            <details
+              className="group/manage"
+              open={["graph", "builds", "lint", "docs", "settings"].includes(sub ?? "") ? true : undefined}
+            >
+              <summary className="flex cursor-pointer list-none items-center rounded-md px-2 py-1 text-sm text-stone-500 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0 flex-1">{t("manage")}</span>
+                <span className="text-xs text-stone-400 transition-transform motion-reduce:transition-none group-open/manage:rotate-90" aria-hidden="true">›</span>
+              </summary>
+              <ul className="mt-1 space-y-0.5 border-l border-stone-200 pl-2">
+                <li>
+                  <Link href={`/wikis/${slug}/graph`} className={`px-2 ${linkCls(sub === "graph")}`}>{t("graph")}</Link>
+                </li>
+                {role !== "viewer" ? (
+                  <>
+                    <li>
+                      <Link href={`/wikis/${slug}/builds`} className={`px-2 ${linkCls(sub === "builds")}`}>{t("builds")}</Link>
+                    </li>
+                    <li>
+                      <Link href={`/wikis/${slug}/lint`} className={`px-2 ${linkCls(sub === "lint")}`}>{t("healthCheck")}</Link>
+                    </li>
+                  </>
+                ) : null}
+                <li>
+                  <Link href={`/wikis/${encodeURIComponent(slug)}/docs`} className={`px-2 ${linkCls(sub === "docs")}`}>{t("integrationGuide")}</Link>
+                </li>
+                <li>
+                  <Link href={`/wikis/${encodeURIComponent(slug)}/settings/trash`} className={`px-2 ${linkCls(inTrash)}`}>{t("trash")}</Link>
+                </li>
+                {role === "owner" ? (
+                  <li>
+                    <Link href={`/wikis/${slug}/settings`} className={`px-2 ${linkCls(sub === "settings" && !inTrash)}`}>{t("settings")}</Link>
+                  </li>
+                ) : null}
+              </ul>
+            </details>
           </li>
-          {role === "owner" && (
-            <li>
-              <Link href={`/wikis/${slug}/settings`} className={`px-2 ${linkCls(sub === "settings" && !inTrash)}`}>{t("settings")}</Link>
-            </li>
-          )}
         </ul>
       </div>
 

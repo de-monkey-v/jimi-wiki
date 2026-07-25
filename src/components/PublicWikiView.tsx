@@ -58,6 +58,8 @@ export async function PublicWikiView({
     if (!page) notFound();
     // 개인 노트(AI 제외)는 공개 뷰에 절대 노출하지 않는다 — 익명 독자가 slug로 직접 접근해도 숨김.
     if (isAiExcludedKind(page.kind)) notFound();
+    // Source projection note는 사용자용 페이지가 아니다. 공개 공유에서는 원문 보관함도 제공하지 않는다.
+    if (page.kind === "note" && page.sourceId) notFound();
     const existing = await existingSlugSet(wikiId);
     const html = await renderMarkdown(page.body, {
       hrefFor: (t) => `${basePath}/p/${encodeURIComponent(t)}`,

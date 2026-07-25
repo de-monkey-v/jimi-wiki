@@ -8,12 +8,11 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { EmptyState } from "@/components/EmptyState";
 import { HomeActions } from "./HomeActions";
-import { RecentList } from "./RecentList";
 import { ReindexForm } from "./ReindexForm";
 import { RunStatusBadge } from "./RunStatusBadge";
 
-/** 위키 홈 = 읽기 대시보드. 작성은 주로 API·봇이 하므로 웹 홈은 핀→최근→읽을거리→문서→지식 순의
- *  소비 화면이고, 원문(note)은 홈에서 제외한다(사이드바 sources 트리가 유일한 진입로). */
+/** 위키 홈 = 읽기 대시보드. 읽을거리→문서→지식의 소비 화면이며,
+ *  원문은 전용 보관함, 최근 기록은 사이드바 팝오버에서 제공한다. */
 export default async function WikiHome({
   params,
   searchParams,
@@ -147,9 +146,6 @@ export default async function WikiHome({
         </section>
       )}
 
-      {/* 최근 본 문서: 기기 로컬(localStorage), 비어 있으면 자체적으로 렌더하지 않음 */}
-      <RecentList slug={slug} current={undefined} heading={t("recentHeading")} />
-
       <section className="surface-panel mb-8 p-4">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-stone-600">
@@ -272,9 +268,12 @@ export default async function WikiHome({
       )}
 
       {logs.length > 0 && (
-        <section className="surface-panel-muted mt-8 p-4">
-          <h2 className="mb-2 text-sm font-semibold text-stone-600">{t("systemActivity")}</h2>
-          <ul className="space-y-1 text-sm text-stone-500">
+        <details className="surface-panel-muted group mt-8 p-4">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md text-sm font-semibold text-stone-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 [&::-webkit-details-marker]:hidden">
+            <span>{t("systemActivity")}</span>
+            <span aria-hidden="true" className="text-stone-400 transition-transform motion-reduce:transition-none group-open:rotate-90">›</span>
+          </summary>
+          <ul className="mt-3 space-y-1 text-sm text-stone-500">
             {logs.map((l) => (
               <li key={l.id} className="flex gap-2">
                 <span className="ui-meta">{l.createdAt.toISOString().slice(5, 16).replace("T", " ")}</span>
@@ -283,7 +282,7 @@ export default async function WikiHome({
               </li>
             ))}
           </ul>
-        </section>
+        </details>
       )}
     </main>
   );

@@ -52,8 +52,8 @@ export const KIND_ORDER: PageKind[] = ["personal", "document", "note", "concept"
 export type TocLeaf = { type: "page"; slug: string; title: string; kind: PageKind; currentVersion: number };
 export type TocFolder = { type: "folder"; name: string; path: string; children: TocEntry[] };
 export type TocEntry = TocLeaf | TocFolder;
-/** 4섹션: 보호 메모 · 문서 · 원문/소스 · 정리된 지식.
- *  라벨은 렌더 시 key로 i18n(WikiToc.section.*) — 서버가 언어를 모르므로 여기엔 label을 두지 않는다. */
+/** 사용자용 목차 섹션. sources는 하위 호환 타입으로 남지만 기본 목차에서는
+ *  노출하지 않고 전용 원문 보관함으로 보낸다. */
 export interface TocSection {
   key: "personal" | "documents" | "sources" | "knowledge";
   entries: TocEntry[];

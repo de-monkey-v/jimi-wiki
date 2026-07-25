@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getBacklinks, getOutlinks, existingSlugSet, getPrevNext, getPageProvenance, getPageSources, getPageNeighborhood, isPagePinned } from "@/lib/wiki";
@@ -48,6 +48,12 @@ export default async function PageView({
   const page = await prisma.page.findUnique({ where: { wikiId_slug: { wikiId: wiki.id, slug: pageSlug } } });
   if (!page) notFound();
   const isResearch = page.kind === "document" && page.documentType === "research";
+  const linkedSource = page.kind === "note" && page.sourceId
+    ? await getPageProvenance(wiki.id, page.sourceId)
+    : null;
+  if (linkedSource) {
+    redirect(`/wikis/${encodeURIComponent(slug)}/sources/${encodeURIComponent(linkedSource.slug)}`);
+  }
 
   // 온디맨드 기계 번역: ?lang=<locale> 이 원문 언어와 다를 때만 (캐시 우선) 번역본을 렌더.
   const pageLang = detectLang(page.body || page.title).code;
@@ -244,7 +250,9 @@ export default async function PageView({
 
   return (
     <>
-      {!page.archivedAt && <RecordVisit wikiSlug={slug} pageSlug={pageSlug} title={page.title} />}
+      {!page.archivedAt && (page.kind === "document" || page.kind === "concept" || page.kind === "entity") ? (
+        <RecordVisit wikiSlug={slug} pageSlug={pageSlug} title={page.title} kind={page.kind} />
+      ) : null}
       {isResearch ? (
         <ResearchArticle
           title={page.title}

@@ -164,14 +164,6 @@ export async function existingSlugSet(wikiId: string): Promise<Set<string>> {
 export { KIND_LABEL };
 export type { TocSection, TocEntry };
 
-/**
- * 위키의 페이지를 kind(카테고리)별 섹션으로 묶고, 각 섹션 안에서 parentId+sortOrder 트리로.
- * flat은 kind 순서 → 섹션 내 전위순회(이전/다음용). 사이드바·이전/다음·공개읽기가 이 하나를 공유.
- */
-/**
- * 탐색기(VSCode식) 목차: 2섹션 — 원문/소스(note) vs 정리된 지식(파생, category 경로 폴더 트리).
- * flat은 섹션 순 전위순회(이전/다음용). getPrevNext는 이 flat만 쓰므로 시그니처 불변.
- */
 /** category 경로("ai/architectures")로 페이지들을 폴더 트리(TocEntry[])로 배치. 미분류는 루트 leaf(=Inbox). */
 function buildCategoryTree(pages: { slug: string; title: string; kind: PageKind; category: string | null; currentVersion: number }[]): TocEntry[] {
   const rootChildren: TocEntry[] = [];
@@ -198,8 +190,9 @@ function buildCategoryTree(pages: { slug: string; title: string; kind: PageKind;
 }
 
 /**
- * 4섹션 목차: 보호 메모 · 문서 · 원문/소스 · 정리된 지식.
- * opts.includePersonal=false면 personal 섹션 제외(공개 뷰). personal은 AI 코퍼스엔 없지만 사이드바 탐색엔 노출된다(제목/트리).
+ * 사용자용 목차: 보호 메모 · 문서 · 정리된 지식.
+ * Source와 연결된 note는 provenance/search용 내부 projection이므로 목차에서 제외하고
+ * 실제 Source는 전용 원문 보관함에서 탐색한다.
  */
 export async function getWikiToc(
   wikiId: string,
@@ -213,9 +206,6 @@ export async function getWikiToc(
   });
 
   const personalPages = includePersonal ? pages.filter((p) => p.kind === "personal") : [];
-  const sourceEntries: TocEntry[] = pages
-    .filter((p) => p.kind === "note")
-    .map((p) => ({ type: "page", slug: p.slug, title: p.title, kind: p.kind, currentVersion: p.currentVersion }));
   const documentPages = pages.filter((p) => p.kind === "document");
   const derivedPages = pages.filter((p) => !["note", "document", "personal"].includes(p.kind)); // concept/entity/meta
 
@@ -223,12 +213,11 @@ export async function getWikiToc(
   const documentEntries = buildCategoryTree(documentPages);
   const knowledgeEntries = buildCategoryTree(derivedPages);
 
-  const sections: TocSection[] = [
+  const sections = [
     ...(includePersonal ? [{ key: "personal" as const, entries: personalEntries }] : []),
-    { key: "documents", entries: documentEntries },
-    { key: "sources", entries: sourceEntries },
-    { key: "knowledge", entries: knowledgeEntries },
-  ];
+    { key: "documents" as const, entries: documentEntries },
+    { key: "knowledge" as const, entries: knowledgeEntries },
+  ].filter((section) => section.entries.length > 0) satisfies TocSection[];
 
   const flat: { slug: string; title: string }[] = [];
   const walk = (entries: TocEntry[]) => {
@@ -248,10 +237,65 @@ export async function getPrevNext(
   slug: string,
   opts?: { includePersonal?: boolean },
 ): Promise<{ prev: { slug: string; title: string } | null; next: { slug: string; title: string } | null }> {
-  const { flat } = await getWikiToc(wikiId, opts);
-  const i = flat.findIndex((f) => f.slug === slug);
-  if (i === -1) return { prev: null, next: null };
-  return { prev: i > 0 ? flat[i - 1] : null, next: i < flat.length - 1 ? flat[i + 1] : null };
+  const { sections } = await getWikiToc(wikiId, opts);
+  for (const section of sections) {
+    const flat: { slug: string; title: string }[] = [];
+    const walk = (entries: TocEntry[]) => {
+      for (const entry of entries) {
+        if (entry.type === "page") flat.push({ slug: entry.slug, title: entry.title });
+        else walk(entry.children);
+      }
+    };
+    walk(section.entries);
+    const index = flat.findIndex((entry) => entry.slug === slug);
+    if (index === -1) continue;
+    return {
+      prev: index > 0 ? flat[index - 1] : null,
+      next: index + 1 < flat.length ? flat[index + 1] : null,
+    };
+  }
+  return { prev: null, next: null };
+}
+
+/** 원문 보관함의 최신순을 그대로 따르는 이전/다음 원문. */
+export async function getSourcePrevNext(
+  wikiId: string,
+  sourceId: string,
+): Promise<{ prev: { slug: string; title: string } | null; next: { slug: string; title: string } | null }> {
+  const current = await prisma.source.findFirst({
+    where: { id: sourceId, wikiId },
+    select: { id: true, ingestedAt: true },
+  });
+  if (!current) return { prev: null, next: null };
+  const [prev, next] = await Promise.all([
+    prisma.source.findFirst({
+      where: {
+        wikiId,
+        archivedAt: null,
+        trashedAt: null,
+        OR: [
+          { ingestedAt: { gt: current.ingestedAt } },
+          { ingestedAt: current.ingestedAt, id: { gt: current.id } },
+        ],
+      },
+      orderBy: [{ ingestedAt: "asc" }, { id: "asc" }],
+      select: { slug: true, title: true },
+    }),
+    prisma.source.findFirst({
+      where: {
+        wikiId,
+        archivedAt: null,
+        trashedAt: null,
+        OR: [
+          { ingestedAt: { lt: current.ingestedAt } },
+          { ingestedAt: current.ingestedAt, id: { lt: current.id } },
+        ],
+      },
+      orderBy: [{ ingestedAt: "desc" }, { id: "desc" }],
+      select: { slug: true, title: true },
+    }),
+  ]);
+  return { prev, next };
 }
 
 /** 새 페이지의 sortOrder = 형제 중 max+1 (끝에 append). */
@@ -553,6 +597,45 @@ export async function getSourceImpact(
   return { notes, derived: contribs.map((c) => c.page) };
 }
 
+/** 현재 revision에서 이 원문을 근거로 쓰는 사용자용 문서·지식 페이지. */
+export async function getSourceUsedPages(
+  wikiId: string,
+  sourceId: string,
+): Promise<{ slug: string; title: string; kind: PageKind }[]> {
+  const refs = await prisma.pageRevisionSource.findMany({
+    where: { sourceRevision: { sourceId, source: { wikiId } } },
+    select: {
+      pageRevision: {
+        select: {
+          version: true,
+          page: {
+            select: {
+              slug: true,
+              title: true,
+              kind: true,
+              currentVersion: true,
+              archivedAt: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  const seen = new Set<string>();
+  return refs.flatMap(({ pageRevision }) => {
+    const page = pageRevision.page;
+    if (
+      page.archivedAt ||
+      pageRevision.version !== page.currentVersion ||
+      page.kind === "note" ||
+      page.kind === "personal" ||
+      seen.has(page.slug)
+    ) return [];
+    seen.add(page.slug);
+    return [{ slug: page.slug, title: page.title, kind: page.kind }];
+  }).sort((a, b) => a.title.localeCompare(b.title));
+}
+
 /**
  * 기존 DELETE 호환 facade. Source와 note는 archive revision으로 보존하고 영향 generated Page는 stale 처리한다.
  * 반환 필드명 deletedNotes는 구 API 호환이며 실제 의미는 함께 archive된 note slug다.
@@ -618,7 +701,7 @@ export async function getPageProvenance(wikiId: string, sourceId: string | null)
   if (!sourceId) return null;
   return prisma.source.findFirst({
     where: { id: sourceId, wikiId },
-    select: { slug: true, title: true, url: true },
+    select: { slug: true, title: true, url: true, curationState: true },
   });
 }
 

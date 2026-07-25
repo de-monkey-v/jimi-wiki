@@ -211,6 +211,13 @@ test("documents, preserve/search scopes, promotion idempotency, and API-key isol
     const pointer = await prisma.page.findFirstOrThrow({ where: { wikiId: wiki.id, sourceId: preservedSource.id, kind: "note" } });
     assert.doesNotMatch(pointer.body, /PRESERVED_SCOPE_CANARY/);
     assert.match(pointer.body, /원문만 보존됨/);
+    const tocAfterPreserve = await wikiStore.getWikiToc(wiki.id);
+    assert.equal(
+      tocAfterPreserve.flat.some((entry) => entry.slug === pointer.slug),
+      false,
+      "source projection notes stay out of the user-facing TOC",
+    );
+    assert.equal(tocAfterPreserve.sections.some((section) => section.key === "sources"), false);
 
     const preservedSecond = await content.createSourceSnapshot({
       wikiId: wiki.id,
@@ -269,6 +276,24 @@ test("documents, preserve/search scopes, promotion idempotency, and API-key isol
     ]);
     assert.deepEqual(researchV1.sources.map((source) => source.ordinal), [0, 1]);
     assert.equal(new Set(researchV1.sources.map((source) => source.sourceRevisionId)).size, 2);
+    const usedByPreserved = await wikiStore.getSourceUsedPages(wiki.id, preservedSource.id);
+    assert.equal(usedByPreserved.some((page) => page.slug === research.page.slug && page.kind === "document"), true);
+    assert.equal(usedByPreserved.some((page) => page.slug === pointer.slug), false);
+    const researchNeighbors = await wikiStore.getPrevNext(wiki.id, research.page.slug);
+    for (const neighbor of [researchNeighbors.prev, researchNeighbors.next]) {
+      if (!neighbor) continue;
+      const neighborPage = await prisma.page.findUniqueOrThrow({
+        where: { wikiId_slug: { wikiId: wiki.id, slug: neighbor.slug } },
+        select: { kind: true },
+      });
+      assert.equal(neighborPage.kind, "document", "document navigation must stay inside the document section");
+    }
+    const sourceNeighbors = await wikiStore.getSourcePrevNext(wiki.id, preservedSource.id);
+    for (const neighbor of [sourceNeighbors.prev, sourceNeighbors.next]) {
+      if (!neighbor) continue;
+      assert.notEqual(neighbor.slug, preservedSource.slug);
+      assert.notEqual(neighbor.slug, otherWikiSource.source.slug);
+    }
 
     const filterTerm = "RESEARCH_FILTER_SATURATION_CANARY";
     const generalSearchPages = Array.from({ length: search.POOL + 5 }, (_, index) => ({

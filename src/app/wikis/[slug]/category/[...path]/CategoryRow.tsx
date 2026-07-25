@@ -50,7 +50,7 @@ export function CategoryRow({
         currentCategory={currentCategory}
         canMove={movable}
         canTrash={canTrash}
-        triggerClassName="ml-auto rounded px-1.5 text-sm text-stone-400 transition-opacity hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 motion-reduce:transition-none md:opacity-0 md:group-focus-within/row:opacity-100 md:group-hover/row:opacity-100 md:aria-expanded:opacity-100"
+        triggerClassName="-my-1 ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded text-base text-stone-400 transition-opacity hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 motion-reduce:transition-none md:opacity-0 md:group-focus-within/row:opacity-100 md:group-hover/row:opacity-100 md:aria-expanded:opacity-100"
       />
     </li>
   );

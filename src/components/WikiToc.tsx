@@ -62,7 +62,7 @@ function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: No
           canMove={!!ctx.movable}
           canTrash={ctx.canTrash && entry.trashable}
           afterTrash={entry.slug === ctx.current ? "goHome" : "refresh"}
-          triggerClassName="absolute right-1 top-1/2 block -translate-y-1/2 rounded px-1 text-xs text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          triggerClassName="absolute right-0.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-sm text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         />
       </li>
     );

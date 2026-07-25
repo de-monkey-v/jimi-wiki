@@ -111,7 +111,7 @@ export function KebabMenu({
         }}
         className={
           triggerClassName ??
-          "rounded px-1 text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          "flex h-8 w-8 items-center justify-center rounded text-base text-stone-400 hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         }
       >
         <span aria-hidden="true">⋮</span>

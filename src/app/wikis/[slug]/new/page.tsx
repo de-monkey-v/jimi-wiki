@@ -33,7 +33,7 @@ export default async function NewPage({
   const presetCategory = category?.slice(0, 200);
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
+    <main className="mx-auto compact-measure px-6 py-10">
       <div className="mb-1 text-sm text-gray-400">
         <Link href="/wikis" className="hover:underline">
           {t("myWikis")}

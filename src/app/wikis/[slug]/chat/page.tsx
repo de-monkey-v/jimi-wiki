@@ -17,7 +17,7 @@ export default async function ChatPage({ params }: { params: Promise<{ slug: str
   const t = await getTranslations("WikisSlugChatPage");
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="mx-auto workspace-measure px-6 py-10">
       <div className="mb-1 text-sm text-gray-400">
         <Link href="/wikis" className="hover:underline">{t("myWikis")}</Link> /{" "}
         <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link>

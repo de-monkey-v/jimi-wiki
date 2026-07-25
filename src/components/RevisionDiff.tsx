@@ -96,7 +96,7 @@ function DiffField({
           <p role="note" className="mb-2 text-xs text-amber-800">
             {value.reason === "size" ? labels.fallbackSize : labels.fallbackComplexity}
           </p>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <Snapshot label={labels.before} value={value.before} empty={labels.empty} />
             <Snapshot label={labels.after} value={value.after} empty={labels.empty} />
           </div>

@@ -26,7 +26,7 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
 
   if (wiki.role !== "owner") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="mx-auto compact-measure px-6 py-10">
         <Link href={`/wikis/${slug}`} className="text-sm text-gray-400 hover:underline">← {wiki.title}</Link>
         <p className="mt-6 text-gray-500">{t("ownerOnly", { role: wiki.role })}</p>
       </main>
@@ -37,7 +37,7 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
   const links = await listShareLinks(wiki.id);
 
   return (
-    <main className="mx-auto max-w-3xl space-y-10 px-4 py-10 sm:px-6">
+    <main className="mx-auto compact-measure space-y-10 px-4 py-10 sm:px-6">
       <div>
         <Link href={`/wikis/${slug}`} className="text-sm text-gray-400 hover:underline">← {wiki.title}</Link>
         <h1 className="text-2xl font-bold mt-1">{t("title")}</h1>

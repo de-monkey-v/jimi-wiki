@@ -16,7 +16,7 @@ export default async function IngestPage({ params }: { params: Promise<{ slug: s
   if (wiki.role === "viewer") redirect(`/wikis/${encodeURIComponent(slug)}`);
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
+    <main className="mx-auto compact-measure px-6 py-10">
       <Link href={`/wikis/${encodeURIComponent(slug)}`} className="text-sm text-stone-400 hover:text-stone-600 hover:underline">
         ← {wiki.title}
       </Link>

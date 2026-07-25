@@ -53,7 +53,7 @@ test("RevisionDiff: 추가·삭제를 semantic element와 텍스트 범례로 �
   assert.match(html, /focus-visible:ring-2/);
 });
 
-test("RevisionDiff: 대용량 fallback은 이전·이후를 모바일 1열, 데스크톱 2열로 렌더한다", () => {
+test("RevisionDiff: 대용량 fallback은 이전·이후를 좁은 화면 1열, 넓은 화면 2열로 렌더한다", () => {
   const html = renderToStaticMarkup(
     RevisionDiff({
       before: { title: "문서", body: "a".repeat(30), category: null },
@@ -64,7 +64,7 @@ test("RevisionDiff: 대용량 fallback은 이전·이후를 모바일 1열, 데�
   );
   assert.match(html, /문서가 커서/);
   assert.match(html, /grid-cols-1/);
-  assert.match(html, /md:grid-cols-2/);
+  assert.match(html, /lg:grid-cols-2/);
   assert.equal((html.match(/<pre/g) ?? []).length, 2);
 });
 

@@ -56,7 +56,7 @@ export default async function WikiContentTrashPage({ params }: { params: Promise
     </li>
   );
 
-  return <main className="mx-auto max-w-3xl px-6 py-8">
+  return <main className="mx-auto compact-measure px-6 py-8">
     <Link href={`/wikis/${encodeURIComponent(wikiSlug)}`} className="rounded-sm text-sm text-stone-400 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">← {wiki.title}</Link>
     <h1 className="mt-2 text-pretty text-2xl font-bold">{t("title")}</h1>
     <p className="mt-1 text-sm text-stone-500">{t("subtitle")}</p>

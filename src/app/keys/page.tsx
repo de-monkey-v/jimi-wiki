@@ -16,7 +16,7 @@ export default async function KeysPage() {
     role === "viewer" || role === "editor" ? t(`role.${role}`) : role;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10 space-y-6">
+    <main className="mx-auto compact-measure px-6 py-10 space-y-6">
       <div>
         <Link href="/wikis" className="text-sm text-gray-400 hover:underline">← {t("backToWikis")}</Link>
         <h1 className="text-2xl font-bold mt-1">{t("title")}</h1>

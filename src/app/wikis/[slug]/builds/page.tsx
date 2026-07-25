@@ -101,7 +101,7 @@ export default async function KnowledgeBuildList({
   const statusLabel = (status: BuildStatus) => t(`status.${status}`);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+    <main className="mx-auto standard-measure px-4 py-10 sm:px-6">
       <Link href={`/wikis/${encodeURIComponent(slug)}`} className="text-sm text-stone-500 hover:text-stone-800 hover:underline">
         ← {wiki.title}
       </Link>
@@ -115,7 +115,7 @@ export default async function KnowledgeBuildList({
 
       {wiki.role === "owner" ? (
         <section className="mt-7 rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div>
               <h2 className="text-base font-semibold text-stone-900">{t("rebuildHeading")}</h2>
               <p className="mt-1 text-sm leading-6 text-stone-600">{t("rebuildBody")}</p>
@@ -124,7 +124,7 @@ export default async function KnowledgeBuildList({
                 {t("externalWarning")}
               </p>
             </div>
-            <form action={startRebuildAction} className="min-w-0 space-y-3 md:w-72">
+            <form action={startRebuildAction} className="min-w-0 space-y-3 lg:w-72">
               <input type="hidden" name="wikiSlug" value={slug} />
               <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-700">
                 <input name="forceExtraction" type="checkbox" className="mt-0.5 h-4 w-4 accent-indigo-600" />
@@ -232,7 +232,7 @@ export default async function KnowledgeBuildList({
                     </div>
                     <span className="text-sm font-medium text-indigo-600 group-hover:underline">{t("openDetail")} →</span>
                   </div>
-                  <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-stone-100 pt-4 text-xs sm:grid-cols-3 lg:grid-cols-6">
+                  <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-stone-100 pt-4 text-xs sm:grid-cols-3 xl:grid-cols-6">
                     <div><dt className="text-stone-400">{t("stageLabel")}</dt><dd className="mt-1 font-semibold text-stone-700">{t(`stage.${knowledgeBuildStage({ status: build.status, inputCount: inputCount(build.inputManifest), extractionCount: build._count.extractions, draftCount: build._count.drafts })}`)}</dd></div>
                     <div><dt className="text-stone-400">{t("inputs")}</dt><dd className="mt-1 font-mono font-semibold tabular-nums text-stone-700">{inputCount(build.inputManifest)}</dd></div>
                     <div><dt className="text-stone-400">{t("extractions")}</dt><dd className="mt-1 font-mono font-semibold tabular-nums text-stone-700">{build._count.extractions}</dd></div>

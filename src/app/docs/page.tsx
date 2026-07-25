@@ -55,7 +55,7 @@ export default async function DocsPage({
   const strong = (chunks: React.ReactNode) => <strong>{chunks}</strong>;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10 space-y-6">
+    <main className="mx-auto compact-measure px-6 py-10 space-y-6">
       <div>
         <Link href={slug ? `/wikis/${slug}` : "/wikis"} className="text-sm text-gray-400 hover:underline">
           ← {slug ? t("backToWiki") : t("backToMyWikis")}

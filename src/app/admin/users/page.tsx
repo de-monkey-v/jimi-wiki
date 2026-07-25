@@ -25,7 +25,7 @@ export default async function AdminUsers() {
   ]);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12 space-y-10">
+    <main className="mx-auto compact-measure px-6 py-12 space-y-10">
       <div>
         <h1 className="text-2xl font-bold">{t("title")}</h1>
         <nav className="text-sm text-gray-500 mt-1">

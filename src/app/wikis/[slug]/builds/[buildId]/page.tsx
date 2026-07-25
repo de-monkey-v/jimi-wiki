@@ -302,7 +302,7 @@ export default async function KnowledgeBuildDetail({
   ) : null;
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+    <main className="mx-auto standard-measure px-4 py-10 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href={`/wikis/${encodeURIComponent(slug)}/builds`} className="text-sm text-stone-500 hover:text-stone-800 hover:underline">
           ← {t("backToBuilds")}
@@ -328,7 +328,7 @@ export default async function KnowledgeBuildDetail({
             {build.model ? <p className="mt-1 font-mono text-xs text-stone-400">{build.model}</p> : null}
           </div>
         </div>
-        <dl className="mt-5 grid grid-cols-2 gap-3 border-t border-stone-100 pt-5 text-xs sm:grid-cols-3 lg:grid-cols-6">
+        <dl className="mt-5 grid grid-cols-2 gap-3 border-t border-stone-100 pt-5 text-xs sm:grid-cols-3 xl:grid-cols-6">
           <div><dt className="text-stone-400">{t("stageLabel")}</dt><dd className="mt-1 font-semibold">{t(`stage.${knowledgeBuildStage({ status: build.status, inputCount: inputCount(build.inputManifest), extractionCount: build._count.extractions, draftCount: build._count.drafts })}`)}</dd></div>
           <div><dt className="text-stone-400">{t("inputs")}</dt><dd className="mt-1 font-mono font-semibold tabular-nums">{inputCount(build.inputManifest)}</dd></div>
           <div><dt className="text-stone-400">{t("extractions")}</dt><dd className="mt-1 font-mono font-semibold tabular-nums">{build._count.extractions}</dd></div>

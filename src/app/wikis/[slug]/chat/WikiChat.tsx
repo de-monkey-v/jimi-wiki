@@ -108,7 +108,7 @@ function SourceCards({ sources, cited, onOpen }: { sources: ChatSource[]; cited:
   const { cited: citedSources } = splitByCited(sources, cited);
   if (citedSources.length === 0) return null;
   return (
-    <div className="mt-3 pt-2 border-t border-gray-200 flex flex-wrap gap-2 lg:hidden">
+    <div className="mt-3 pt-2 border-t border-gray-200 flex flex-wrap gap-2 xl:hidden">
       {citedSources.map((s) => (
         <button
           key={s.n}
@@ -145,7 +145,7 @@ function EvidencePanel({ sources, cited, onOpen }: { sources: ChatSource[]; cite
   const t = useTranslations("WikisSlugChatWikiChat");
   const { cited: citedSources, rest } = splitByCited(sources, cited);
   return (
-    <aside className="hidden lg:block w-72 shrink-0">
+    <aside className="hidden xl:block w-72 shrink-0">
       <div className="rounded-lg border bg-white p-3">
         <h2 className="mb-2 text-sm font-semibold text-stone-600">{t("evidenceTitle")}</h2>
         {sources.length === 0 ? (
@@ -228,8 +228,8 @@ export function WikiChat({ slug }: { slug: string }) {
               <div
                 className={
                   isUser
-                    ? "bg-stone-900 text-white rounded-2xl rounded-br-sm px-4 py-2 max-w-[80%] whitespace-pre-wrap text-sm"
-                    : "bg-gray-50 text-gray-900 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[85%] border"
+                    ? "bg-stone-900 text-white rounded-2xl rounded-br-sm px-4 py-2 max-w-[min(80%,52rem)] whitespace-pre-wrap text-sm"
+                    : "bg-gray-50 text-gray-900 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[min(85%,52rem)] border"
                 }
               >
                 {isUser ? (

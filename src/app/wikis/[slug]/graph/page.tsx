@@ -19,7 +19,7 @@ export default async function GraphPage({ params }: { params: Promise<{ slug: st
   const { nodes, edges } = await getWikiGraph(wiki.id);
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
+    <main className="mx-auto workspace-measure px-6 py-8">
       <div className="mb-1 text-sm text-stone-400">
         <Link href={`/wikis/${slug}`} className="hover:underline">← {wiki.title}</Link>
       </div>

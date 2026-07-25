@@ -66,7 +66,7 @@ export default async function LintPage({
   if (!wiki) notFound();
   if (!hasRole(wiki.role, "editor")) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="mx-auto compact-measure px-6 py-10">
         <p className="text-gray-500">{t("editorOnly")}</p>
       </main>
     );
@@ -95,7 +95,7 @@ export default async function LintPage({
   const barColor = (s: number) => (s >= 90 ? "bg-green-500" : s >= 70 ? "bg-yellow-500" : "bg-red-500");
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10 space-y-4">
+    <main className="mx-auto compact-measure px-6 py-10 space-y-4">
       <div>
         <Link href={base} className="text-sm text-gray-400 hover:underline">← {wiki.title}</Link>
         <h1 className="text-2xl font-bold mt-1">{t("title")}</h1>

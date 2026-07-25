@@ -11,6 +11,9 @@
   --muted: #78716c; /* 보조 텍스트(stone-500) */
   --border: #e7e5e4; /* stone-200 */
   --accent: #4f46e5; /* 링크/액센트(절제된 인디고) */
+  --layout-compact-max: 48rem;
+  --layout-standard-max: 96rem;
+  --layout-workspace-max: 110rem;
 }
 
 @theme inline {
@@ -123,11 +126,17 @@ a.accent, .accent { color: var(--accent); }
   text-decoration-color: #4f46e5;
 }
 
-/* 읽기 화면 본문 측정폭: 컨테이너(사이드바 제외 영역)의 85%에 비례하되
-   768px(좁은 화면 기존 폭) 아래로 줄지 않고, 초광폭에서는 1536px에서 멈춰 가독성을 지킨다.
-   % 는 containing block 기준 — 위키 레이아웃의 flex-1 스크롤 컨테이너 / 공개 뷰는 뷰포트. */
+/* 페이지 외곽 폭 어휘: 작은 폼, 일반 콘텐츠, 데이터 작업 화면의 세 단계만 사용한다.
+   width:100%로 중간 화면의 불필요한 15% 여백을 없애고, 각 main의 px-*가 안전한 gutter를 맡는다. */
+.compact-measure {
+  width: min(100%, var(--layout-compact-max));
+}
+.standard-measure,
 .reading-measure {
-  max-width: clamp(48rem, 85%, 96rem);
+  width: min(100%, var(--layout-standard-max));
+}
+.workspace-measure {
+  width: min(100%, var(--layout-workspace-max));
 }
 
 /* 렌더된 페이지 본문 기본 타이포 */
@@ -155,7 +164,7 @@ a.accent, .accent { color: var(--accent); }
 
 /* 연구 보고서 — 종이 본문 + 근거 장부의 리서치 노트북 레이아웃 */
 .research-shell {
-  width: min(100%, 110rem);
+  width: min(100%, var(--layout-workspace-max));
   margin-inline: auto;
   padding: 2.5rem 1.5rem 4rem;
 }
@@ -198,7 +207,7 @@ a.accent, .accent { color: var(--accent); }
   padding: clamp(1.35rem, 4vw, 3rem);
 }
 .research-content {
-  width: min(100%, 55rem);
+  width: 100%;
   margin-inline: auto;
   color: #292524;
   font-size: 1.01rem;
@@ -252,17 +261,19 @@ a.accent, .accent { color: var(--accent); }
 .research-content blockquote.research-callout--summary { border-color: #a5b4fc; background: #eef2ff; }
 .research-content blockquote.research-callout--info { border-color: #93c5fd; background: #eff6ff; color: #1e40af; }
 .research-content blockquote.research-callout--warning { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
+.research-content > div > :not([data-streamdown="table-wrapper"]):not([data-streamdown="mermaid"]) {
+  max-width: 64rem;
+  margin-inline: auto;
+}
 .research-content [data-streamdown="table-wrapper"],
 .research-content [data-streamdown="mermaid"] {
-  width: min(812px, calc(100vw - 4rem));
-  max-width: calc(100vw - 4rem);
-  margin-left: 50%;
-  transform: translateX(-50%);
+  width: 100%;
+  max-width: 100%;
 }
 .research-content table {
   display: table;
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 60rem;
   max-width: none;
 }
 .research-content [data-streamdown="table-wrapper"] {
@@ -366,10 +377,6 @@ a.accent, .accent { color: var(--accent); }
   .research-notebook { grid-template-columns: minmax(0, 1fr); }
   .research-evidence { order: 2; }
   .research-evidence-sticky { position: static; max-height: none; }
-  .research-content [data-streamdown="table-wrapper"],
-  .research-content [data-streamdown="mermaid"] {
-    width: min(100%, calc(100vw - 4rem));
-  }
 }
 
 @media (max-width: 959px) {
@@ -380,9 +387,4 @@ a.accent, .accent { color: var(--accent); }
   .research-shell { padding: 1.5rem 0.75rem 3rem; }
   .research-paper { padding: 1.1rem; border-radius: 0.75rem; }
   .research-content { font-size: 0.96rem; }
-  .research-content [data-streamdown="table-wrapper"],
-  .research-content [data-streamdown="mermaid"] {
-    width: calc(100vw - 2.5rem);
-    max-width: calc(100vw - 2.5rem);
-  }
 }

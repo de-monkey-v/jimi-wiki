@@ -92,7 +92,7 @@ export function RevisionHistoryView({
     : undefined;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+    <main className="mx-auto standard-measure px-4 py-10 sm:px-6">
       <Link
         href={backHref}
         className="rounded-sm text-sm text-stone-500 hover:text-stone-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
@@ -109,7 +109,7 @@ export function RevisionHistoryView({
           {labels.empty}
         </section>
       ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
+        <div className="grid items-start gap-5 xl:grid-cols-[19rem_minmax(0,1fr)]">
           <nav aria-label={labels.timeline} className="rounded-2xl border border-stone-200 bg-white p-2 shadow-sm">
             <ol className="max-h-[44rem] space-y-1 overflow-y-auto pr-1">
               {revisions.map((revision) => {

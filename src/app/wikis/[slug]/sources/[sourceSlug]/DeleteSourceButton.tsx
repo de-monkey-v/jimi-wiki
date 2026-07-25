@@ -41,7 +41,7 @@ export function DeleteSourceButton({
       <input type="hidden" name="sourceSlug" value={sourceSlug} />
       <button
         type="submit"
-        className="shrink-0 rounded border border-red-200 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
+        className="btn-danger btn-compact shrink-0"
       >
         {t("deleteButton")}
       </button>

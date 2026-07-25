@@ -28,7 +28,7 @@ export default function TranslateMenu({ current, pageLang }: { current: Locale |
 
   return (
     <div className="relative flex items-center gap-1 text-sm">
-      {current && <span className="text-xs text-amber-600 dark:text-amber-500">{t("machineTranslated")}</span>}
+      {current && <span className="text-xs text-amber-600">{t("machineTranslated")}</span>}
       {open && (
         <button aria-hidden tabIndex={-1} onClick={() => setOpen(false)} className="fixed inset-0 z-40 cursor-default" />
       )}
@@ -38,7 +38,7 @@ export default function TranslateMenu({ current, pageLang }: { current: Locale |
         aria-haspopup="listbox"
         aria-expanded={open}
         title={current ? t("machineTranslated") : t("translate")}
-        className="z-50 flex items-center gap-1 rounded border border-stone-200 px-2.5 py-1 text-stone-600 hover:bg-stone-50 dark:border-white/15 dark:text-stone-300 dark:hover:bg-neutral-800"
+        className="z-50 flex items-center gap-1 rounded-lg border border-stone-200 px-2.5 py-1 text-stone-600 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
       >
         <span aria-hidden>🌐</span>
         <span>{current ? LOCALE_LABELS[current] : t("translate")}</span>
@@ -47,14 +47,14 @@ export default function TranslateMenu({ current, pageLang }: { current: Locale |
       {open && (
         <ul
           role="listbox"
-          className="absolute right-0 top-full z-50 mt-1 min-w-[9rem] overflow-hidden rounded-md border border-stone-200 bg-white py-1 shadow-lg dark:border-white/15 dark:bg-neutral-800"
+          className="absolute right-0 top-full z-50 mt-1 min-w-[9rem] overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
         >
           {current && (
             <li>
               <button
                 type="button"
                 onClick={() => go(null)}
-                className="block w-full px-3 py-1.5 text-left text-stone-700 hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-neutral-700"
+                className="block w-full px-3 py-1.5 text-left text-stone-700 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
               >
                 {t("showOriginal")}
               </button>
@@ -67,8 +67,8 @@ export default function TranslateMenu({ current, pageLang }: { current: Locale |
                 role="option"
                 aria-selected={loc === current}
                 onClick={() => go(loc)}
-                className={`block w-full px-3 py-1.5 text-left hover:bg-stone-100 dark:hover:bg-neutral-700 ${
-                  loc === current ? "font-semibold text-blue-600 dark:text-blue-400" : "text-stone-700 dark:text-stone-200"
+                className={`block w-full px-3 py-1.5 text-left hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
+                  loc === current ? "font-semibold text-indigo-600" : "text-stone-700"
                 }`}
               >
                 {LOCALE_LABELS[loc]}

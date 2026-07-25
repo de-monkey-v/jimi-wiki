@@ -199,8 +199,9 @@ export function QuickNavProvider({
               if (!loading && !error) go(results[sel]);
             }
           }}
+          aria-label={t("switcherPlaceholder")}
           placeholder={t("switcherPlaceholder")}
-          className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+          className="field-control text-sm"
         />
         <span id={statusId} role="status" aria-live="polite" className="sr-only">
           {statusText}
@@ -212,12 +213,12 @@ export function QuickNavProvider({
             {t("switcherLoading")}
           </div>
         ) : error ? (
-          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+          <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700">
             <p>{t("switcherError")}</p>
             <button
               type="button"
               onClick={() => setRequestNonce((value) => value + 1)}
-              className="mt-2 rounded border border-red-300 bg-white px-2 py-1 text-xs font-medium hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              className="btn-danger btn-compact mt-2"
             >
               {t("switcherRetry")}
             </button>
@@ -284,11 +285,11 @@ export function QuickNavProvider({
               defaultValue={captureInitial}
               rows={8}
               placeholder={t("capturePlaceholder")}
-              className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+              className="field-control text-sm"
             />
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] text-stone-400">{t("captureHint")}</span>
-              <button type="submit" className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+              <button type="submit" className="btn-primary text-sm">
                 {t("captureSave")}
               </button>
             </div>
@@ -309,11 +310,11 @@ export function QuickNavProvider({
               name="category"
               defaultValue={move.category}
               placeholder={t("movePlaceholder")}
-              className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+              className="field-control text-sm"
             />
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] text-stone-400">{t("moveToInboxHint")}</span>
-              <button type="submit" className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+              <button type="submit" className="btn-primary text-sm">
                 {t("moveSubmit")}
               </button>
             </div>

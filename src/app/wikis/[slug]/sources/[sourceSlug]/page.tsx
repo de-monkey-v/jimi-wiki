@@ -45,9 +45,9 @@ export default async function SourceView({
   };
 
   return (
-    <main className="mx-auto reading-measure px-6 py-10">
-      <div className="mb-1 text-sm text-stone-400">
-        <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link> / {t("source")}
+    <main className="mx-auto reading-measure px-4 py-10 sm:px-6">
+      <div className="page-breadcrumb">
+        <Link href={`/wikis/${slug}`}>{wiki.title}</Link> / {t("source")}
       </div>
       {source.archivedAt && (
         <div className="mb-3 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -65,10 +65,13 @@ export default async function SourceView({
           {ts("history")}
         </Link>
       </div>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="min-w-0 break-words text-2xl font-bold">{source.title}</h1>
+      <div className="page-header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="page-kicker">Preserved source</p>
+          <h1 className="page-title min-w-0 break-words">{source.title}</h1>
+        </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="rounded bg-stone-100 px-2 py-0.5 text-xs text-stone-500">{t("readOnlyBadge")}</span>
+          <span className="ui-badge">{t("readOnlyBadge")}</span>
         </div>
       </div>
       {canWrite && impact ? (
@@ -90,7 +93,7 @@ export default async function SourceView({
           href={source.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="mb-4 block truncate text-sm text-blue-600 hover:underline"
+          className="ui-link mb-4 block truncate rounded text-sm"
         >
           {source.url}
         </a>

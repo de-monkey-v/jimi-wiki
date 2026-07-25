@@ -15,6 +15,7 @@ export function PinButton({ wikiSlug, pageSlug, pinned: initial }: { wikiSlug: s
       type="button"
       disabled={pending}
       aria-pressed={pinned}
+      aria-label={pinned ? t("unpin") : t("pin")}
       title={pinned ? t("unpin") : t("pin")}
       onClick={() =>
         start(async () => {
@@ -23,7 +24,7 @@ export function PinButton({ wikiSlug, pageSlug, pinned: initial }: { wikiSlug: s
           router.refresh();
         })
       }
-      className="rounded border px-2 py-1 text-sm hover:bg-stone-50 disabled:opacity-50"
+      className="btn-secondary btn-compact"
     >
       <span className={pinned ? "text-amber-500" : "text-stone-400"}>{pinned ? "★" : "☆"}</span>
     </button>

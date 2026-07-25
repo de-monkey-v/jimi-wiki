@@ -13,7 +13,7 @@ export function HomeActions({ slug }: { slug: string }) {
         type="button"
         onClick={() => actions?.openIngest()}
         title={t("ingestDesc")}
-        className="rounded border px-3 py-1.5 text-sm hover:bg-gray-50"
+        className="btn-secondary text-sm"
       >
         {t("ingestOpen")}
       </button>
@@ -26,7 +26,7 @@ export function HomeActions({ slug }: { slug: string }) {
             actions.openNewPage();
           }
         }}
-        className="rounded border px-3 py-1.5 text-sm hover:bg-gray-50"
+        className="btn-secondary text-sm"
       >
         {t("newPageCreate")}
       </Link>

@@ -17,15 +17,18 @@ export default async function ChatPage({ params }: { params: Promise<{ slug: str
   const t = await getTranslations("WikisSlugChatPage");
 
   return (
-    <main className="mx-auto workspace-measure px-6 py-10">
-      <div className="mb-1 text-sm text-gray-400">
+    <main className="mx-auto workspace-measure px-4 py-10 sm:px-6">
+      <header className="page-header">
+      <div className="page-breadcrumb">
         <Link href="/wikis" className="hover:underline">{t("myWikis")}</Link> /{" "}
         <Link href={`/wikis/${slug}`} className="hover:underline">{wiki.title}</Link>
       </div>
-      <h1 className="text-2xl font-bold mb-1">{t("askAi")}</h1>
-      <p className="text-sm text-gray-500 mb-4">
+      <p className="page-kicker">Grounded conversation</p>
+      <h1 className="page-title">{t("askAi")}</h1>
+      <p className="page-description">
         {t("subtitle", { title: wiki.title })}
       </p>
+      </header>
       <WikiChat slug={slug} />
     </main>
   );

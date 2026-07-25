@@ -77,6 +77,7 @@
   },
   "Common": {
     "appName": "jimi-wiki",
+    "skipToContent": "本文へ移動",
     "noscriptWarning": "JavaScript が実行されていません — モーダル・チャット・フォルダ展開が動作しません。Brave Shields（アドレスバーのライオンアイコン）でこのサイトのスクリプトブロックを解除するか、ブラウザの JavaScript 設定を確認してください。",
     "appDescription": "LLMがメンテナンスするwikiプラットフォーム"
   },

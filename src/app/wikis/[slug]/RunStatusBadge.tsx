@@ -50,18 +50,18 @@ export function RunStatusBadge({
       role="status"
       className={`mb-4 rounded-lg border p-3 text-sm ${
         run.status === "error"
-          ? "border-red-300 bg-red-50 text-red-700"
+          ? "border-rose-300 bg-rose-50 text-rose-700"
           : run.status === "done"
             ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-            : "border-blue-200 bg-blue-50 text-blue-700"
+            : "border-indigo-200 bg-indigo-50 text-indigo-700"
       }`}
     >
       <span className="flex items-center gap-2 font-semibold">
         {inProgress && (
-          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent motion-reduce:animate-none" />
         )}
         {t("prefix")} {KNOWN_STATUSES.includes(run.status) ? t(`status.${run.status}`) : run.status}
-        {inProgress && <span className="font-normal text-blue-500">{t("inProgressHint")}</span>}
+        {inProgress && <span className="font-normal text-indigo-500">{t("inProgressHint")}</span>}
       </span>
       {run.status === "error" && <p className="mt-1">{run.error}</p>}
       {run.status === "done" && (

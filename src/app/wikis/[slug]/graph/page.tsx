@@ -19,13 +19,14 @@ export default async function GraphPage({ params }: { params: Promise<{ slug: st
   const { nodes, edges } = await getWikiGraph(wiki.id);
 
   return (
-    <main className="mx-auto workspace-measure px-6 py-8">
-      <div className="mb-1 text-sm text-stone-400">
-        <Link href={`/wikis/${slug}`} className="hover:underline">← {wiki.title}</Link>
-      </div>
-      <h1 className="mb-4 text-2xl font-bold">{t("title")}</h1>
+    <main className="mx-auto workspace-measure px-4 py-10 sm:px-6">
+      <header className="page-header">
+        <div className="page-breadcrumb"><Link href={`/wikis/${slug}`}>← {wiki.title}</Link></div>
+        <p className="page-kicker">Knowledge map</p>
+        <h1 className="page-title">{t("title")}</h1>
+      </header>
       {nodes.length === 0 ? (
-        <div className="rounded-lg border border-stone-200 bg-white p-6">
+        <div className="surface-panel p-6">
           <EmptyState
             asset="empty-graph"
             title={t("emptyTitle")}

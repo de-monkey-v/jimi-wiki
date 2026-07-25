@@ -27,27 +27,31 @@ export default async function EditPage({
   if (!page) notFound();
 
   return (
-    <main className="mx-auto reading-measure px-6 py-10">
-      <div className="mb-6 text-sm text-gray-400">
-        <Link href={`/wikis/${slug}/${pageSlug}`} className="hover:underline">← {t("backTo", { title: page.title })}</Link>
-      </div>
+    <main className="mx-auto reading-measure px-4 py-10 sm:px-6">
+      <header className="page-header">
+        <div className="page-breadcrumb">
+          <Link href={`/wikis/${slug}/${pageSlug}`}>← {t("backTo", { title: page.title })}</Link>
+        </div>
+        <p className="page-kicker">Edit entry</p>
+        <h1 className="page-title">{page.title}</h1>
+      </header>
 
-      <form action={savePageAction} className="space-y-4">
+      <form action={savePageAction} className="surface-panel space-y-4 p-4 sm:p-6">
         <input type="hidden" name="wikiSlug" value={slug} />
         <input type="hidden" name="pageSlug" value={pageSlug} />
         <input type="hidden" name="expectedVersion" value={page.currentVersion} />
 
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <label htmlFor="page-title" className="sr-only">{t("titleLabel")}</label>
           <input
             id="page-title"
             name="title"
             defaultValue={page.title}
             required
-            className="flex-1 border rounded px-3 py-2 font-semibold"
+            className="field-control flex-1 font-semibold"
           />
           <label htmlFor="page-kind" className="sr-only">{t("kindLabel")}</label>
-          <select id="page-kind" name="kind" defaultValue={page.kind} className="border rounded px-3 py-2">
+          <select id="page-kind" name="kind" defaultValue={page.kind} className="field-control sm:w-auto">
             {MANUAL_KIND_OPTIONS.filter((o) => page.kind === "document" ? o.value === "document" : o.value !== "document").map((o) => (
               <option key={o.value} value={o.value}>{tk(`${o.value}Option`)}</option>
             ))}
@@ -70,7 +74,7 @@ export default async function EditPage({
                   </span>
                 </>
               ) : (
-                <select name="documentType" defaultValue={page.documentType ?? "general"} className="w-full rounded border bg-white px-3 py-2">
+                <select name="documentType" defaultValue={page.documentType ?? "general"} className="field-control">
                   {DOCUMENT_TYPES.map((type) => <option key={type} value={type}>{t(`documentType.${type}`)}</option>)}
                 </select>
               )}
@@ -89,12 +93,12 @@ export default async function EditPage({
           defaultValue={page.body}
           rows={22}
           placeholder={t("bodyPlaceholder")}
-          className="w-full border rounded px-3 py-2 font-mono text-sm"
+          className="field-control font-mono text-sm"
         />
 
         <div className="flex gap-2">
-          <button type="submit" className="bg-stone-900 text-white rounded px-4 py-2">{t("save")}</button>
-          <Link href={`/wikis/${slug}/${pageSlug}`} className="border rounded px-4 py-2 hover:bg-gray-50">{t("cancel")}</Link>
+          <button type="submit" className="btn-primary">{t("save")}</button>
+          <Link href={`/wikis/${slug}/${pageSlug}`} className="btn-secondary">{t("cancel")}</Link>
         </div>
       </form>
     </main>

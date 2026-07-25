@@ -33,8 +33,9 @@ export default async function NewPage({
   const presetCategory = category?.slice(0, 200);
 
   return (
-    <main className="mx-auto compact-measure px-6 py-10">
-      <div className="mb-1 text-sm text-gray-400">
+    <main className="mx-auto compact-measure px-4 py-10 sm:px-6">
+      <header className="page-header">
+      <div className="page-breadcrumb">
         <Link href="/wikis" className="hover:underline">
           {t("myWikis")}
         </Link>{" "}
@@ -43,9 +44,12 @@ export default async function NewPage({
           {wiki.title}
         </Link>
       </div>
-      <h1 className="mb-1 text-2xl font-bold">{t("newPage")}</h1>
-      <p className="mb-6 text-sm text-gray-500">{t("description")}</p>
+      <p className="page-kicker">New entry</p>
+      <h1 className="page-title">{t("newPage")}</h1>
+      <p className="page-description">{t("description")}</p>
+      </header>
 
+      <div className="surface-panel p-4 sm:p-6">
       <NewPageForm
         wikiSlug={slug}
         wikiKind={wiki.kind}
@@ -53,6 +57,7 @@ export default async function NewPage({
         presetCategory={presetCategory}
         presetKind={presetKind}
       />
+      </div>
     </main>
   );
 }

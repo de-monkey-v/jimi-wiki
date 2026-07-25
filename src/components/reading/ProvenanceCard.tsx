@@ -15,7 +15,7 @@ export function ProvenanceCard({ title, href, url }: { title: string; href?: str
       <div className="text-sm font-medium text-stone-700">{title}</div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         {href && (
-          <Link href={href} className="font-medium text-blue-600 hover:underline">
+          <Link href={href} className="ui-link rounded font-medium">
             📄 {t("viewStoredSource")}
           </Link>
         )}

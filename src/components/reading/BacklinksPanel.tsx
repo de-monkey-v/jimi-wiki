@@ -21,7 +21,7 @@ export function BacklinksPanel({
         <ul className="space-y-1">
           {items.map((b) => (
             <li key={b.slug}>
-              <PreviewLink pageSlug={b.slug} href={hrefFor(b.slug)} className="text-sm text-blue-600 hover:underline">
+              <PreviewLink pageSlug={b.slug} href={hrefFor(b.slug)} className="ui-link rounded text-sm">
                 {b.title}
               </PreviewLink>
             </li>

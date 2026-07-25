@@ -15,10 +15,15 @@ export default async function Login() {
   if (bootstrapped === 0) redirect("/setup"); // 최초 관리자 미생성 → 셋업으로
 
   return (
-    <main className="mx-auto max-w-sm px-6 py-20">
-      <h1 className="text-2xl font-bold mb-2">{t("title")}</h1>
-      <p className="text-sm text-gray-500 mb-6">{t("subtitle")}</p>
+    <main className="mx-auto compact-measure px-4 py-16 sm:px-6 sm:py-20">
+      <div className="surface-panel mx-auto max-w-sm p-6 sm:p-8">
+      <header className="page-header">
+        <p className="page-kicker">jimi-wiki</p>
+        <h1 className="page-title">{t("title")}</h1>
+        <p className="page-description">{t("subtitle")}</p>
+      </header>
       <LoginForm />
+      </div>
     </main>
   );
 }

@@ -137,7 +137,7 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
     >
       <div
         ref={panelRef}
-        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl outline-none"
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-stone-200 bg-white shadow-xl outline-none"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -148,7 +148,7 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
             {stack.length > 1 && (
               <button
                 onClick={() => setNav({ rootKey, stack: stack.slice(0, -1) })}
-                className="shrink-0 rounded border border-stone-200 px-1.5 py-0.5 text-xs text-stone-500 hover:bg-stone-50"
+                className="btn-secondary btn-compact shrink-0"
               >
                 ← {t("back")}
               </button>
@@ -163,16 +163,16 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            <a href={href} className="text-xs text-blue-600 hover:underline">{t("fullPage")} →</a>
-            <button onClick={onClose} aria-label={t("close")} className="text-lg leading-none text-stone-400 hover:text-stone-700">
+            <a href={href} className="ui-link rounded text-xs">{t("fullPage")} →</a>
+            <button onClick={onClose} aria-label={t("close")} className="rounded p-1 text-lg leading-none text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
               ✕
             </button>
           </div>
         </div>
-        <div ref={bodyRef} onClick={onBodyClick} className="overflow-y-auto px-6 py-5">
+        <div ref={bodyRef} onClick={onBodyClick} className="overscroll-contain overflow-y-auto px-6 py-5">
           {state.loading && <p className="text-sm text-stone-400">{t("loading")}</p>}
           {state.error && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-rose-600">
               {t("loadError")}{" "}
               <button onClick={load} className="underline">{t("retry")}</button>
             </p>
@@ -184,7 +184,7 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
                   href={state.data.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mb-3 block truncate text-sm text-blue-600 hover:underline"
+                  className="ui-link mb-3 block truncate rounded text-sm"
                 >
                   {state.data.url}
                 </a>
@@ -202,7 +202,7 @@ export function DocModal({ doc, wikiSlug, onClose }: { doc: EvidenceDoc | null; 
                       <button
                         key={r.slug}
                         onClick={() => setNav({ rootKey, stack: [...stack, { kind: "page", slug: r.slug, title: r.title }] })}
-                        className="rounded-md border border-stone-200 px-2 py-1 text-xs text-stone-600 hover:border-blue-400 hover:text-blue-700"
+                        className="rounded-md border border-stone-200 px-2 py-1 text-xs text-stone-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                       >
                         {r.title}
                       </button>

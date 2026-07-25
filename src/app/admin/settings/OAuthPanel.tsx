@@ -108,7 +108,7 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
   }
 
   return (
-    <section className="border rounded-lg p-4 space-y-3">
+    <section className="surface-panel space-y-3 p-5">
       <h2 className="font-semibold">{t("title")}</h2>
 
       {/* 연결 방식 선택 — 사용 가능한 것만 고를 수 있다. 현재 선택은 강조. */}
@@ -125,10 +125,10 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
                 <button
                   disabled={!ok || current}
                   title={ok ? "" : t("optionUnavailable", { hint: hintText })}
-                  className={`text-sm rounded border px-3 py-1.5 disabled:cursor-not-allowed ${
+                  className={`rounded-lg border px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed ${
                     current
                       ? "border-stone-900 bg-stone-900 text-white"
-                      : "border-stone-200 hover:bg-gray-50 disabled:opacity-40"
+                      : "border-stone-200 hover:bg-stone-50 disabled:opacity-40"
                   }`}
                 >
                   {current ? "✓ " : ""}
@@ -139,7 +139,7 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
             );
           })}
         </div>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-stone-500">
           {t.rich("currentDescription", { transport, b: (chunks) => <b>{chunks}</b> })}
         </p>
       </div>
@@ -151,30 +151,30 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
           {status.expires ? t("expiresAt", { date: new Date(status.expires).toLocaleString() }) : ""}
         </p>
       ) : (
-        <p className="text-sm text-gray-500">{t("notLoggedIn")}</p>
+        <p className="text-sm text-stone-500">{t("notLoggedIn")}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={startLogin} disabled={busy} className="bg-stone-900 text-white rounded px-4 py-2 text-sm disabled:opacity-50">
+        <button type="button" onClick={startLogin} disabled={busy} className="btn-primary text-sm">
           {status.exists ? t("reLogin") : t("loginWithChatGPT")}
         </button>
         {busy && (
-          <button type="button" onClick={stop} className="text-sm underline text-gray-600">
+          <button type="button" onClick={stop} className="btn-secondary text-sm">
             {t("cancel")}
           </button>
         )}
         {status.exists && (
           <form action={logoutOAuthAction}>
-            <button className="text-sm text-red-600 underline">{t("logout")}</button>
+            <button className="btn-danger text-sm">{t("logout")}</button>
           </form>
         )}
       </div>
 
       {device && (
-        <div className="text-sm border rounded p-3 bg-gray-50 space-y-1">
+        <div className="surface-panel-muted space-y-1 p-3 text-sm">
           <p>
             {t("step1")}{" "}
-            <a href={device.url} target="_blank" rel="noreferrer" className="underline text-blue-600">
+            <a href={device.url} target="_blank" rel="noreferrer" className="ui-link rounded">
               {device.url}
             </a>{" "}
             {t("openLink")}
@@ -185,7 +185,7 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
           </p>
         </div>
       )}
-      {msg && <p className="text-sm text-gray-600">{msg}</p>}
+      {msg && <p aria-live="polite" className="text-sm text-stone-600">{msg}</p>}
 
       <p className="text-xs text-amber-600">{t("warning")}</p>
     </section>

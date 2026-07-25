@@ -28,9 +28,9 @@ function stateText(r: RunListItem, t: Translate): string {
 
 function StatusDot({ status }: { status: string }) {
   if (ACTIVE.has(status))
-    return <span className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />;
+    return <span className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent motion-reduce:animate-none" />;
   if (status === "done") return <span className="shrink-0 text-emerald-600">✓</span>;
-  return <span className="shrink-0 text-red-600">✗</span>;
+  return <span className="shrink-0 text-rose-600">✗</span>;
 }
 
 /**
@@ -80,12 +80,12 @@ export function JobsIndicator({ slug }: { slug: string }) {
   }, [poll, activeCount, open]);
 
   return (
-    <div className="fixed bottom-8 right-24 z-30 flex flex-col items-end gap-2">
+    <div className="fixed bottom-28 right-4 z-30 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 sm:bottom-8 sm:right-24">
       {open && (
-        <div className="w-96 max-w-[min(24rem,calc(100%-2rem))] rounded-xl border border-stone-200 bg-white shadow-xl">
+        <div className="w-96 max-w-full rounded-xl border border-stone-200 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-stone-100 px-4 py-2.5">
             <h2 className="text-sm font-semibold text-stone-700">{t("title")}</h2>
-            <button onClick={() => setOpen(false)} aria-label={t("close")} className="text-stone-400 hover:text-stone-700">✕</button>
+            <button onClick={() => setOpen(false)} aria-label={t("close")} className="rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">✕</button>
           </div>
           <ul className="max-h-80 overflow-y-auto p-2">
             {runs.length === 0 && <li className="px-2 py-3 text-sm text-stone-400">{t("empty")}</li>}
@@ -107,7 +107,7 @@ export function JobsIndicator({ slug }: { slug: string }) {
                       </>
                     )}
                   </div>
-                  {r.error && <p className="mt-0.5 truncate text-xs text-red-600">{r.error}</p>}
+                  {r.error && <p className="mt-0.5 truncate text-xs text-rose-600">{r.error}</p>}
                 </div>
               </li>
             ))}
@@ -116,11 +116,12 @@ export function JobsIndicator({ slug }: { slug: string }) {
       )}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm shadow-lg hover:border-blue-400"
+        aria-expanded={open}
+        className="flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm shadow-lg hover:border-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
       >
         {activeCount > 0 ? (
           <>
-            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent motion-reduce:animate-none" />
             <span className="text-stone-700">
               {t("activeCount", { count: activeCount })}
               {newestActive && <span className="text-stone-400"> · {stateText(newestActive, t)}</span>}

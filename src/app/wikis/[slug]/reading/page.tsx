@@ -27,15 +27,25 @@ export default async function ReadingPage({ params }: { params: Promise<{ slug: 
   });
 
   return (
-    <main className="mx-auto reading-measure px-6 py-8">
-      <Link href={`/wikis/${slug}`} className="text-xs text-stone-400 hover:text-stone-600">← {wiki.title}</Link>
-      <div className="flex items-center justify-between"><h1 className="mb-1 mt-1 text-2xl font-bold">{t("title")}</h1><Link href={`/wikis/${encodeURIComponent(slug)}/settings/trash`} className="rounded-sm text-sm text-stone-500 hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("trash")}</Link></div>
-      <p className="mb-4 text-sm text-stone-400">{t("subtitle")}</p>
+    <main className="mx-auto reading-measure px-4 py-10 sm:px-6">
+      <header className="page-header">
+        <div className="page-breadcrumb"><Link href={`/wikis/${slug}`}>← {wiki.title}</Link></div>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="page-kicker">Reading queue</p>
+            <h1 className="page-title">{t("title")}</h1>
+            <p className="page-description">{t("subtitle")}</p>
+          </div>
+          <Link href={`/wikis/${encodeURIComponent(slug)}/settings/trash`} className="btn-secondary shrink-0 text-sm">{t("trash")}</Link>
+        </div>
+      </header>
 
+      <div className="surface-panel p-4">
       <AddLinkForm wikiSlug={slug} />
+      </div>
 
       {links.length === 0 ? (
-        <p className="mt-8 text-sm text-stone-400">{t("empty")}</p>
+        <div className="surface-panel-muted mt-6 p-5 text-sm text-stone-400">{t("empty")}</div>
       ) : (
         <ReadingList
           wikiSlug={slug}

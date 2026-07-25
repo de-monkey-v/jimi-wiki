@@ -64,20 +64,20 @@ export function ReadingPane({
 }) {
   const t = useTranslations("ReadingPane");
   return (
-    <main className="mx-auto reading-measure px-6 py-10">
+    <main className="mx-auto reading-measure px-4 py-10 sm:px-6">
       {crumb}
       {notice && <div className="mt-3">{notice}</div>}
-      <div className="mb-6 mt-3">
+      <div className="page-header mt-3">
         {headerMeta && <div className="mb-2">{headerMeta}</div>}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="min-w-0 break-words text-2xl font-bold">{title}</h1>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <h1 className="page-title min-w-0 break-words">{title}</h1>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {pinControl}
             {translateControl}
             {editHref && (
               <Link
                 href={editHref}
-                className="rounded border px-3 py-1 text-sm hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className="btn-secondary text-sm"
               >
                 {t("edit")}
               </Link>

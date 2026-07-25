@@ -103,7 +103,7 @@ export function ReadingRow({
               router.refresh();
             })
           }
-          className="min-h-11 flex-1 touch-manipulation whitespace-nowrap rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:border-red-300 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0 lg:flex-none lg:rounded lg:px-2 lg:py-1 lg:text-xs lg:font-normal"
+          className="min-h-11 flex-1 touch-manipulation whitespace-nowrap rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-600 hover:border-rose-300 hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0 lg:flex-none lg:rounded lg:px-2 lg:py-1 lg:text-xs lg:font-normal"
         >
           {t("delete")}
         </button>

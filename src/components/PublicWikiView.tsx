@@ -15,7 +15,7 @@ function EntryList({ entries, basePath }: { entries: TocEntry[]; basePath: strin
       {entries.map((e) =>
         e.type === "page" ? (
           <li key={`p:${e.slug}`}>
-            <Link href={`${basePath}/p/${encodeURIComponent(e.slug)}`} className="text-blue-600 hover:underline">
+            <Link href={`${basePath}/p/${encodeURIComponent(e.slug)}`} className="ui-link rounded">
               {e.title}
             </Link>
           </li>
@@ -47,9 +47,9 @@ export async function PublicWikiView({
   const t = await getTranslations("PublicWikiView");
   const tw = await getTranslations("WikiToc"); // 사이드바 섹션 라벨 공유(WikiToc와 동일 키)
   const crumb = (
-    <div className="mb-1 text-sm text-stone-400">
-      <Link href={basePath} className="hover:underline">{title}</Link>
-      <span className="ml-2 rounded bg-stone-100 px-1.5 py-0.5 text-xs">{t("readOnly")}</span>
+    <div className="page-breadcrumb">
+      <Link href={basePath}>{title}</Link>
+      <span className="ui-badge ml-2">{t("readOnly")}</span>
     </div>
   );
 
@@ -101,11 +101,14 @@ export async function PublicWikiView({
 
   const { sections } = await getWikiToc(wikiId, { includePersonal: false }); // 공개 사이드바에 개인 노트 미노출
   return (
-    <main className="mx-auto reading-measure px-6 py-10">
+    <main className="mx-auto reading-measure px-4 py-10 sm:px-6">
       {crumb}
-      <h1 className="mb-6 text-2xl font-bold">{title}</h1>
+      <header className="page-header">
+        <p className="page-kicker">Shared archive</p>
+        <h1 className="page-title">{title}</h1>
+      </header>
       {sections.length === 0 ? (
-        <div className="rounded-lg border border-stone-200 bg-white p-6">
+        <div className="surface-panel p-6">
           <EmptyState
             asset="read-only-share"
             title={t("emptyTitle")}
@@ -113,7 +116,7 @@ export async function PublicWikiView({
           />
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="surface-panel space-y-6 p-5 sm:p-6">
           {sections.map((s) => (
             <section key={s.key}>
               <h2 className="mb-2 text-sm font-semibold text-stone-500">{tw(`section.${s.key}`)}</h2>

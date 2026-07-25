@@ -31,12 +31,16 @@ export default async function ClaimPage({
   const safeError = errorKey && knownErrors.has(errorKey) ? errorKey : null;
 
   return (
-    <main className="mx-auto max-w-lg px-6 py-20">
-      <h1 className="text-2xl font-bold">{t("title")}</h1>
-      <p className="mt-2 text-sm text-stone-600">{t("description")}</p>
+    <main className="mx-auto compact-measure px-4 py-16 sm:px-6 sm:py-20">
+      <div className="surface-panel mx-auto max-w-lg p-6 sm:p-8">
+      <header className="page-header">
+        <p className="page-kicker">jimi-wiki</p>
+        <h1 className="page-title">{t("title")}</h1>
+        <p className="page-description">{t("description")}</p>
+      </header>
 
       {safeError ? (
-        <section className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <section className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
           <h2 className="font-semibold">{t("blockedTitle")}</h2>
           <p className="mt-1">{t(`errors.${safeError}`)}</p>
           {(safeError === "recovery-required" || safeError === "mapping-conflict") && state.status !== "invalid-config" ? (
@@ -49,18 +53,19 @@ export default async function ClaimPage({
           ) : null}
         </section>
       ) : state.status === "claimable" ? (
-        <section className="mt-6 rounded-lg border border-stone-200 p-5">
+        <section className="surface-panel-muted p-5">
           <h2 className="font-semibold">{t("candidateTitle")}</h2>
           <p className="mt-2 text-sm text-stone-600">
             {t("candidate", { email: state.candidate.email, login: state.login })}
           </p>
           <form action={claimTailscaleOwnerAction} className="mt-5">
-            <button type="submit" className="rounded bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+            <button type="submit" className="btn-primary text-sm">
               {t("claim")}
             </button>
           </form>
         </section>
       ) : null}
+      </div>
     </main>
   );
 }

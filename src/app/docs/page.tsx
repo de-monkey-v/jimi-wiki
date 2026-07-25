@@ -28,7 +28,7 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border rounded-lg p-5 space-y-3">
+    <section className="surface-panel space-y-3 p-5">
       <h2 className="font-semibold text-stone-800">{title}</h2>
       {children}
     </section>
@@ -55,13 +55,14 @@ export default async function DocsPage({
   const strong = (chunks: React.ReactNode) => <strong>{chunks}</strong>;
 
   return (
-    <main className="mx-auto compact-measure px-6 py-10 space-y-6">
-      <div>
-        <Link href={slug ? `/wikis/${slug}` : "/wikis"} className="text-sm text-gray-400 hover:underline">
+    <main className="mx-auto compact-measure space-y-6 px-4 py-10 sm:px-6">
+      <header className="page-header">
+        <div className="page-breadcrumb"><Link href={slug ? `/wikis/${slug}` : "/wikis"}>
           ← {slug ? t("backToWiki") : t("backToMyWikis")}
-        </Link>
-        <h1 className="text-2xl font-bold mt-1">{t("title")}</h1>
-        <p className="text-sm text-gray-500">
+        </Link></div>
+        <p className="page-kicker">Integration manual</p>
+        <h1 className="page-title">{t("title")}</h1>
+        <p className="page-description">
           {t.rich("intro", { strong })}
           {slug ? (
             <> {t.rich("introSlugFilled", { code, slug })}</>
@@ -69,7 +70,7 @@ export default async function DocsPage({
             <> {t.rich("introSlugPlaceholder", { code, slug: SLUG })}</>
           )}
         </p>
-      </div>
+      </header>
 
       <Section title={t("section1Title")}>
         <p className="text-sm text-stone-600">

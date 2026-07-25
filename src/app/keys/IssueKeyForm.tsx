@@ -25,11 +25,11 @@ export function IssueKeyForm({ wikis }: { wikis: { id: string; title: string }[]
     return () => window.removeEventListener("apikey:changed", clear);
   }, []);
 
-  const selectCls = "border rounded px-3 py-2 text-sm";
+  const selectCls = "field-control w-auto text-sm";
   return (
     <div className="space-y-3">
       {revealed && (
-        <div className="border border-emerald-300 bg-emerald-50 rounded-lg p-4">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-semibold text-emerald-800">
               {t("tokenIssued")}
@@ -38,46 +38,46 @@ export function IssueKeyForm({ wikis }: { wikis: { id: string; title: string }[]
               type="button"
               onClick={() => setRevealed(null)}
               aria-label={t("hideToken")}
-              className="shrink-0 rounded px-1.5 text-sm text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900"
+              className="shrink-0 rounded px-1.5 text-sm text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
               {t("close")}
             </button>
           </div>
-          <code className="mt-2 block break-all text-sm bg-white border rounded px-3 py-2">{revealed}</code>
+          <code className="mt-2 block break-all rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm">{revealed}</code>
           <button
             type="button"
             onClick={() => navigator.clipboard?.writeText(revealed).then(() => setCopied(true)).catch(() => {})}
-            className="mt-2 rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-800 hover:bg-emerald-100"
+            className="mt-2 rounded border border-emerald-300 px-2 py-1 text-xs text-emerald-800 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
           >
             {copied ? t("copied") : t("copy")}
           </button>
         </div>
       )}
-      {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
+      {state?.error && <p role="alert" aria-live="polite" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{state.error}</p>}
       {/* 새 발급을 시작하면 이전 토큰 잔상을 먼저 지운다(성공 시 새 토큰으로 교체됨). */}
-      <form action={action} onSubmit={() => setRevealed(null)} className="flex flex-wrap items-center gap-2 pt-2 border-t">
-        <input name="name" placeholder={t("namePlaceholder")} className="flex-1 min-w-[10rem] border rounded px-3 py-2 text-sm" />
+      <form action={action} onSubmit={() => setRevealed(null)} className="flex flex-wrap items-center gap-2 border-t border-stone-100 pt-4">
+        <input name="name" aria-label={t("namePlaceholder")} placeholder={t("namePlaceholder")} className="field-control min-w-[10rem] flex-1 text-sm" />
         {/* 스코프 위키: 미선택=전체(레거시). 특정 위키 선택 시 그 위키 콘텐츠 API에서만 유효 */}
-        <select name="wikiId" defaultValue="" className={selectCls} title={t("scopeWiki")}>
+        <select name="wikiId" defaultValue="" className={selectCls} aria-label={t("scopeWiki")} title={t("scopeWiki")}>
           <option value="">{t("allWikis")}</option>
           {wikis.map((w) => (
             <option key={w.id} value={w.id}>{w.title}</option>
           ))}
         </select>
         {/* 상한 역할: 미선택=제한 없음(멤버십 역할 그대로). viewer=읽기 전용, editor=편집 */}
-        <select name="maxRole" defaultValue="" className={selectCls} title={t("maxRole")}>
+        <select name="maxRole" defaultValue="" className={selectCls} aria-label={t("maxRole")} title={t("maxRole")}>
           <option value="">{t("noRoleLimit")}</option>
           <option value="viewer">{t("role.viewer")}</option>
           <option value="editor">{t("role.editor")}</option>
         </select>
         {/* 만료: 미선택=무기한. 선택 시 발급 시점 기준 N일 뒤 만료 */}
-        <select name="expiresDays" defaultValue="" className={selectCls} title={t("expiry")}>
+        <select name="expiresDays" defaultValue="" className={selectCls} aria-label={t("expiry")} title={t("expiry")}>
           <option value="">{t("noExpiry")}</option>
           <option value="30">{t("daysOption", { days: 30 })}</option>
           <option value="90">{t("daysOption", { days: 90 })}</option>
           <option value="365">{t("daysOption", { days: 365 })}</option>
         </select>
-        <button disabled={pending} className="bg-stone-900 text-white rounded px-3 py-2 text-sm disabled:opacity-50">
+        <button disabled={pending} className="btn-primary text-sm">
           {pending ? t("issuing") : t("issue")}
         </button>
       </form>

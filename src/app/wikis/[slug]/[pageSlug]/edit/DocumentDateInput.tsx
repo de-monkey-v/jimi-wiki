@@ -20,7 +20,7 @@ export function DocumentDateInput({ value }: { value: string }) {
         suppressHydrationWarning
         value={localValue}
         onChange={(event) => setLocalValue(event.target.value)}
-        className="w-full rounded border bg-white px-3 py-2"
+        className="field-control"
       />
     </>
   );

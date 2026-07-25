@@ -11,7 +11,7 @@ export function RevokeButton({ id }: { id: string }) {
   return (
     <form action={revokeKeyAction} onSubmit={() => window.dispatchEvent(new Event("apikey:changed"))}>
       <input type="hidden" name="id" value={id} />
-      <button className="border rounded px-2 py-1 text-red-600 hover:bg-red-50">{t("revoke")}</button>
+      <button className="btn-danger btn-compact">{t("revoke")}</button>
     </form>
   );
 }

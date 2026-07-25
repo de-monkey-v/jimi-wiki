@@ -22,7 +22,7 @@ export function FolderPinButton({ wikiSlug, category, pinned: initial }: { wikiS
           router.refresh();
         })
       }
-      className="shrink-0 rounded border px-2 py-1 text-sm hover:bg-stone-50 disabled:opacity-50"
+      className="btn-secondary btn-compact shrink-0"
     >
       <span className={pinned ? "text-amber-500" : "text-stone-400"}>{pinned ? "★" : "☆"}</span>
       <span className="ml-1 text-xs text-stone-500">{pinned ? t("pinned") : t("pin")}</span>

@@ -25,7 +25,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded bg-stone-900 px-5 py-2 text-white hover:bg-stone-700 disabled:opacity-50"
+      className="btn-primary"
     >
       {pending ? t("submitting") : t("create")}
     </button>
@@ -112,7 +112,7 @@ function CategoryPicker({ categories, quickCats, initialValue }: { categories: C
         }}
         onKeyDown={onKeyDown}
         placeholder={t("categoryPlaceholder")}
-        className="w-full rounded border px-3 py-2"
+        className="field-control"
       />
       {quickCats.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -121,7 +121,7 @@ function CategoryPicker({ categories, quickCats, initialValue }: { categories: C
               key={c}
               type="button"
               onClick={() => choose(c)}
-              className="rounded-full border border-stone-200 px-2 py-0.5 text-xs text-stone-500 hover:border-blue-400 hover:text-blue-700"
+              className="rounded-full border border-stone-200 px-2 py-0.5 text-xs text-stone-500 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
               {c}/
             </button>
@@ -155,7 +155,7 @@ function CategoryPicker({ categories, quickCats, initialValue }: { categories: C
                   {o.itemCount ? <span className="text-xs text-stone-400">{o.itemCount}</span> : null}
                 </>
               ) : (
-                <span className="text-blue-700">{t("createCategory", { slug: o.slug })}</span>
+                <span className="text-indigo-700">{t("createCategory", { slug: o.slug })}</span>
               )}
             </li>
           ))}
@@ -206,9 +206,8 @@ export function NewPageForm({
           id="new-title"
           name="title"
           required
-          autoFocus
           placeholder={t("titlePlaceholder")}
-          className="w-full rounded border px-3 py-2"
+          className="field-control"
         />
       </div>
 
@@ -225,7 +224,7 @@ export function NewPageForm({
             setKind(next);
             if (next === "personal") setAllowExternalAi(false);
           }}
-          className="w-full rounded border px-3 py-2"
+          className="field-control"
         >
           {MANUAL_KIND_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -239,7 +238,7 @@ export function NewPageForm({
         <p className="mt-1 text-xs text-stone-400">
           {t.rich("ingestHint", {
             link: (chunks) => (
-              <Link href={`/wikis/${wikiSlug}`} className="text-blue-600 hover:underline">
+              <Link href={`/wikis/${wikiSlug}`} className="ui-link">
                 {chunks}
               </Link>
             ),
@@ -253,7 +252,7 @@ export function NewPageForm({
             <label htmlFor="new-document-type" className="mb-1 block text-sm font-medium text-stone-600">
               {t("documentTypeLabel")}
             </label>
-            <select id="new-document-type" name="documentType" defaultValue={wikiKind === "project" ? "worklog" : "general"} className="w-full rounded border bg-white px-3 py-2">
+            <select id="new-document-type" name="documentType" defaultValue={wikiKind === "project" ? "worklog" : "general"} className="field-control">
               {DOCUMENT_TYPES.map((type) => <option key={type} value={type}>{t(`documentType.${type}`)}</option>)}
             </select>
           </div>
@@ -262,7 +261,7 @@ export function NewPageForm({
               {t("documentAtLabel")}
             </label>
             <input type="hidden" name="documentAt" value={documentAt ? new Date(documentAt).toISOString() : ""} />
-            <input id="new-document-at" type="datetime-local" value={documentAt} onChange={(event) => setDocumentAt(event.target.value)} className="w-full rounded border bg-white px-3 py-2" />
+            <input id="new-document-at" type="datetime-local" value={documentAt} onChange={(event) => setDocumentAt(event.target.value)} className="field-control" />
           </div>
           <p className="text-xs leading-5 text-stone-500 sm:col-span-2">{t("documentHint")}</p>
         </div>
@@ -302,13 +301,13 @@ export function NewPageForm({
           name="body"
           rows={16}
           placeholder={t("bodyPlaceholder")}
-          className="w-full rounded border px-3 py-2 font-mono text-sm"
+          className="field-control font-mono text-sm"
         />
       </div>
 
       <div className="flex items-center gap-3 pt-2">
         <SubmitButton />
-        <Link href={`/wikis/${wikiSlug}`} className="text-sm text-gray-500 hover:underline">
+        <Link href={`/wikis/${wikiSlug}`} className="ui-link rounded text-sm">
           {t("cancel")}
         </Link>
       </div>

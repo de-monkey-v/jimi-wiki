@@ -96,8 +96,11 @@ export default async function WikiHome({
     .slice(0, 8);
 
   return (
-    <main className="mx-auto reading-measure px-6 py-10">
-      <h1 className="text-2xl font-bold mb-6">{wiki.title}</h1>
+    <main className="mx-auto reading-measure px-4 py-10 sm:px-6">
+      <header className="page-header">
+        <p className="page-kicker">Wiki workspace</p>
+        <h1 className="page-title">{wiki.title}</h1>
+      </header>
 
       {/* ingest 잡 상태 배지: 진행 중이면 자동 폴링, 완료 시 결과 요약 + 목록 갱신 */}
       {runStatus && (
@@ -147,7 +150,7 @@ export default async function WikiHome({
       {/* 최근 본 문서: 기기 로컬(localStorage), 비어 있으면 자체적으로 렌더하지 않음 */}
       <RecentList slug={slug} current={undefined} heading={t("recentHeading")} />
 
-      <section className="mb-8 rounded-xl border border-stone-200 bg-stone-50/60 p-4">
+      <section className="surface-panel mb-8 p-4">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-stone-600">
             {t("readingHeading")}
@@ -191,7 +194,7 @@ export default async function WikiHome({
       </section>
 
       {readablePageCount === 0 && (
-        <div className="mb-8 rounded-lg border border-stone-200 bg-white p-5">
+        <div className="surface-panel mb-8 p-5">
           <EmptyState
             asset="empty-pages"
             title={t("emptyTitle")}
@@ -201,7 +204,7 @@ export default async function WikiHome({
       )}
 
       {documents.length > 0 && (
-        <section className="mb-8">
+        <section className="surface-panel mb-8 p-4 sm:p-5">
           <div className="mb-3 flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-stone-600">{t("recentDocuments")}</h2>
             {documentCount > documents.length && (
@@ -228,7 +231,7 @@ export default async function WikiHome({
       )}
 
       {knowledge.length > 0 && (
-        <section className="mb-8">
+        <section className="surface-panel mb-8 p-4 sm:p-5">
           <h2 className="mb-3 text-sm font-semibold text-stone-600">{t("knowledgeHeading")}</h2>
           {knowledgeFolders.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
@@ -269,13 +272,13 @@ export default async function WikiHome({
       )}
 
       {logs.length > 0 && (
-        <section className="mt-8 border-t pt-4">
-          <h2 className="text-sm font-semibold text-gray-500 mb-2">{t("systemActivity")}</h2>
-          <ul className="space-y-1 text-sm text-gray-500">
+        <section className="surface-panel-muted mt-8 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-stone-600">{t("systemActivity")}</h2>
+          <ul className="space-y-1 text-sm text-stone-500">
             {logs.map((l) => (
               <li key={l.id} className="flex gap-2">
-                <span className="text-gray-400">{l.createdAt.toISOString().slice(5, 16).replace("T", " ")}</span>
-                <span className="rounded bg-gray-100 px-1.5 text-xs">{l.kind}</span>
+                <span className="ui-meta">{l.createdAt.toISOString().slice(5, 16).replace("T", " ")}</span>
+                <span className="ui-badge">{l.kind}</span>
                 <span className="truncate">{l.title}</span>
               </li>
             ))}

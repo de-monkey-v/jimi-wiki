@@ -9,6 +9,7 @@ import FA2Layout from "graphology-layout-forceatlas2/worker";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import noverlap from "graphology-layout-noverlap";
 import { createNodeBorderProgram } from "@sigma/node-border";
+import type { NodeLabelDrawingFunction } from "sigma/rendering";
 import { nodeColor, KIND_COLOR, KIND_ORDER, type WikiGraph } from "@/lib/kinds";
 import type { PageKind } from "@/generated/prisma/client";
 
@@ -22,6 +23,35 @@ const NodeHaloProgram = createNodeBorderProgram({
     { size: { fill: true }, color: { attribute: "color" } },
   ],
 });
+
+// Sigma 기본 라벨은 항상 노드 오른쪽에 그려 canvas 경계에서 잘린다.
+// 오른쪽 공간이 부족하면 왼쪽으로 뒤집고, 아주 긴 라벨은 남은 폭 안에 맞춘다.
+const drawContainedNodeLabel: NodeLabelDrawingFunction = (context, data, settings) => {
+  if (!data.label) return;
+
+  const margin = 6;
+  const gap = data.size + 3;
+  const canvasWidth = context.canvas.clientWidth || context.canvas.width;
+  const color = settings.labelColor.attribute
+    ? String(data[settings.labelColor.attribute] ?? settings.labelColor.color ?? "#44403c")
+    : settings.labelColor.color ?? "#44403c";
+
+  context.fillStyle = color;
+  context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`;
+
+  const textWidth = context.measureText(data.label).width;
+  const rightX = data.x + gap;
+  const rightAvailable = Math.max(0, canvasWidth - margin - rightX);
+  const leftEdge = data.x - gap;
+  const leftAvailable = Math.max(0, data.x - gap - margin);
+  const drawRight = textWidth <= rightAvailable || rightAvailable >= leftAvailable;
+  const maxWidth = drawRight ? rightAvailable : leftAvailable;
+  const x = drawRight ? rightX : leftEdge - Math.min(textWidth, leftAvailable);
+
+  if (maxWidth > 0) {
+    context.fillText(data.label, x, data.y + settings.labelSize / 3, maxWidth);
+  }
+};
 
 export default function GraphCanvas({
   nodes,
@@ -110,6 +140,7 @@ export default function GraphCanvas({
       labelWeight: "500",
       labelColor: { color: "#44403c" }, // stone-700 — 배경 위 가독성
       labelFont: "ui-sans-serif, system-ui, sans-serif",
+      defaultDrawNodeLabel: drawContainedNodeLabel,
       defaultEdgeColor: DIM,
       minCameraRatio: 0.05,
       maxCameraRatio: 8,
@@ -311,10 +342,13 @@ export default function GraphCanvas({
       {controls && (
         <div className="absolute left-3 top-3 z-10 w-56 space-y-2 rounded-lg border border-stone-200 bg-white/90 p-3 text-sm shadow-sm backdrop-blur">
           <input
+            id="wiki-graph-search"
+            name="graphSearch"
             value={search}
             onChange={(e) => onSearch(e.target.value)}
+            aria-label={t("searchPlaceholder")}
             placeholder={t("searchPlaceholder")}
-            className="w-full rounded border border-stone-200 px-2 py-1 text-sm"
+            className="field-control py-1 text-sm"
           />
           <div className="space-y-1">
             {KIND_ORDER.map((k) => (
@@ -346,7 +380,7 @@ export default function GraphCanvas({
             transform: `translate(${tip.flipX ? "calc(-100% - 12px)" : "12px"}, ${tip.flipY ? "calc(-100% - 12px)" : "12px"})`,
           }}
         >
-          <span className="font-medium text-red-600">{tip.slug}</span>
+          <span className="font-medium text-rose-600">{tip.slug}</span>
           <span className="text-stone-400"> · </span>
           {t("nonexistentPage")}
         </div>

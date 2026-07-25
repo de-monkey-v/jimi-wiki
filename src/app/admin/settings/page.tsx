@@ -31,24 +31,25 @@ export default async function AdminSettings() {
   };
 
   return (
-    <main className="mx-auto compact-measure px-6 py-12 space-y-10">
-      <div>
-        <h1 className="text-2xl font-bold">{t("appTitle")}</h1>
-        <nav className="text-sm text-gray-500 mt-1">
-          <a href="/admin/users" className="underline">{t("usersLink")}</a> · <span className="text-gray-800">{t("appTitle")}</span>
+    <main className="mx-auto compact-measure space-y-8 px-4 py-12 sm:px-6">
+      <header className="page-header">
+        <p className="page-kicker">Administration</p>
+        <h1 className="page-title">{t("appTitle")}</h1>
+        <nav className="mt-2 text-sm text-stone-500">
+          <a href="/admin/users" className="ui-link rounded">{t("usersLink")}</a> · <span className="text-stone-800">{t("appTitle")}</span>
         </nav>
-      </div>
+      </header>
 
-      <section className="border rounded-lg p-4 space-y-3">
+      <section className="surface-panel space-y-3 p-5">
         <div>
           <h2 className="font-semibold">{t("providersTitle")}</h2>
-          <p className="text-xs text-gray-500">{t("providersHint")}</p>
+          <p className="text-xs text-stone-500">{t("providersHint")}</p>
         </div>
         <ul className="space-y-1">
           {providers.map((s) => (
-            <li key={s.provider} className="flex flex-wrap items-center gap-2 border rounded px-3 py-2">
+            <li key={s.provider} className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 px-3 py-2">
               <span className="min-w-32 flex-1 font-medium">{s.label}</span>
-              <span className={`text-xs ${s.usable ? "text-emerald-600" : "text-gray-400"}`}>
+              <span className={`text-xs ${s.usable ? "text-emerald-600" : "text-stone-400"}`}>
                 {s.usable ? t("usable") : t("noCredential")}
               </span>
             </li>
@@ -62,9 +63,9 @@ export default async function AdminSettings() {
         envDefaults={env}
       />
 
-      <section className="border rounded-lg p-4 space-y-2">
+      <section className="surface-panel space-y-2 p-5">
         <h2 className="font-semibold">{t("embeddingTitle")}</h2>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-stone-500">
           EMBED_PROVIDER=<code>{embedProvider()}</code> · EMBED_MODEL=<code>{embedModelName()}</code> ·
           EMBED_DIM=<code>{EMBED_DIM}</code>
         </p>
@@ -76,7 +77,7 @@ export default async function AdminSettings() {
       <OAuthPanel status={oauthStatus} transport={openaiTransport()} avail={openaiAvail} />
 
       <form action={refreshCatalogAction}>
-        <button className="text-xs underline text-gray-500">{t("refreshCatalog")}</button>
+        <button className="ui-link rounded text-xs">{t("refreshCatalog")}</button>
       </form>
     </main>
   );

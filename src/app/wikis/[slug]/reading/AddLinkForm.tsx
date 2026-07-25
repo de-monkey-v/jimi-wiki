@@ -37,18 +37,19 @@ export function AddLinkForm({ wikiSlug }: { wikiSlug: string }) {
           onChange={(e) => setUrl(e.target.value)}
           type="url"
           inputMode="url"
+          aria-label={t("addPlaceholder")}
           placeholder={t("addPlaceholder")}
-          className="min-w-0 flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+          className="field-control min-w-0 flex-1 text-sm"
         />
         <button
           type="submit"
           disabled={pending}
-          className="shrink-0 rounded-md bg-stone-900 px-4 py-2 text-sm text-white hover:bg-stone-700 disabled:opacity-50"
+          className="btn-primary shrink-0 text-sm"
         >
           {pending ? t("adding") : t("addButton")}
         </button>
       </form>
-      {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
+      {err && <p role="alert" aria-live="polite" className="mt-2 text-xs text-rose-600">{err}</p>}
     </div>
   );
 }

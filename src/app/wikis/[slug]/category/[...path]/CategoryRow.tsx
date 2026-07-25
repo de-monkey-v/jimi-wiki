@@ -38,7 +38,7 @@ export function CategoryRow({
       <PreviewLink
         pageSlug={pageSlug}
         href={`/wikis/${wikiSlug}/${encodeURIComponent(pageSlug)}`}
-        className="text-blue-600 hover:underline"
+        className="ui-link rounded"
       >
         {title}
       </PreviewLink>

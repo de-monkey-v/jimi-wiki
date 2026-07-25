@@ -83,7 +83,7 @@ function MarkdownMessage({
                   disabled={!ok}
                   onClick={() => onOpenCite(n)}
                   aria-label={t("openEvidence", { n })}
-                  className="mx-px inline-flex items-center rounded bg-blue-50 px-1 align-baseline text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400"
+                  className="mx-px inline-flex items-center rounded bg-indigo-50 px-1 align-baseline text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:bg-stone-100 disabled:text-stone-400"
                 >
                   {n}
                 </button>
@@ -108,15 +108,15 @@ function SourceCards({ sources, cited, onOpen }: { sources: ChatSource[]; cited:
   const { cited: citedSources } = splitByCited(sources, cited);
   if (citedSources.length === 0) return null;
   return (
-    <div className="mt-3 pt-2 border-t border-gray-200 flex flex-wrap gap-2 xl:hidden">
+    <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-200 pt-2 xl:hidden">
       {citedSources.map((s) => (
         <button
           key={s.n}
           onClick={() => onOpen({ kind: s.kind, slug: s.slug, title: s.title, heading: s.heading })}
-          className="text-left text-xs bg-white border rounded-md px-2 py-1 hover:border-blue-400"
+          className="rounded-md border border-stone-200 bg-white px-2 py-1 text-left text-xs hover:border-indigo-300 hover:bg-indigo-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         >
-          <span className="text-gray-400">[{s.n}]</span> {s.title}
-          {s.heading ? <span className="text-gray-400"> › {s.heading}</span> : null}
+          <span className="text-stone-400">[{s.n}]</span> {s.title}
+          {s.heading ? <span className="text-stone-400"> › {s.heading}</span> : null}
         </button>
       ))}
     </div>
@@ -129,7 +129,7 @@ function EvidenceItem({ s, onOpen }: { s: ChatSource; onOpen: (d: EvidenceDoc) =
     <li>
       <button
         onClick={() => onOpen({ kind: s.kind, slug: s.slug, title: s.title, heading: s.heading })}
-        className="w-full rounded-md border border-stone-200 px-2.5 py-1.5 text-left text-xs hover:border-blue-400 hover:bg-stone-50"
+        className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-left text-xs hover:border-indigo-300 hover:bg-indigo-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
       >
         <span className="text-stone-400">[{s.n}]</span>{" "}
         <span className="font-medium text-stone-700">{s.title}</span>
@@ -146,7 +146,7 @@ function EvidencePanel({ sources, cited, onOpen }: { sources: ChatSource[]; cite
   const { cited: citedSources, rest } = splitByCited(sources, cited);
   return (
     <aside className="hidden xl:block w-72 shrink-0">
-      <div className="rounded-lg border bg-white p-3">
+      <div className="surface-panel p-3">
         <h2 className="mb-2 text-sm font-semibold text-stone-600">{t("evidenceTitle")}</h2>
         {sources.length === 0 ? (
           <EmptyState
@@ -208,8 +208,8 @@ export function WikiChat({ slug }: { slug: string }) {
 
   return (
     <div className="flex gap-4">
-      <div className="flex flex-col h-[68vh] min-w-0 flex-1 border rounded-lg overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+      <div className="surface-panel flex h-[68vh] min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex-1 space-y-4 overflow-y-auto bg-white p-4 sm:p-5">
         {messages.length === 0 && (
           <div className="flex min-h-full items-center justify-center">
             <EmptyState
@@ -229,7 +229,7 @@ export function WikiChat({ slug }: { slug: string }) {
                 className={
                   isUser
                     ? "bg-stone-900 text-white rounded-2xl rounded-br-sm px-4 py-2 max-w-[min(80%,52rem)] whitespace-pre-wrap text-sm"
-                    : "bg-gray-50 text-gray-900 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[min(85%,52rem)] border"
+                    : "max-w-[min(85%,52rem)] rounded-2xl rounded-bl-sm border border-stone-200 bg-stone-50 px-4 py-3 text-stone-900 shadow-sm"
                 }
               >
                 {isUser ? (
@@ -244,7 +244,7 @@ export function WikiChat({ slug }: { slug: string }) {
                     }}
                   />
                 ) : busy ? (
-                  <span className="text-gray-400 text-sm">{t("searching")}</span>
+                  <span className="text-sm text-stone-400">{t("searching")}</span>
                 ) : null}
 
                 {!isUser && <SourceCards sources={sources} cited={citedNumbers(text)} onOpen={setActiveDoc} />}
@@ -256,10 +256,10 @@ export function WikiChat({ slug }: { slug: string }) {
       </div>
 
       {status === "error" && error && (
-        <div role="alert" className="border-t bg-red-50 px-4 py-2 text-sm text-red-700 flex items-center gap-3">
+        <div role="alert" aria-live="polite" className="flex items-center gap-3 border-t border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">
           <span className="flex-1">{t("error", { message: error.message })}</span>
-          <button onClick={() => regenerate()} className="border rounded px-2 py-0.5 hover:bg-red-100">{t("retry")}</button>
-          <button onClick={() => clearError()} className="hover:underline">{t("close")}</button>
+          <button onClick={() => regenerate()} className="btn-danger btn-compact">{t("retry")}</button>
+          <button onClick={() => clearError()} className="rounded px-2 py-1 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">{t("close")}</button>
         </div>
       )}
 
@@ -268,7 +268,7 @@ export function WikiChat({ slug }: { slug: string }) {
           e.preventDefault();
           submit();
         }}
-        className="flex items-end gap-2 border-t p-3 bg-gray-50"
+        className="flex items-end gap-2 border-t border-stone-200 bg-stone-50 p-3"
       >
         <textarea
           value={input}
@@ -280,19 +280,20 @@ export function WikiChat({ slug }: { slug: string }) {
             }
           }}
           rows={1}
+          aria-label={t("inputPlaceholder")}
           placeholder={t("inputPlaceholder")}
-          className="flex-1 resize-none border rounded-lg px-3 py-2 max-h-32"
+          className="field-control max-h-32 flex-1 resize-none"
         />
         {busy ? (
           <button
             type="button"
             onClick={() => stop()}
-            className="bg-gray-700 text-white rounded-lg px-5 py-2 shrink-0"
+            className="btn-secondary shrink-0"
           >
             {t("stop")}
           </button>
         ) : (
-          <button type="submit" className="bg-stone-900 text-white rounded-lg px-5 py-2 shrink-0">
+          <button type="submit" className="btn-primary shrink-0">
             {t("send")}
           </button>
         )}

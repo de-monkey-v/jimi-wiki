@@ -61,11 +61,11 @@ function ModelSelect({
 
   return (
     <div className="space-y-1">
-      <label className="block text-sm font-medium">{label}</label>
-      {hint && <p className="text-xs text-gray-500">{hint}</p>}
+      <label htmlFor={`${name}-select`} className="block text-sm font-medium">{label}</label>
+      {hint && <p className="text-xs text-stone-500">{hint}</p>}
       <input type="hidden" name={name} value={value} />
       <div className="flex flex-wrap items-center gap-2">
-        <select value={sel} onChange={(e) => setSel(e.target.value)} className="border rounded px-3 py-2 text-sm">
+        <select id={`${name}-select`} value={sel} onChange={(e) => setSel(e.target.value)} className="field-control w-auto text-sm">
           <option value="">{t("envDefaultOption", { env: envDefault })}</option>
           {groups.map((g) => (
             <optgroup key={g.provider} label={g.label + (g.enabled ? "" : t("providerDisabled"))}>
@@ -83,15 +83,16 @@ function ModelSelect({
           <input
             value={custom}
             onChange={(e) => setCustom(e.target.value)}
+            aria-label={t("customPlaceholder")}
             placeholder={t("customPlaceholder")}
-            className="border rounded px-3 py-2 text-sm w-48"
+            className="field-control w-48 text-sm"
           />
         )}
-        <button type="button" onClick={runTest} disabled={test.loading} className="text-xs border rounded px-2 py-1 hover:bg-gray-50 disabled:opacity-50">
+        <button type="button" onClick={runTest} disabled={test.loading} className="btn-secondary btn-compact">
           {test.loading ? t("testing") : t("test")}
         </button>
         {test.ok === true && <span className="text-xs text-emerald-600">✓ {test.msg}</span>}
-        {test.ok === false && <span className="text-xs text-red-600">✗ {test.msg}</span>}
+        {test.ok === false && <span className="text-xs text-rose-600">✗ {test.msg}</span>}
       </div>
     </div>
   );
@@ -108,15 +109,15 @@ export function ModelsForm({
 }) {
   const t = useTranslations("AdminSettingsModelsForm");
   return (
-    <form action={updateModelsAction} className="border rounded-lg p-4 space-y-4">
+    <form action={updateModelsAction} className="surface-panel space-y-4 p-5">
       <div>
         <h2 className="font-semibold">{t("title")}</h2>
-        <p className="text-xs text-gray-500">{t("description")}</p>
+        <p className="text-xs text-stone-500">{t("description")}</p>
       </div>
       <ModelSelect key={`chat:${initial.chat}`} name="chatModel" label={t("chatLabel")} groups={catalog.filter((g) => CHAT_PROVIDERS.includes(g.provider))} initial={initial.chat} envDefault={envDefaults.chatModel} />
       <ModelSelect key={`ingest:${initial.ingest}`} name="ingestModel" label="Ingest (INGEST_MODEL)" hint={t("ingestHint")} groups={catalog} initial={initial.ingest} envDefault={envDefaults.ingestModel} />
       <ModelSelect key={`gen:${initial.gen}`} name="genModel" label={t("genLabel")} groups={catalog} initial={initial.gen} envDefault={envDefaults.genModel} />
-      <button className="bg-stone-900 text-white rounded px-4 py-2 w-fit">{t("save")}</button>
+      <button className="btn-primary w-fit">{t("save")}</button>
     </form>
   );
 }

@@ -10,10 +10,10 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex items-center gap-2 rounded border px-3 py-1.5 text-sm hover:bg-gray-50 disabled:text-gray-400"
+      className="btn-secondary flex items-center gap-2 text-sm disabled:text-stone-400"
     >
       {pending && (
-        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-stone-400 border-t-transparent" />
+        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-stone-400 border-t-transparent motion-reduce:animate-none" />
       )}
       {pending ? t("reindexing") : t("reindex")}
     </button>
@@ -27,7 +27,7 @@ export function ReindexForm({ wikiSlug }: { wikiSlug: string }) {
     <form action={reindexAction} className="flex items-center gap-3">
       <input type="hidden" name="wikiSlug" value={wikiSlug} />
       <SubmitButton />
-      <span className="text-xs text-gray-400">
+      <span className="text-xs text-stone-400">
         {t("hint")}
       </span>
     </form>

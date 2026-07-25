@@ -17,11 +17,11 @@ export function SourcesPanel({ sources, hrefFor }: { sources: SourceRef[]; hrefF
         {sources.map((s) => (
           <li key={s.slug} className="text-sm">
             {hrefFor ? (
-              <Link href={hrefFor(s.slug)} className="text-blue-600 hover:underline">
+              <Link href={hrefFor(s.slug)} className="ui-link rounded">
                 {s.title}
               </Link>
             ) : s.url ? (
-              <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+              <a href={s.url} target="_blank" rel="noopener noreferrer" className="ui-link rounded">
                 {s.title}
               </a>
             ) : (

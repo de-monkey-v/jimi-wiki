@@ -28,35 +28,40 @@ export default async function WikisPage({
     role === "owner" || role === "editor" || role === "viewer" ? t(`role.${role}`) : (role ?? "");
 
   return (
-    <main className="mx-auto compact-measure px-6 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">jimi-wiki</h1>
-        <div className="flex items-center gap-3 text-sm text-stone-500">
-          <Link href="/keys" className="hover:text-stone-800">{t("apiKeys")}</Link>
-          <Link href="/docs" className="hover:text-stone-800">{t("integrationGuide")}</Link>
-          <Link href="/wikis?view=trash" className="hover:text-stone-800">{t("trash")}</Link>
+    <main className="mx-auto compact-measure px-4 py-10 sm:px-6">
+      <header className="page-header">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="page-kicker">Knowledge registry</p>
+          <h1 className="page-title">jimi-wiki</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-stone-500">
+          <Link href="/keys" className="rounded hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("apiKeys")}</Link>
+          <Link href="/docs" className="rounded hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("integrationGuide")}</Link>
+          <Link href="/wikis?view=trash" className="rounded hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("trash")}</Link>
           <span className="text-stone-300">·</span>
           <span className="text-xs text-stone-400">{user.email}</span>
           {authMode() !== "tailscale" ? (
             <form action={logoutAction}>
-              <button className="hover:text-stone-800">{t("logout")}</button>
+              <button className="rounded hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("logout")}</button>
             </form>
           ) : null}
         </div>
-      </div>
+        </div>
+      </header>
       <h2 className="text-sm font-semibold text-stone-500 mb-2">{t("myWikis")}</h2>
 
       {/* 내가 만든 위키 */}
       <ul className="space-y-2 mb-8">
-        {owned.length === 0 && hasAnyWikis && <li className="text-gray-500">{t("noOwnedWikis")}</li>}
+        {owned.length === 0 && hasAnyWikis && <li className="text-stone-500">{t("noOwnedWikis")}</li>}
         {owned.map((w) => (
-          <li key={w.id} className="card-hover border rounded-lg p-4 bg-white">
-            <Link href={`/wikis/${w.slug}`} className="flex items-center justify-between">
-              <div>
+          <li key={w.id} className="surface-panel card-hover p-4">
+            <Link href={`/wikis/${w.slug}`} className="flex items-center justify-between gap-4 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+              <div className="min-w-0">
                 <div className="font-semibold">{w.title}</div>
-                {w.description && <div className="text-sm text-gray-500">{w.description}</div>}
+                {w.description && <div className="truncate text-sm text-stone-500">{w.description}</div>}
               </div>
-              <div className="text-xs text-gray-400">
+              <div className="shrink-0 text-xs text-stone-400">
                 {w.kind} · {t("pageCount", { count: w._count.pages })}
               </div>
             </Link>
@@ -67,17 +72,17 @@ export default async function WikisPage({
       {/* 공유받은 위키 */}
       {shared.length > 0 && (
         <div className="mb-10">
-          <h2 className="text-sm font-semibold text-gray-500 mb-2">{t("sharedWikis")}</h2>
+          <h2 className="mb-2 text-sm font-semibold text-stone-500">{t("sharedWikis")}</h2>
           <ul className="space-y-2">
             {shared.map((w) => (
-              <li key={w.id} className="card-hover border rounded-lg p-4 bg-white">
-                <Link href={`/wikis/${w.slug}`} className="flex items-center justify-between">
-                  <div>
+              <li key={w.id} className="surface-panel card-hover p-4">
+                <Link href={`/wikis/${w.slug}`} className="flex items-center justify-between gap-4 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                  <div className="min-w-0">
                     <div className="font-semibold">{w.title}</div>
-                    <div className="text-xs text-gray-400">{t("authoredBy", { name: w.createdBy.name ?? w.createdBy.email })}</div>
+                    <div className="truncate text-xs text-stone-400">{t("authoredBy", { name: w.createdBy.name ?? w.createdBy.email })}</div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5">{roleLabel(w.myRole ?? null)}</span>
+                  <div className="flex shrink-0 items-center gap-2 text-xs text-stone-400">
+                    <span className="ui-badge">{roleLabel(w.myRole ?? null)}</span>
                     <span>{t("pageCount", { count: w._count.pages })}</span>
                   </div>
                 </Link>
@@ -88,7 +93,7 @@ export default async function WikisPage({
       )}
 
       {!hasAnyWikis && (
-        <div className="mb-8 rounded-lg border border-stone-200 bg-white p-5">
+        <div className="surface-panel mb-8 p-5">
           <EmptyState
             asset="empty-wikis"
             title={t("emptyTitle")}
@@ -97,10 +102,10 @@ export default async function WikisPage({
         </div>
       )}
 
-      <form action={createWikiAction} className="border rounded-lg p-4 space-y-3">
-        <h2 className="font-semibold">{t("createWiki")}</h2>
+      <form action={createWikiAction} className="surface-panel space-y-3 p-5">
+        <h2 className="font-semibold text-stone-800">{t("createWiki")}</h2>
         <label htmlFor="new-wiki-title" className="block text-sm font-medium text-stone-700">{t("titleLabel")}</label>
-        <input id="new-wiki-title" name="title" required placeholder={t("titlePlaceholder")} className="w-full border rounded px-3 py-2" />
+        <input id="new-wiki-title" name="title" required placeholder={t("titlePlaceholder")} className="field-control" />
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="cursor-pointer rounded-lg border border-stone-200 p-3 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50/50">
             <span className="flex items-center gap-2 font-medium text-stone-800">
@@ -117,7 +122,7 @@ export default async function WikisPage({
             <span className="mt-1 block pl-6 text-xs leading-5 text-stone-500">{t("kindProjectDescription")}</span>
           </label>
         </div>
-        <button type="submit" className="block bg-stone-900 text-white rounded px-4 py-2">
+        <button type="submit" className="btn-primary">
           {t("create")}
         </button>
       </form>

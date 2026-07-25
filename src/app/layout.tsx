@@ -56,6 +56,12 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <a
+          href="#main-content"
+          className="fixed left-4 top-4 z-[100] -translate-y-24 rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 motion-reduce:transition-none"
+        >
+          {t("skipToContent")}
+        </a>
         {/* JS가 차단된 환경(Brave Shields 등) 진단용: 스크립트가 실행되면 이 배너는 보이지 않는다 */}
         <noscript>
           <div style={{ background: "#dc2626", color: "#fff", padding: "10px 16px", fontSize: 14, textAlign: "center" }}>
@@ -63,7 +69,9 @@ export default async function RootLayout({
           </div>
         </noscript>
         <NextIntlClientProvider>
+          <div id="main-content" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
           {children}
+          </div>
           <LocaleSwitcher changeLocaleAction={changeLocaleAction} />
         </NextIntlClientProvider>
       </body>

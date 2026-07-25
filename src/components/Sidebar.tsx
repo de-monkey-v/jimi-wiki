@@ -7,8 +7,8 @@ import { logoutAction } from "@/app/login/actions";
 type Wiki = { slug: string; title: string; myRole?: string };
 
 function itemCls(active: boolean) {
-  return `block truncate rounded-lg px-3 py-1.5 text-sm ${
-    active ? "bg-gray-200 text-gray-900 font-medium" : "text-gray-600 hover:bg-gray-100"
+  return `block truncate rounded-lg px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+    active ? "bg-stone-200 text-stone-900 font-medium" : "text-stone-600 hover:bg-stone-100"
   }`;
 }
 
@@ -26,7 +26,7 @@ export function Sidebar({ email, owned, shared, showLogout = true }: { email: st
         <Link href={`/wikis/${w.slug}`} className={itemCls(active && !sub)}>
           {w.title}
           {w.myRole && w.myRole !== "owner" ? (
-            <span className="ml-1 text-xs text-gray-400">· {w.myRole === "editor" ? t("role.editor") : t("role.viewer")}</span>
+            <span className="ml-1 text-xs text-stone-400">· {w.myRole === "editor" ? t("role.editor") : t("role.viewer")}</span>
           ) : null}
         </Link>
         {active && (
@@ -41,23 +41,23 @@ export function Sidebar({ email, owned, shared, showLogout = true }: { email: st
   };
 
   return (
-    <aside className="flex h-dvh w-64 shrink-0 flex-col border-r border-gray-200 bg-white">
+    <aside className="flex h-dvh w-64 shrink-0 flex-col border-r border-stone-200 bg-white">
       <div className="px-4 py-4">
-        <Link href="/wikis" className="text-lg font-bold tracking-tight">jimi-wiki</Link>
+        <Link href="/wikis" className="rounded text-lg font-bold tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">jimi-wiki</Link>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 pb-4 space-y-4">
         <div>
-          <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">{t("myWikis")}</div>
+          <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-stone-400">{t("myWikis")}</div>
           <ul className="space-y-0.5">
-            {owned.length === 0 && <li className="px-3 py-1 text-sm text-gray-400">{t("empty")}</li>}
+            {owned.length === 0 && <li className="px-3 py-1 text-sm text-stone-400">{t("empty")}</li>}
             {owned.map(wikiLink)}
           </ul>
         </div>
 
         {shared.length > 0 && (
           <div>
-            <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">{t("sharedWikis")}</div>
+            <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-stone-400">{t("sharedWikis")}</div>
             <ul className="space-y-0.5">{shared.map(wikiLink)}</ul>
           </div>
         )}
@@ -70,11 +70,11 @@ export function Sidebar({ email, owned, shared, showLogout = true }: { email: st
         </div>
       </nav>
 
-      <div className="border-t border-gray-200 px-3 py-3">
-        <div className="mb-1 truncate px-1 text-xs text-gray-500">{email}</div>
+      <div className="border-t border-stone-200 px-3 py-3">
+        <div className="mb-1 truncate px-1 text-xs text-stone-500">{email}</div>
         {showLogout ? (
           <form action={logoutAction}>
-            <button className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("logout")}</button>
+            <button className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-stone-600 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("logout")}</button>
           </form>
         ) : null}
       </div>

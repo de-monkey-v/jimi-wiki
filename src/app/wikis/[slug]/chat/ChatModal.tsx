@@ -121,7 +121,7 @@ export function ChatModalProvider({
           }}
           aria-label={t("askAi")}
           title={t("askAiWithShortcut", { shortcut })}
-          className="fixed bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-stone-900 text-white shadow-lg transition-transform hover:scale-105 hover:bg-stone-700"
+          className="fixed bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-stone-900 text-white shadow-lg transition-transform hover:scale-105 hover:bg-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-4 motion-reduce:hover:scale-100"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
             <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.6 8.6 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 1 1 16.1-3.8z" />
@@ -139,7 +139,7 @@ export function ChatModalProvider({
               role="dialog"
               aria-modal="true"
               aria-label={t("dialogLabel", { title })}
-              className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-xl bg-stone-50 shadow-2xl"
+              className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-stone-200 bg-stone-50 shadow-2xl"
             >
               <div className="flex items-center justify-between gap-3 rounded-t-xl border-b border-stone-200 bg-white px-5 py-3">
                 <div className="min-w-0">
@@ -155,20 +155,20 @@ export function ChatModalProvider({
                   <Link
                     href={`/wikis/${encodeURIComponent(slug)}/chat`}
                     onClick={close}
-                    className="text-xs text-blue-600 hover:underline"
+                    className="ui-link rounded text-xs"
                   >
                     {t("fullScreen")}
                   </Link>
                   <button
                     onClick={close}
                     aria-label={t("close")}
-                    className="text-lg leading-none text-stone-400 hover:text-stone-700"
+                    className="rounded p-1 text-lg leading-none text-stone-400 hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                   >
                     ✕
                   </button>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-4">
                 <WikiChat slug={slug} />
               </div>
             </div>

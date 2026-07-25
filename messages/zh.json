@@ -77,6 +77,7 @@
   },
   "Common": {
     "appName": "jimi-wiki",
+    "skipToContent": "跳到主要内容",
     "noscriptWarning": "JavaScript 未运行 — 弹窗、聊天和文件夹展开将无法使用。请在 Brave Shields（地址栏中的狮子图标）中解除本站点的脚本拦截，或检查浏览器的 JavaScript 设置。",
     "appDescription": "由 LLM 维护的维基平台"
   },

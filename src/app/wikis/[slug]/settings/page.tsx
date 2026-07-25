@@ -27,8 +27,8 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
   if (wiki.role !== "owner") {
     return (
       <main className="mx-auto compact-measure px-6 py-10">
-        <Link href={`/wikis/${slug}`} className="text-sm text-gray-400 hover:underline">← {wiki.title}</Link>
-        <p className="mt-6 text-gray-500">{t("ownerOnly", { role: wiki.role })}</p>
+        <Link href={`/wikis/${slug}`} className="page-breadcrumb inline-block">← {wiki.title}</Link>
+        <div className="surface-panel mt-5 p-5 text-sm text-stone-600">{t("ownerOnly", { role: wiki.role })}</div>
       </main>
     );
   }
@@ -38,95 +38,96 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
 
   return (
     <main className="mx-auto compact-measure space-y-10 px-4 py-10 sm:px-6">
-      <div>
-        <Link href={`/wikis/${slug}`} className="text-sm text-gray-400 hover:underline">← {wiki.title}</Link>
-        <h1 className="text-2xl font-bold mt-1">{t("title")}</h1>
-      </div>
+      <header className="page-header">
+        <div className="page-breadcrumb"><Link href={`/wikis/${slug}`}>← {wiki.title}</Link></div>
+        <p className="page-kicker">Wiki control</p>
+        <h1 className="page-title">{t("title")}</h1>
+      </header>
 
       {/* 일반 설정 */}
-      <section className="border rounded-lg p-4 space-y-3">
-        <h2 className="font-semibold">{t("generalHeading")}</h2>
+      <section className="surface-panel space-y-4 p-5">
+        <h2 className="text-base font-semibold text-stone-800">{t("generalHeading")}</h2>
         <form action={updateWikiSettingsAction} className="space-y-3">
           <input type="hidden" name="wikiSlug" value={slug} />
-          <label className="block text-sm">
+          <label className="block text-sm font-medium text-stone-700">
             {t("titleLabel")}
-            <input name="title" defaultValue={wiki.title} className="mt-1 w-full border rounded px-3 py-2" />
+            <input name="title" defaultValue={wiki.title} className="field-control mt-1.5" />
           </label>
-          <label className="block text-sm">
+          <label className="block text-sm font-medium text-stone-700">
             {t("descriptionLabel")}
-            <input name="description" defaultValue={wiki.description ?? ""} className="mt-1 w-full border rounded px-3 py-2" />
+            <input name="description" defaultValue={wiki.description ?? ""} className="field-control mt-1.5" />
           </label>
-          <label className="block text-sm">
+          <label className="block text-sm font-medium text-stone-700">
             {t("visibilityLabel")}
-            <select name="visibility" defaultValue={wiki.visibility} className="mt-1 block border rounded px-3 py-2">
+            <select name="visibility" defaultValue={wiki.visibility} className="field-control mt-1.5 block">
               <option value="private">{t("visibilityPrivate")}</option>
               <option value="unlisted">{t("visibilityUnlisted")}</option>
             </select>
           </label>
-          <button className="bg-stone-900 text-white rounded px-4 py-2">{t("save")}</button>
+          <button className="btn-primary text-sm">{t("save")}</button>
         </form>
       </section>
 
       {/* 멤버 */}
-      <section className="border rounded-lg p-4 space-y-3">
-        <h2 className="font-semibold">{t("membersHeading")}</h2>
-        <ul className="space-y-2">
+      <section className="surface-panel space-y-4 p-5">
+        <h2 className="text-base font-semibold text-stone-800">{t("membersHeading")}</h2>
+        <ul className="divide-y divide-stone-100">
           {members.map((m) => (
-            <li key={m.userId} className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <li key={m.userId} className="flex flex-col gap-2 py-3 text-sm first:pt-0 sm:flex-row sm:items-center sm:justify-between">
               <span className="min-w-0 break-words sm:truncate">{m.user.name ?? m.user.email}</span>
               <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
                 <form action={updateMemberRoleAction} className="flex min-w-0 flex-1 items-center gap-1 sm:flex-none">
                   <input type="hidden" name="wikiSlug" value={slug} />
                   <input type="hidden" name="userId" value={m.userId} />
-                  <select name="role" defaultValue={m.role} className="min-w-0 flex-1 rounded border px-2 py-1 sm:flex-none">
+                  <select name="role" defaultValue={m.role} className="field-control min-w-0 flex-1 py-1 text-xs sm:w-auto sm:flex-none">
                     {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
-                  <button className="shrink-0 rounded border px-2 py-1 hover:bg-gray-50">{t("changeRole")}</button>
+                  <button className="btn-secondary btn-compact shrink-0">{t("changeRole")}</button>
                 </form>
                 <form action={removeMemberAction} className="shrink-0">
                   <input type="hidden" name="wikiSlug" value={slug} />
                   <input type="hidden" name="userId" value={m.userId} />
-                  <button className="border rounded px-2 py-1 text-red-600 hover:bg-red-50">{t("remove")}</button>
+                  <button className="btn-danger btn-compact">{t("remove")}</button>
                 </form>
               </div>
             </li>
           ))}
         </ul>
-        <form action={inviteMemberAction} className="grid gap-2 border-t pt-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <form action={inviteMemberAction} className="grid gap-2 border-t border-stone-100 pt-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
           <input type="hidden" name="wikiSlug" value={slug} />
-          <input name="email" type="email" required placeholder={t("invitePlaceholder")} className="min-w-0 rounded border px-3 py-2 text-sm" />
-          <select name="role" defaultValue="viewer" className="w-full rounded border px-2 py-2 text-sm sm:w-auto">
+          <input name="email" type="email" required autoComplete="email" spellCheck={false} placeholder={t("invitePlaceholder")} className="field-control min-w-0 text-sm" />
+          <select name="role" defaultValue="viewer" className="field-control text-sm sm:w-auto">
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
-          <button className="w-full rounded bg-stone-900 px-3 py-2 text-sm text-white sm:w-auto">{t("invite")}</button>
+          <button className="btn-primary w-full text-sm sm:w-auto">{t("invite")}</button>
         </form>
       </section>
 
       {/* 공유 링크 */}
-      <section className="border rounded-lg p-4 space-y-3">
-        <h2 className="font-semibold">{t("shareLinksHeading")}</h2>
+      <section className="surface-panel space-y-4 p-5">
+        <h2 className="text-base font-semibold text-stone-800">{t("shareLinksHeading")}</h2>
         <ul className="space-y-2">
-          {links.length === 0 && <li className="text-sm text-gray-400">{t("noShareLinks")}</li>}
+          {links.length === 0 && <li className="text-sm text-stone-400">{t("noShareLinks")}</li>}
           {links.map((l) => (
             <li key={l.id} className="flex items-center justify-between gap-2 text-sm">
-              <code className="min-w-0 flex-1 truncate rounded bg-gray-100 px-2 py-1 text-xs">/s/{l.token}</code>
+              <code className="min-w-0 flex-1 truncate rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-xs text-stone-600">/s/{l.token}</code>
               <form action={revokeShareLinkAction}>
                 <input type="hidden" name="wikiSlug" value={slug} />
                 <input type="hidden" name="linkId" value={l.id} />
-                <button className="border rounded px-2 py-1 text-red-600 hover:bg-red-50">{t("revoke")}</button>
+                <button className="btn-danger btn-compact">{t("revoke")}</button>
               </form>
             </li>
           ))}
         </ul>
         <form action={createShareLinkAction}>
           <input type="hidden" name="wikiSlug" value={slug} />
-          <button className="border rounded px-3 py-2 text-sm hover:bg-gray-50">{t("createShareLink")}</button>
+          <button className="btn-secondary text-sm">{t("createShareLink")}</button>
         </form>
       </section>
 
       {/* 위험 구역 */}
-      <section className="border border-red-200 rounded-lg p-4 space-y-3">
-        <h2 className="font-semibold text-red-700">{t("dangerZone")}</h2>
+      <section className="surface-panel-danger space-y-3 p-5">
+        <h2 className="font-semibold text-rose-700">{t("dangerZone")}</h2>
         <form action={deleteWikiAction}>
           <input type="hidden" name="wikiSlug" value={slug} />
           <p className="mb-2 text-sm text-stone-600">{t("trashDescription")}</p>
@@ -138,10 +139,10 @@ export default async function WikiSettings({ params }: { params: Promise<{ slug:
               pattern={slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}
               autoComplete="off"
               spellCheck={false}
-              className="mb-2 mt-1 w-full rounded border border-red-200 px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              className="field-control mb-2 mt-1 font-mono text-sm focus-visible:border-rose-500 focus-visible:ring-rose-200"
             />
           </label>
-          <button className="rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">{t("deleteWiki")}</button>
+          <button className="btn-danger text-sm">{t("deleteWiki")}</button>
         </form>
       </section>
     </main>

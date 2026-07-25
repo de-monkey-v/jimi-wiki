@@ -18,7 +18,7 @@ type PinnedItem =
   | { type: "folder"; category: string };
 
 function linkCls(active: boolean) {
-  return `block truncate rounded-md py-1 pr-2 text-sm ${
+  return `block truncate rounded-md py-1 pr-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
     active ? "bg-stone-200 text-stone-900 font-medium" : "text-stone-600 hover:bg-stone-100"
   }`;
 }

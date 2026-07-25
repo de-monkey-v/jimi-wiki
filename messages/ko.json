@@ -77,6 +77,7 @@
   },
   "Common": {
     "appName": "jimi-wiki",
+    "skipToContent": "본문으로 건너뛰기",
     "noscriptWarning": "JavaScript가 실행되지 않고 있습니다 — 모달·채팅·폴더 펼침이 동작하지 않습니다. Brave Shields(주소창의 사자 아이콘)에서 이 사이트의 스크립트 차단을 해제하거나, 브라우저의 JavaScript 설정을 확인하세요.",
     "appDescription": "LLM이 유지보수하는 위키 플랫폼"
   },

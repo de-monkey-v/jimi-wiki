@@ -41,7 +41,7 @@ export default function LocaleSwitcher({
           disabled={pending}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className="flex items-center gap-1.5 rounded-md border border-black/10 bg-white/90 px-2.5 py-1.5 font-medium text-neutral-700 shadow-sm backdrop-blur transition hover:bg-white disabled:opacity-60 dark:border-white/15 dark:bg-neutral-800/90 dark:text-neutral-200 dark:hover:bg-neutral-800"
+          className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white/90 px-2.5 py-1.5 font-medium text-stone-700 shadow-sm backdrop-blur transition hover:border-stone-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-60"
         >
           <span aria-hidden>🌐</span>
           <span>{LOCALE_LABELS[current]}</span>
@@ -50,7 +50,7 @@ export default function LocaleSwitcher({
         {open && (
           <ul
             role="listbox"
-            className="absolute right-0 mt-1 min-w-[8rem] overflow-hidden rounded-md border border-black/10 bg-white py-1 shadow-lg dark:border-white/15 dark:bg-neutral-800"
+            className="absolute right-0 mt-1 min-w-[8rem] overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
           >
             {LOCALES.map((loc) => (
               <li key={loc}>
@@ -59,8 +59,8 @@ export default function LocaleSwitcher({
                   role="option"
                   aria-selected={loc === current}
                   onClick={() => pick(loc)}
-                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left transition hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
-                    loc === current ? "font-semibold text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200"
+                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-stone-700 transition hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
+                    loc === current ? "font-semibold text-indigo-600" : "text-stone-700"
                   }`}
                 >
                   {LOCALE_LABELS[loc]}

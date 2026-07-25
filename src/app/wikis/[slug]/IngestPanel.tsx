@@ -12,7 +12,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex items-center gap-2 rounded bg-stone-900 px-4 py-2 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:bg-stone-500"
+      className="btn-primary flex items-center gap-2 disabled:bg-stone-500"
     >
       {pending && (
         <span aria-hidden="true" className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent motion-reduce:animate-none" />
@@ -27,7 +27,7 @@ export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
   const t = useTranslations("WikisSlugIngestPanel");
   const [allowExternalAi, setAllowExternalAi] = useState(true);
   return (
-    <form action={ingestAction} encType="multipart/form-data" className="space-y-3 rounded-lg border p-4">
+    <form action={ingestAction} encType="multipart/form-data" className="space-y-4">
       <EmptyState
         asset="ingest-flow"
         title={t("emptyTitle")}
@@ -45,7 +45,7 @@ export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
           inputMode="url"
           autoComplete="off"
           placeholder={t("urlPlaceholder")}
-          className="w-full rounded border px-3 py-2 focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+          className="field-control"
         />
       </div>
       <div>
@@ -56,7 +56,7 @@ export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
           rows={3}
           autoComplete="off"
           placeholder={t("textPlaceholder")}
-          className="w-full rounded border px-3 py-2 text-sm focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+          className="field-control text-sm"
         />
       </div>
       <div>
@@ -66,7 +66,7 @@ export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
           name="title"
           autoComplete="off"
           placeholder={t("titlePlaceholder")}
-          className="w-full rounded border px-3 py-2 focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30"
+          className="field-control"
         />
       </div>
       <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5">
@@ -94,7 +94,7 @@ export function IngestPanel({ wikiSlug }: { wikiSlug: string }) {
           name="file"
           multiple
           accept=".pdf,.docx,.pptx,.xlsx,.odt,.odp,.ods,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,.zip"
-          className="w-full rounded border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 file:mr-3 file:rounded file:border-0 file:bg-stone-200 file:px-3 file:py-1 file:text-stone-700"
+          className="field-control text-sm file:mr-3 file:rounded file:border-0 file:bg-stone-200 file:px-3 file:py-1 file:text-stone-700"
         />
         <p className="text-xs text-stone-500">{t("fileHint")}</p>
       </div>

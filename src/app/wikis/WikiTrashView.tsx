@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/session";
 import { listTrashedOwnedWikis } from "@/lib/wiki";
 import { purgeWikiAction, restoreWikiAction } from "./manage-actions";
 import { unauthenticatedPath } from "@/lib/auth-mode";
+import { AsyncSubmitButton } from "@/components/AsyncSubmitButton";
 
 export async function WikiTrashView() {
   const user = await getCurrentUser();
@@ -28,7 +29,7 @@ export async function WikiTrashView() {
       ) : (
         <ul className="mt-6 space-y-3">
           {wikis.map((wiki) => (
-            <li key={wiki.id} className="surface-panel p-4">
+            <li key={wiki.id} className="surface-panel card-hover p-4">
               <div className="break-words font-semibold">{wiki.title}</div>
               <div className="mt-1 break-words text-xs text-stone-500">
                 {t("details", {
@@ -41,7 +42,7 @@ export async function WikiTrashView() {
               <div className="mt-3 flex flex-wrap items-end gap-2">
                 <form action={restoreWikiAction}>
                   <input type="hidden" name="wikiSlug" value={wiki.slug} />
-                  <button className="btn-secondary text-sm">{t("restore")}</button>
+                  <AsyncSubmitButton idle={t("restore")} pending={t("restorePending")} className="btn-secondary text-sm" />
                 </form>
                 <form action={purgeWikiAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="wikiSlug" value={wiki.slug} />
@@ -49,7 +50,7 @@ export async function WikiTrashView() {
                     {t("purgeConfirm", { slug: wiki.slug })}
                     <input name="confirmSlug" required autoComplete="off" spellCheck={false} className="field-control mt-1 block py-1 font-mono text-xs focus-visible:border-rose-500 focus-visible:ring-rose-200" />
                   </label>
-                  <button className="btn-danger text-sm">{t("purge")}</button>
+                  <AsyncSubmitButton idle={t("purge")} pending={t("purgePending")} className="btn-danger text-sm" />
                 </form>
               </div>
             </li>

@@ -1022,8 +1022,10 @@
     "empty": "回收站为空。",
     "details": "{slug} · {pages} 个页面 · {sources} 个来源 · 自动删除 {purgeAt}",
     "restore": "恢复",
+    "restorePending": "恢复中…",
     "purgeConfirm": "确认永久删除: {slug}",
-    "purge": "永久删除"
+    "purge": "永久删除",
+    "purgePending": "永久删除中…"
   },
   "WikiContentTrashPage": {
     "title": "回收站",
@@ -1034,7 +1036,9 @@
     "sources": "来源",
     "autoDelete": "自动删除 {date}",
     "restore": "恢复",
+    "restorePending": "恢复中…",
     "purgeConfirm": "确认永久删除: {identity}",
-    "purge": "永久删除"
+    "purge": "永久删除",
+    "purgePending": "永久删除中…"
   }
 }

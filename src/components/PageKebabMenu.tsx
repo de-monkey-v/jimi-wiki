@@ -67,5 +67,5 @@ export function PageKebabMenu({
   }
   if (items.length === 0) return null;
 
-  return <KebabMenu label={t("open")} items={items} triggerClassName={triggerClassName} />;
+  return <KebabMenu label={t("open")} items={items} triggerClassName={triggerClassName} busy={pending} />;
 }

@@ -1022,8 +1022,10 @@
     "empty": "Trash is empty.",
     "details": "{slug} · {pages} pages · {sources} sources · auto-delete {purgeAt}",
     "restore": "Restore",
+    "restorePending": "Restoring…",
     "purgeConfirm": "Confirm permanent deletion: {slug}",
-    "purge": "Delete permanently"
+    "purge": "Delete permanently",
+    "purgePending": "Deleting…"
   },
   "WikiContentTrashPage": {
     "title": "Trash",
@@ -1034,7 +1036,9 @@
     "sources": "Sources",
     "autoDelete": "Auto-delete {date}",
     "restore": "Restore",
+    "restorePending": "Restoring…",
     "purgeConfirm": "Confirm permanent deletion: {identity}",
-    "purge": "Delete permanently"
+    "purge": "Delete permanently",
+    "purgePending": "Deleting…"
   }
 }

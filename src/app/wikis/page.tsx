@@ -36,14 +36,14 @@ export default async function WikisPage({
           <h1 className="page-title">jimi-wiki</h1>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-stone-500">
-          <Link href="/keys" className="rounded hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("apiKeys")}</Link>
-          <Link href="/docs" className="rounded hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("integrationGuide")}</Link>
-          <Link href="/wikis?view=trash" className="rounded hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("trash")}</Link>
+          <Link href="/keys" className="rounded transition-colors hover:text-stone-800 hover:underline underline-offset-[3px] active:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("apiKeys")}</Link>
+          <Link href="/docs" className="rounded transition-colors hover:text-stone-800 hover:underline underline-offset-[3px] active:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("integrationGuide")}</Link>
+          <Link href="/wikis?view=trash" className="rounded transition-colors hover:text-stone-800 hover:underline underline-offset-[3px] active:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("trash")}</Link>
           <span className="text-stone-300">·</span>
           <span className="text-xs text-stone-400">{user.email}</span>
           {authMode() !== "tailscale" ? (
             <form action={logoutAction}>
-              <button className="rounded hover:text-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("logout")}</button>
+              <button className="rounded transition-colors hover:text-stone-800 hover:underline underline-offset-[3px] active:text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("logout")}</button>
             </form>
           ) : null}
         </div>

@@ -1022,8 +1022,10 @@
     "empty": "휴지통이 비어 있습니다.",
     "details": "{slug} · 페이지 {pages}개 · 원문 {sources}개 · 자동 삭제 {purgeAt}",
     "restore": "복원",
+    "restorePending": "복원 중…",
     "purgeConfirm": "영구 삭제 확인: {slug}",
-    "purge": "영구 삭제"
+    "purge": "영구 삭제",
+    "purgePending": "영구 삭제 중…"
   },
   "WikiContentTrashPage": {
     "title": "휴지통",
@@ -1034,7 +1036,9 @@
     "sources": "원문",
     "autoDelete": "자동 삭제 {date}",
     "restore": "복원",
+    "restorePending": "복원 중…",
     "purgeConfirm": "영구 삭제 확인: {identity}",
-    "purge": "영구 삭제"
+    "purge": "영구 삭제",
+    "purgePending": "영구 삭제 중…"
   }
 }

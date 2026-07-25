@@ -5,6 +5,7 @@ import { hasRole } from "@/lib/api-gate";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser } from "@/lib/wiki";
+import { AsyncSubmitButton } from "@/components/AsyncSubmitButton";
 import {
   purgePageFromTrashAction,
   purgeSavedLinkAction,
@@ -42,15 +43,15 @@ export default async function WikiContentTrashPage({ params }: { params: Promise
     restoreAction: (formData: FormData) => Promise<void>;
     purgeAction: (formData: FormData) => Promise<void>;
   }) => (
-    <li className="surface-panel p-3">
+    <li className="surface-panel card-hover p-3">
       <div className="break-words font-medium text-stone-900">{title}</div>
       <div className="mt-1 break-words text-xs text-stone-500"><code className="break-all">{identity}</code> · {t("autoDelete", { date: purgeAt ? format.dateTime(purgeAt, { dateStyle: "medium", timeStyle: "short" }) : "—" })}</div>
       {restorable && <div className="mt-3 flex flex-wrap items-end gap-2">
-        <form action={restoreAction}><Hidden wikiSlug={wikiSlug} name={kind} value={identity} /><button className="btn-secondary btn-compact">{t("restore")}</button></form>
+        <form action={restoreAction}><Hidden wikiSlug={wikiSlug} name={kind} value={identity} /><AsyncSubmitButton idle={t("restore")} pending={t("restorePending")} className="btn-secondary btn-compact" /></form>
         {owner && <form action={purgeAction} className="flex items-end gap-2">
           <Hidden wikiSlug={wikiSlug} name={kind} value={identity} />
           <label className="text-xs text-stone-500">{t("purgeConfirm", { identity })}<input name="confirm" required autoComplete="off" spellCheck={false} className="field-control mt-1 block py-1 font-mono text-xs focus-visible:border-rose-500 focus-visible:ring-rose-200" /></label>
-          <button className="btn-danger btn-compact">{t("purge")}</button>
+          <AsyncSubmitButton idle={t("purge")} pending={t("purgePending")} className="btn-danger btn-compact" />
         </form>}
       </div>}
     </li>

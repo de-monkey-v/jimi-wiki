@@ -1022,8 +1022,10 @@
     "empty": "ゴミ箱は空です。",
     "details": "{slug} · ページ {pages}件 · 原文 {sources}件 · 自動削除 {purgeAt}",
     "restore": "復元",
+    "restorePending": "復元中…",
     "purgeConfirm": "完全削除の確認: {slug}",
-    "purge": "完全削除"
+    "purge": "完全削除",
+    "purgePending": "完全削除中…"
   },
   "WikiContentTrashPage": {
     "title": "ゴミ箱",
@@ -1034,7 +1036,9 @@
     "sources": "原文",
     "autoDelete": "自動削除 {date}",
     "restore": "復元",
+    "restorePending": "復元中…",
     "purgeConfirm": "完全削除の確認: {identity}",
-    "purge": "完全削除"
+    "purge": "完全削除",
+    "purgePending": "完全削除中…"
   }
 }

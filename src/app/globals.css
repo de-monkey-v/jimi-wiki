@@ -263,9 +263,31 @@ a.accent, .accent { color: var(--accent); }
   background: #eef2ff; /* indigo-50 */
   border-color: #c7d2fe; /* indigo-200 */
 }
+/* 케밥(⋮) 트리거 상태 — 목록 행이든 상세 헤더(btn-secondary)든 hover·눌림·열림 반응이 같아야 한다.
+   Tailwind 유틸리티는 @layer utilities 안이라 비레이어인 .btn-secondary 계열에 밀린다.
+   그래서 상태를 여기(비레이어)에 두고, .btn-* 정의보다 뒤에 놓아 동일 특이도에서 이기게 한다. */
+.kebab-trigger {
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.kebab-trigger:hover {
+  background: #e7e5e4; /* stone-200 */
+  color: #44403c; /* stone-700 */
+}
+.kebab-trigger:active { background: #d6d3d1; } /* stone-300 — 눌림 */
+.kebab-trigger[aria-expanded="true"] { /* 메뉴가 열려 있는 동안 트리거도 켜져 보이게 */
+  background: #e7e5e4;
+  color: #44403c;
+}
+.kebab-trigger:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+.kebab-trigger:disabled { cursor: progress; opacity: 0.6; }
+
 @media (prefers-reduced-motion: reduce) {
   .card-hover { transition: box-shadow 0.15s, border-color 0.15s; }
   .card-hover:hover { transform: none; }
+  .kebab-trigger { transition: none; }
 }
 
 /* 위키링크 — 존재하는 페이지: 본문색 + 세련된 밑줄.

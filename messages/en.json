@@ -81,6 +81,11 @@
     "noscriptWarning": "JavaScript is not running — modals, chat, and folder expansion won't work. Disable script blocking for this site in Brave Shields (the lion icon in the address bar), or check your browser's JavaScript settings.",
     "appDescription": "A wiki platform maintained by an LLM"
   },
+  "DeploymentSkew": {
+    "message": "This tab is out of date — the app was redeployed. Reload to reconnect.",
+    "disconnected": "Can't reach the server, so this view may be out of date. Reload if it persists.",
+    "reload": "Reload"
+  },
   "DocsPage": {
     "metaTitle": "Integration Guide — jimi-wiki",
     "metaDescription": "How to maintain this wiki with external tools (MCP, Skill, REST) instead of the app's built-in AI",

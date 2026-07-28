@@ -3,7 +3,13 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # develop도 검사한다. main만 걸어두면 ff-merge로 승격한 뒤에야 CI가 처음 돌아,
+    # 깨진 변경을 릴리스 브랜치로 올린 다음에 발견하게 된다.
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   checks:

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { DeploymentSkewNotice, useDeploymentSkew } from "@/components/DeploymentSkewNotice";
 import { listRunsAction, type RunListItem } from "../actions";
 
 const TYPE_KINDS = new Set(["ingest", "query", "lint"]);
@@ -45,6 +46,7 @@ export function JobsIndicator({ slug }: { slug: string }) {
   const router = useRouter();
   const t = useTranslations("WikisSlugJobsIndicator");
   const prevActiveIds = useRef<Set<string>>(new Set());
+  const { status: skew, noteSuccess, noteFailure } = useDeploymentSkew();
 
   const activeRuns = runs.filter((r) => ACTIVE.has(r.status));
   const activeCount = activeRuns.length;
@@ -55,6 +57,7 @@ export function JobsIndicator({ slug }: { slug: string }) {
   const poll = useCallback(async () => {
     try {
       const list = await listRunsAction(slug);
+      noteSuccess(); // 액션이 resolve됐다 = 서버·클라이언트 배포가 일치한다
       if (!list) return;
       setNow(Date.now());
       // 실행 중이던 잡이 완료로 전이하면 서버 컴포넌트 갱신(페이지 목록·TOC 반영)
@@ -63,13 +66,18 @@ export function JobsIndicator({ slug }: { slug: string }) {
       prevActiveIds.current = nowActive;
       setRuns(list);
       if (completed) router.refresh();
-    } catch {
-      // 일시적 오류는 다음 폴링에서 재시도
+    } catch (e) {
+      // 일시적 오류는 다음 폴링에서 재시도. 배포 교체로 인한 영구 실패면 stale이 켜진다.
+      noteFailure(e);
     }
-  }, [slug, router]);
+  }, [slug, router, noteSuccess, noteFailure]);
 
   // 활성 잡이나 열린 패널이 있으면 3초, 아니면 15초 간격으로 폴링(새 잡 시작·단계 전이 감지)
+  // 배포 스큐가 확정되면 폴링을 멈춘다 — 사라진 액션 ID를 다시 던져도 복구되지 않고
+  // 서버 로그만 채운다(방치된 탭 하나가 시간당 60건씩 쌓은 전례가 있다).
+  // 단순 연결 끊김(disconnected)은 회복될 수 있으므로 계속 폴링한다.
   useEffect(() => {
+    if (skew === "stale") return;
     const t0 = setTimeout(poll, 0); // 즉시 1회 (effect 내 동기 setState 회피)
     const interval = activeCount > 0 || open ? 3000 : 15000;
     const iv = setInterval(poll, interval);
@@ -77,10 +85,11 @@ export function JobsIndicator({ slug }: { slug: string }) {
       clearTimeout(t0);
       clearInterval(iv);
     };
-  }, [poll, activeCount, open]);
+  }, [poll, activeCount, open, skew]);
 
   return (
     <div className="fixed bottom-28 right-4 z-30 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 sm:bottom-8 sm:right-24">
+      {skew !== "ok" && <DeploymentSkewNotice status={skew} className="w-96 max-w-full" />}
       {open && (
         <div className="w-96 max-w-full rounded-xl border border-stone-200 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-stone-100 px-4 py-2.5">

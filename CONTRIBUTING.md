@@ -17,10 +17,10 @@ pnpm install
 cp .env.example .env          # fill in at least GEMINI_API_KEY
 pnpm db:up                    # start development Postgres (pgvector) on port 5434
 pnpm db:migrate               # apply existing migrations non-interactively
-pnpm dev:all                  # web (:3007) + ingest worker together
+pnpm dev:all                  # web (:3006) + ingest worker together
 ```
 
-Open http://localhost:3007 and create the first admin at `/setup`. See the [README](README.md)
+Open http://localhost:3006 and create the first admin at `/setup`. See the [README](README.md)
 for the full environment-variable reference and auth modes.
 
 ### Before you open a PR
@@ -52,7 +52,12 @@ Common types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`.
 
 ### Branching
 
-Branch off `dev`, open the PR against `dev`. `main` is the release branch.
+Branch off `develop`, open the PR against `develop`. `main` is the release branch:
+it only ever moves by `git merge --ff-only develop`, and every fast-forward is tagged
+`vX.Y.Z` matching `package.json`'s `version`. **Only tags get deployed** —
+`ops/deploy.sh build` rejects anything that is not a pushed version tag reachable
+from `main`. See [docs/personal-production.md](docs/personal-production.md) for the
+promotion steps.
 
 ### Internationalization (i18n)
 
@@ -86,10 +91,10 @@ pnpm install
 cp .env.example .env          # 최소 GEMINI_API_KEY 채우기
 pnpm db:up                    # 개발 Postgres(pgvector) 5434 포트로 기동
 pnpm db:migrate               # 기존 migration 비대화식 적용
-pnpm dev:all                  # web(:3007) + ingest worker 동시 기동
+pnpm dev:all                  # web(:3006) + ingest worker 동시 기동
 ```
 
-http://localhost:3007 접속 후 `/setup`에서 첫 관리자를 만드세요. 환경변수 전체와 인증 모드는
+http://localhost:3006 접속 후 `/setup`에서 첫 관리자를 만드세요. 환경변수 전체와 인증 모드는
 [README](README.md)를 참고하세요.
 
 ### PR 올리기 전에
@@ -121,7 +126,11 @@ pnpm check:rules   # ontology 규칙 ↔ skill parity
 
 ### 브랜치
 
-`dev`에서 분기하고 PR도 `dev` 대상으로 올리세요. `main`은 릴리스 브랜치입니다.
+`develop`에서 분기하고 PR도 `develop` 대상으로 올리세요. `main`은 릴리스 브랜치입니다.
+`main`은 `git merge --ff-only develop`으로만 움직이고, 모든 fast-forward에는
+`package.json`의 `version`과 일치하는 `vX.Y.Z` 태그를 답니다. **배포 대상은 태그뿐**입니다 —
+`ops/deploy.sh build`는 `main`에서 도달 가능한 push된 버전 태그가 아니면 거부합니다.
+승격 절차는 [docs/personal-production.md](docs/personal-production.md)를 참고하세요.
 
 ### 국제화(i18n)
 

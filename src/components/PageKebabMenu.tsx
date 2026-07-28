@@ -53,14 +53,21 @@ export function PageKebabMenu({
       onSelect: () => {
         if (!window.confirm(tKc("trashConfirm"))) return;
         start(async () => {
-          const result = await trashPageFromMenuAction(wikiSlug, pageSlug, currentVersion);
-          if (result.status === "error") {
-            window.alert(tKc(`error.${result.code ?? "failed"}`));
-            router.refresh(); // versionConflict 등 → 최신 버전으로 재수화 후 재시도 가능
-            return;
+          try {
+            const result = await trashPageFromMenuAction(wikiSlug, pageSlug, currentVersion);
+            if (result.status === "error") {
+              window.alert(tKc(`error.${result.code ?? "failed"}`));
+              router.refresh(); // versionConflict 등 → 최신 버전으로 재수화 후 재시도 가능
+              return;
+            }
+            if (afterTrash === "goHome") router.push(`/wikis/${encodeURIComponent(wikiSlug)}`);
+            else router.refresh();
+          } catch {
+            // 액션이 throw하는 경로(배포 교체로 액션 ID가 사라졌거나 네트워크 단절).
+            // 반환값 검사로는 잡히지 않아 transition의 unhandled rejection이 되고,
+            // 파괴적 동작인데도 화면에는 아무 표시가 남지 않는다.
+            window.alert(tKc("error.failed"));
           }
-          if (afterTrash === "goHome") router.push(`/wikis/${encodeURIComponent(wikiSlug)}`);
-          else router.refresh();
         });
       },
     });

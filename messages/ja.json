@@ -81,6 +81,11 @@
     "noscriptWarning": "JavaScript が実行されていません — モーダル・チャット・フォルダ展開が動作しません。Brave Shields（アドレスバーのライオンアイコン）でこのサイトのスクリプトブロックを解除するか、ブラウザの JavaScript 設定を確認してください。",
     "appDescription": "LLMがメンテナンスするwikiプラットフォーム"
   },
+  "DeploymentSkew": {
+    "message": "アプリが再デプロイされ、このタブは古くなっています。再読み込みすると最新の状態に戻ります。",
+    "disconnected": "サーバーに接続できず、表示が最新でない可能性があります。続く場合は再読み込みしてください。",
+    "reload": "再読み込み"
+  },
   "DocsPage": {
     "metaTitle": "連携ガイド — jimi-wiki",
     "metaDescription": "このwikiをアプリ内蔵AIを使わず外部ツール（MCP・Skill・REST）でメンテナンスする方法",

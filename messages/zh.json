@@ -81,6 +81,11 @@
     "noscriptWarning": "JavaScript 未运行 — 弹窗、聊天和文件夹展开将无法使用。请在 Brave Shields（地址栏中的狮子图标）中解除本站点的脚本拦截，或检查浏览器的 JavaScript 设置。",
     "appDescription": "由 LLM 维护的维基平台"
   },
+  "DeploymentSkew": {
+    "message": "应用已重新部署，此标签页已过期。刷新后即可恢复。",
+    "disconnected": "无法连接服务器，当前内容可能不是最新的。若持续出现请刷新。",
+    "reload": "刷新"
+  },
   "DocsPage": {
     "metaTitle": "集成指南 — jimi-wiki",
     "metaDescription": "如何在不使用应用内置 AI 的情况下，用外部工具（MCP、Skill、REST）维护此 wiki",

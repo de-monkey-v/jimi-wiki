@@ -27,8 +27,7 @@ docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U jimi -d jimi -v new_pa
 ALTER ROLE jimi PASSWORD :'new_password';
 SQL
 mv "$temp" "$env_file"
-(
-  cd "$repo"
-  docker compose --env-file "$env_file" --file "$production_compose" up -d --force-recreate db embeddings
-)
+# 운영 compose 호출은 ops/compose.sh 하나로 모은다 — env-file·compose 파일이
+# 호출자마다 달라지면 개발 설정으로 뜬 운영 컨테이너를 만들어낸다.
+JIMI_ENV_FILE="$env_file" "$repo/ops/compose.sh" up -d --force-recreate db embeddings
 echo "PostgreSQL role, container environment, production DATABASE_URL, and DB/embedding loopback bindings were applied together"

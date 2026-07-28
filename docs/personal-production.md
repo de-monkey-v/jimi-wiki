@@ -2,6 +2,17 @@
 
 This runbook moves a single-owner Jimi Wiki from tmux development processes to a private Tailscale HTTPS endpoint backed by `systemd --user` services. PostgreSQL and the embedding server remain in Docker through the explicit `docker-compose.production.yml`; the default `docker-compose.yml` is development-only. The web, worker, and pinned Codex OAuth proxy run on the host.
 
+**Always drive production containers through `ops/compose.sh`.** It is the single entry point that pins `--env-file ~/.config/jimi-wiki/app.env` and `--file docker-compose.production.yml`:
+
+```bash
+ops/compose.sh up -d --force-recreate db embeddings
+ops/compose.sh ps
+```
+
+A bare `docker compose ...` inside the checkout picks up the development compose file and the repository `.env` instead. That is not hypothetical: from 2026-07-02 to 07-28 the production database ran that way, bound to `0.0.0.0:5433` (exposed to the whole tailnet) and holding the development password. Editing a compose file does not fix an already-created container — its port mappings and environment stay until it is recreated. Never merge the two compose files with `-f`; the projects are separate (`jimi-wiki-app` vs `jimi-wiki-dev`) and merging opens both ports.
+
+`ops/check-production-containers.sh` verifies at runtime that the live containers really came from the production compose file and bind only to loopback. `ops/deploy.sh activate` runs it before touching anything (`JIMI_SKIP_CONTAINER_CHECK=1` overrides), and `ops/health-check.sh` includes it.
+
 ## Security contract
 
 - Humans use only `https://<device>.<tailnet>.ts.net`. Tailscale Funnel stays off.
@@ -66,7 +77,7 @@ rsync -a --checksum .blobs/ "$HOME/.local/share/jimi-wiki/shared/blobs/"
 pnpm content:manifest -- --blob-dir "$HOME/.local/share/jimi-wiki/shared/blobs" --output /tmp/jimi-before.json
 ```
 
-Rotate PostgreSQL only after `app.env` exists. The script always selects `docker-compose.production.yml`; it changes the live role password, `DATABASE_URL`, and the production Compose container environment together, and force-recreates DB/embedding so their loopback-only bindings take effect:
+Rotate PostgreSQL only after `app.env` exists. The script recreates DB/embedding through `ops/compose.sh`, so the role password, `DATABASE_URL`, and the production Compose container environment change together and the loopback-only bindings take effect. Rotating the password without also running `ALTER ROLE` on the live container is what left the two out of sync for weeks in 2026-07 — use the script rather than editing `app.env` by hand:
 
 ```bash
 ops/rotate-db-password.sh
@@ -152,6 +163,8 @@ tailscale funnel status
 ```
 
 All four application ports must be loopback-only, readiness must be 200, and Funnel must be off. Verify an old key returns 401, the new personal key succeeds on its wiki, and it gets 404 on another wiki.
+
+`ops/health-check.sh` runs every check to completion and reports all failures together rather than stopping at the first one. It used to exit early, so while readiness was failing with a 503 the loopback-binding check behind it never ran at all — that is how a database exposed to the tailnet stayed hidden for 26 days. Expect `Jimi Wiki health check FAILED (n):` followed by one line per failed check.
 
 The rollback target is whatever `$HOME/.local/share/jimi-wiki/previous` points at; read its `.jimi-tag` to see which release that is. Before the first research row is created, `ops/deploy.sh rollback` may swap the release symlink back and restart services. Once research rows exist, a rollback that also needs the old database contract must stop every writer and restore the encrypted backup taken immediately before this cutover; the release symlink alone is not a database rollback. For an account-reset rollback, restore that same database/blob backup, then run `ops/hermes-jimi-mcp.sh restore-pre-reset` to restore the protected matching Hermes key/config snapshot.
 

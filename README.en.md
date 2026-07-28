@@ -146,7 +146,10 @@ The default `docker-compose.yml` is the `jimi-wiki-dev` project and uses a devel
 container, volume, and port 5434. `dev`, `dev:all`, `worker:dev`, `smoke`, `db:migrate`,
 `db:migrate:create`, and `db:seed` refuse to run unless `DATABASE_URL` points to loopback port
 5434. Production explicitly selects `docker-compose.production.yml`; its PostgreSQL and embedding
-ports (5433/8080) remain loopback-only. The web, worker, and Codex proxy run from atomic releases
+ports (5433/8080) remain loopback-only. **Always drive production containers through
+`ops/compose.sh`** (`ops/compose.sh up -d --force-recreate db`) — a bare `docker compose` inside the
+checkout picks up the development compose file and the repository `.env`, and merging the two
+compose files with `-f` opens the development ports as well. The web, worker, and Codex proxy run from atomic releases
 under `systemd --user`. See
 [`docs/personal-production.md`](docs/personal-production.md) for the private Tailscale deployment,
 owner claim, encrypted backup, and real restore workflow. For development, `pnpm dev:all` is enough.

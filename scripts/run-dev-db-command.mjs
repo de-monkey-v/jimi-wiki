@@ -45,7 +45,7 @@ function assertDevContainerOwnsPort(port) {
   if (foreign.length > 0) {
     fail(
       `${port} 포트를 개발 컨테이너(${DEV_DATABASE_CONTAINER})가 아닌 ${foreign.join(", ")}가 노출하고 있습니다.`,
-      "[dev-db] `docker compose --env-file ~/.config/jimi-wiki/app.env -f docker-compose.production.yml up -d --force-recreate db`로 운영 컨테이너를 운영 설정만으로 재기동한 뒤 다시 실행하세요.",
+      "[dev-db] `ops/compose.sh up -d --force-recreate db`로 운영 컨테이너를 운영 설정만으로 재기동한 뒤 다시 실행하세요.",
     );
   }
 }

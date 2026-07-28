@@ -120,6 +120,11 @@ case "$command_name" in
     [[ -n "$argument" && -d "$argument" && -f "$argument/.jimi-release" ]] || usage
     [[ -f "$env_file" ]] || { echo "missing production env: $env_file" >&2; exit 1; }
     [[ "$(stat -c %a "$env_file")" == "600" ]] || { echo "production env must be mode 600" >&2; exit 1; }
+    # 서비스를 멈추기 전에, 지금 떠 있는 운영 컨테이너가 정말 운영 설정에서 나왔는지 본다.
+    # 개발 compose로 뜬 DB에 대고 배포하면 마이그레이션이 엉뚱한 설정의 컨테이너에 적용된다.
+    if [[ "${JIMI_SKIP_CONTAINER_CHECK:-0}" != "1" ]]; then
+      "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/check-production-containers.sh"
+    fi
     old_target="$(readlink -f "$current_link" 2>/dev/null || true)"
     stopped=0
     swapped=0

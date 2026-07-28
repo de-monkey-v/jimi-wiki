@@ -12,7 +12,7 @@ profile_dir="${HERMES_PERSONAL_PROFILE_DIR:-$HOME/.hermes/profiles/wiki-personal
 profile_env="$profile_dir/.env"
 profile_config="$profile_dir/config.yaml"
 state_dir="${JIMI_CONFIG_DIR:-$HOME/.config/jimi-wiki}"
-runtime_dir="${JIMI_RELEASE_DIR:-$HOME/.local/share/jimi-wiki/current}"
+runtime_dir="${JIMI_RELEASE_DIR:-$HOME/releases/jimi-wiki/current}"
 config_backup="$state_dir/hermes-personal-config.pre-reset.yaml"
 key_backup="$state_dir/hermes-personal-key.pre-reset.env"
 

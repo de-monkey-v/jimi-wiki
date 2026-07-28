@@ -3,8 +3,9 @@ Description=Jimi Wiki encrypted database and blob backup
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/.local/share/jimi-wiki/current
-ExecStart=%h/.local/share/jimi-wiki/current/ops/backup.sh
+WorkingDirectory=%h/releases/jimi-wiki/current
+Environment=JIMI_STATE_DIR=%h/releases/jimi-wiki
+ExecStart=%h/releases/jimi-wiki/current/ops/backup.sh
 TimeoutStartSec=2h
 UMask=0077
 StandardOutput=journal

@@ -115,7 +115,7 @@ systemctl --user restart \
 JIMI_RELEASE_DIR="$target/current" ops/hermes-jimi-mcp.sh connect
 systemctl --user start \
   jimi-wiki-health.timer jimi-wiki-backup.timer jimi-wiki-restore-verify.timer
-"$target/current/ops/health-check.sh"
+systemctl --user start jimi-wiki-health.service
 ```
 
 The embedding container binds host port 8080 by default. On a host where something else already

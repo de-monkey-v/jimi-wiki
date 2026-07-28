@@ -19,7 +19,9 @@ services:
       timeout: 5s
       retries: 10
 
-  # 운영 자가호스팅 임베딩. web·worker는 host loopback의 8080으로 접근한다.
+  # 운영 자가호스팅 임베딩. web·worker는 host loopback의 EMBED_HOST_PORT(기본 8080)로 접근한다.
+  # 호스트 포트를 설정값으로 둔 이유: 기본 8080은 흔한 번호라 같은 머신의 다른 서비스와
+  # 부딪힌다. 그때 이 값만 옮기면 되고, app.env의 EMBED_BASE_URL·health-check가 함께 따라간다.
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:86-1.9
     container_name: jimi-wiki-embeddings
@@ -28,7 +30,7 @@ services:
     environment:
       HUGGINGFACE_HUB_CACHE: /data
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:${EMBED_HOST_PORT:-8080}:80"
     volumes:
       - jimi-embed-models:/data
     deploy:

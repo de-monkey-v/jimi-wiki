@@ -70,6 +70,14 @@ ops/prepare-env.sh \
 ops/install-systemd.sh
 ```
 
+The embedding container binds host port 8080 by default. On a host where something else already
+holds that port, pass `--embed-port <port>`: it writes both `EMBED_HOST_PORT` (the Compose host
+binding) and `EMBED_BASE_URL` (the address web/worker dial) into `app.env`. Keep the two in sync —
+editing only one leaves the container bound to one port while the app dials another, which breaks
+embedding while every other check still passes. `ops/health-check.sh` guards this directly: it
+watches both ports for non-loopback exposure and fails the `embedding port agreement` check when
+they disagree.
+
 Copy the existing blob archive into the persistent path before activation, then verify it byte-for-byte:
 
 ```bash
@@ -155,9 +163,10 @@ Docker Desktop must also be configured to start at login. Test this with a real 
 ## Verification and rollback
 
 ```bash
+set -a; source "$HOME/.config/jimi-wiki/app.env"; set +a   # 아래 grep이 실제 임베딩 포트를 쓰도록
 curl -fsS http://127.0.0.1:23007/api/readyz
 systemctl --user start jimi-wiki-health.service
-ss -ltnp | grep -E ':(23007|5433|8080|10531)\b'
+ss -ltnp | grep -E ":(23007|5433|${EMBED_HOST_PORT:-8080}|10531)\b"
 tailscale serve status
 tailscale funnel status
 ```

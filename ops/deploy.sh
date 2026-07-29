@@ -2,7 +2,8 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 build <version-tag> | activate <release-dir> | rollback | prune [--dry-run]" >&2
+  echo "usage: $0 build <version-tag> | activate <release-dir> | rollback" >&2
+  echo "       $0 prune [--dry-run] | keep [<release-dir>] | unkeep <release-dir>" >&2
   exit 2
 }
 
@@ -21,6 +22,7 @@ pnpm_system() {
 
 config_dir="${JIMI_CONFIG_DIR:-$HOME/.config/jimi-wiki}"
 actions_key_file="${JIMI_ACTIONS_KEY_FILE:-$config_dir/server-actions-key}"
+keep_marker=".jimi-keep"
 db_container="${JIMI_DB_CONTAINER:-jimi-wiki-db}"
 db_user="${JIMI_DB_USER:-jimi}"
 db_name="${JIMI_DB_NAME:-jimi}"
@@ -86,35 +88,46 @@ in_use_releases() {
   done < <(grep -ho "$releases_dir/[^[:space:]]*" /proc/[0-9]*/maps 2>/dev/null)
 }
 
-# 보존: 최근 keep개 또는 keep_days일 이내 중 넓은 쪽. current·previous·사용 중은 무조건 보호.
+# 사용자가 "이건 남겨둬"라고 못박은 릴리스. 개수 상한과 무관하게 보호한다.
+pinned_releases() {
+  find "$releases_dir" -mindepth 2 -maxdepth 2 -name "$keep_marker" -printf '%h\n' 2>/dev/null
+}
+
+# 보존은 개수 상한이다: current·previous·사용 중·pin된 것 + 최근 keep개.
+#
+# 나이 기준(예전 JIMI_KEEP_DAYS)은 없앴다. 되돌릴 대상은 previous이고, 그보다 오래된
+# 릴리스는 push된 태그에서 `build`로 그대로 재생성된다 — 쌓아두는 것이 사주는 건
+# 재빌드 시간(수 분)뿐인데, 릴리스 하나가 수백 MB를 차지한다. 나이는 "되돌릴
+# 가능성"과 상관이 거의 없으므로, 오래 두고 싶은 릴리스는 `keep`으로 명시한다.
 prune_releases() {
   local dry_run="${1:-}"
-  local keep="${JIMI_KEEP:-3}" keep_days="${JIMI_KEEP_DAYS:-14}"
-  # 잘못된 값은 조용히 다르게 동작한다 — `head -n 0`은 SIGPIPE로, `-n -1`은 "마지막
-  # 하나만 빼고"로 해석돼 보존 범위가 뜻과 어긋난다. 정리 전에 막는다.
-  [[ "$keep" =~ ^[0-9]+$ && "$keep_days" =~ ^[0-9]+$ ]] || {
-    echo "JIMI_KEEP/JIMI_KEEP_DAYS must be non-negative integers (got '$keep' / '$keep_days')" >&2
+  local keep="${JIMI_KEEP:-3}"
+  # 잘못된 값은 조용히 다르게 동작한다 — `head -n -1`은 "마지막 하나만 빼고"로
+  # 해석돼 보존 범위가 뜻과 어긋난다. 정리 전에 막는다.
+  [[ "$keep" =~ ^[0-9]+$ ]] || {
+    echo "JIMI_KEEP must be a non-negative integer (got '$keep')" >&2
     return 1
   }
-  local protected release age
+  local protected release
   protected="$(
     { readlink -f "$current_link" 2>/dev/null || true
       readlink -f "$previous_link" 2>/dev/null || true
       in_use_releases
-      # 최근 keep개는 mtime 기준으로 남긴다. keep=0이면 개수 보호를 쓰지 않겠다는
-      # 뜻인데, `head -n 0`은 SIGPIPE를 내고 pipefail과 겹쳐 정리 자체가 죽는다.
+      pinned_releases
+      # 최근 keep개. 순서는 디렉터리 mtime이 아니라 빌드 시각(.jimi-release의 mtime)으로
+      # 정한다 — 디렉터리 mtime은 pin 마커를 하나 쓰기만 해도 바뀌어, 고정하는 행위가
+      # 엉뚱한 릴리스를 보존 창 밖으로 밀어낸다. .jimi-release는 빌드 때 한 번만 쓴다.
+      # keep=0이면 개수 보호를 쓰지 않겠다는 뜻인데, `head -n 0`은 SIGPIPE를 내고
+      # pipefail과 겹쳐 정리 자체가 죽는다.
       if ((keep > 0)); then
-        find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '[0-9a-f]*' \
-          -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n "$keep" | cut -d' ' -f2-
+        find "$releases_dir" -mindepth 2 -maxdepth 2 -name .jimi-release \
+          -printf '%T@ %h\n' 2>/dev/null | sort -rn | head -n "$keep" | cut -d' ' -f2-
       fi
     } | sort -u
   )"
   while IFS= read -r release; do
     [[ -n "$release" ]] || continue
     grep -qxF "$release" <<<"$protected" && continue
-    # keep_days 이내면 남긴다 — 롤백 창을 개수만으로 좁히지 않는다.
-    age="$(find "$release" -maxdepth 0 -mtime "+$keep_days" -print 2>/dev/null)"
-    [[ -n "$age" ]] || continue
     if [[ "$dry_run" == "--dry-run" ]]; then
       echo "would remove $release"
     else
@@ -330,6 +343,26 @@ case "$command_name" in
     (($# <= 2)) || { echo "prune takes at most one argument" >&2; usage; }
     state_lock
     prune_releases "${argument:-}"
+    ;;
+  keep)
+    # 인자가 없으면 지금 고정된 릴리스를 보여준다.
+    if [[ -z "$argument" ]]; then
+      pinned_releases | sort | while IFS= read -r release; do
+        [[ -n "$release" ]] || continue
+        printf '%s\t%s\n' "$(cat "$release/.jimi-tag" 2>/dev/null || echo '?')" "$release"
+      done
+      exit 0
+    fi
+    [[ -d "$argument" && -f "$argument/.jimi-release" ]] \
+      || { echo "not a release directory: $argument" >&2; exit 1; }
+    : > "$argument/$keep_marker"
+    echo "pinned $argument"
+    ;;
+  unkeep)
+    [[ -d "$argument" && -f "$argument/.jimi-release" ]] \
+      || { echo "not a release directory: $argument" >&2; exit 1; }
+    rm -f -- "$argument/$keep_marker"
+    echo "unpinned $argument"
     ;;
   rollback)
     target="$(readlink -f "$previous_link" 2>/dev/null || true)"

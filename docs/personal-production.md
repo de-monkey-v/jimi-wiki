@@ -103,9 +103,23 @@ After the restart, `activate` waits for the release to actually serve — `/api/
 
 ## Release retention
 
-`ops/deploy.sh prune` (also run automatically before a build and after a successful activation) keeps the newest `JIMI_KEEP` releases (default 3) plus anything newer than `JIMI_KEEP_DAYS` (default 14), and always protects `current`, `previous`, and **any release a running process still references** (`/proc/*/cwd`, `/proc/*/exe`, and mapped files in `/proc/*/maps` — the last one catches a process whose working directory is elsewhere but which loaded code from the release). Deleting a release that a process is still running from does not kill it immediately — it dies later on the next lazy import or static-file read, which is very hard to trace. Stale `.staging-*` directories older than 24h are removed too; younger ones are left alone so a concurrent build is never destroyed. `prune` rejects any argument other than `--dry-run` — a typo like `--dryrun` must not silently turn a preview into a real deletion.
+`ops/deploy.sh prune` (also run automatically before a build and after a successful activation) keeps the newest `JIMI_KEEP` releases (default 3) and always protects `current`, `previous`, **pinned releases** (see below), and **any release a running process still references** (`/proc/*/cwd`, `/proc/*/exe`, and mapped files in `/proc/*/maps` — the last one catches a process whose working directory is elsewhere but which loaded code from the release).
+
+Retention is a **count cap, not an age rule**. Age says almost nothing about whether you will roll back to a release: the rollback target is `previous`, and anything older is reproducible with `ops/deploy.sh build vX.Y.Z` from the pushed tag. Keeping old releases only buys rebuild time (minutes) instead of a symlink swap (seconds), and each retained release costs hundreds of MB. So keep the window small and pin the ones that actually matter.
+
+"Newest" is ordered by build time (`.jimi-release`'s mtime), not the directory mtime — writing a pin marker would otherwise bump a release to the front and silently push another one out of the window.
+
+```bash
+ops/deploy.sh keep "$release"     # pin: never pruned, regardless of the count cap
+ops/deploy.sh keep                # list pinned releases (tag + path)
+ops/deploy.sh unkeep "$release"   # unpin
+```
+
+Pin the release you consider your known-good fallback. Rebuild-from-tag depends on the registry still serving the same dependencies (`--frozen-lockfile`); a pinned build is the cheap insurance against that. Deleting a release that a process is still running from does not kill it immediately — it dies later on the next lazy import or static-file read, which is very hard to trace. Stale `.staging-*` directories older than 24h are removed too; younger ones are left alone so a concurrent build is never destroyed. `prune` rejects any argument other than `--dry-run` — a typo like `--dryrun` must not silently turn a preview into a real deletion.
 
 Pruning before the build matters: this host keeps releases and Postgres on the same disk, so a full disk does not merely fail the build — it fails Postgres writes at the same time. Use `prune --dry-run` to see what would go.
+
+Sizes are shared: pnpm hardlinks `node_modules` into a common store, so a release directory reports ~1.6G on its own while 19 of them together occupied 8.4G. Deleting one frees only its exclusive blocks (~380MB here), not its reported size.
 
 The steps below are the manual first-cutover procedure. Save `~/.config/jimi-wiki/backup-passphrase` in a password manager before proceeding. Stop every writer (tmux web/worker or the systemd units), then create and actually restore the encrypted backup:
 

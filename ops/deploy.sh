@@ -77,6 +77,13 @@ in_use_releases() {
     rest="${target#"$releases_dir"/}"
     printf '%s\n' "$releases_dir/${rest%%/*}"
   done
+  # cwd가 릴리스 밖인 채 릴리스 코드를 실행하는 프로세스(예: `cd / && node <release>/…`)는
+  # 위 두 링크로 잡히지 않는다. 매핑된 파일까지 봐야 그 경우도 보호된다.
+  while IFS= read -r target; do
+    [[ -n "$target" ]] || continue
+    rest="${target#"$releases_dir"/}"
+    printf '%s\n' "$releases_dir/${rest%%/*}"
+  done < <(grep -ho "$releases_dir/[^[:space:]]*" /proc/[0-9]*/maps 2>/dev/null)
 }
 
 # 보존: 최근 keep개 또는 keep_days일 이내 중 넓은 쪽. current·previous·사용 중은 무조건 보호.
@@ -125,23 +132,34 @@ prune_releases() {
       echo "removing $stale"
       rm -rf -- "$stale"
     fi
-  done < <(find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '.staging-*' -mtime +1 2>/dev/null)
+    # -mtime +1은 "24시간 초과"가 아니라 "48시간 초과"다. 분 단위로 지정해야
+    # 죽은 지 하루 지난 staging이 실제로 정리된다.
+  done < <(find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '.staging-*' -mmin +1440 2>/dev/null)
 }
 
 # 재시작이 실제로 떴는지 확인한다. 전체 health-check.sh는 funnel·키 만료처럼 이 릴리스와
 # 무관한 항목까지 보므로 게이트로 쓰면 멀쩡한 배포가 남의 사정으로 롤백된다.
 wait_ready() {
-  local deadline=$((SECONDS + ${JIMI_READY_TIMEOUT:-120}))
+  local timeout="${JIMI_READY_TIMEOUT:-120}"
+  # 비정수면 산술 확장이 set -u 아래에서 스크립트를 즉시 죽여, 호출부의 "rolling back"
+  # 안내조차 나오지 않는다. 복구는 trap이 하더라도 운영자가 원인을 오판한다.
+  [[ "$timeout" =~ ^[0-9]+$ ]] || {
+    echo "JIMI_READY_TIMEOUT must be a non-negative integer (got '$timeout')" >&2
+    return 1
+  }
+  local deadline=$((SECONDS + timeout))
   local web="${JIMI_READY_URL:-http://127.0.0.1:23007/api/readyz}"
   local proxy="${JIMI_PROXY_READY_URL:-http://127.0.0.1:10531/v1/models}"
-  while ((SECONDS < deadline)); do
+  # 최소 한 번은 실제로 찔러본다. 조건을 앞에 두면 timeout=0에서 한 번도 확인하지
+  # 않고 실패로 단정해 멀쩡한 배포가 항상 롤백된다.
+  while :; do
     if curl --fail --silent --max-time 5 "$web" >/dev/null 2>&1 \
       && curl --fail --silent --max-time 5 "$proxy" >/dev/null 2>&1; then
       return 0
     fi
+    ((SECONDS < deadline)) || return 1
     sleep 2
   done
-  return 1
 }
 
 case "$command_name" in
@@ -284,22 +302,32 @@ case "$command_name" in
     ln -s "$argument" "$next_link"
     mv -T "$next_link" "$current_link"
     swapped=1
-    if [[ -n "$old_target" && "$old_target" != "$argument" ]]; then
-      previous_next="$state_dir/.previous.$$.next"
-      ln -s "$old_target" "$previous_next"
-      mv -T "$previous_next" "$previous_link"
-    fi
     systemctl --user daemon-reload
     systemctl --user restart jimi-wiki-codex-proxy.service jimi-wiki-web.service jimi-wiki-worker.service
     # 여기서 실패하면 stopped/swapped가 아직 1이므로 recover_old가 이전 릴리스를 되살린다.
     # 재시작만 하고 끝내면 "배포 성공"이라고 말한 뒤 서비스가 죽어 있는 상태가 남는다.
     wait_ready || { echo "release did not become ready in time; rolling back" >&2; exit 1; }
+    # previous는 이 릴리스가 실제로 뜬 뒤에만 옮긴다. 교체를 readiness 앞에 두면
+    # 실패한 배포가 previous를 자기 직전 값으로 덮어써, recover_old가 current를
+    # 되살려도 진짜 직전 릴리스가 사라진다 = 다음 rollback이 제자리를 맴돈다.
+    if [[ -n "$old_target" && "$old_target" != "$argument" ]]; then
+      previous_next="$state_dir/.previous.$$.next"
+      ln -s "$old_target" "$previous_next"
+      mv -T "$previous_next" "$previous_link"
+    fi
     stopped=0
     trap - EXIT
     echo "activated $argument"
     prune_releases || true
     ;;
   prune)
+    # 오타 하나로 미리보기가 실삭제가 되면 안 된다 — `--dryrun`, `-n`처럼 비슷한
+    # 인자는 조용히 무시되는 대신 거부한다.
+    case "${argument:-}" in
+      "" | --dry-run) ;;
+      *) echo "unknown argument for prune: $argument" >&2; usage ;;
+    esac
+    (($# <= 2)) || { echo "prune takes at most one argument" >&2; usage; }
     state_lock
     prune_releases "${argument:-}"
     ;;

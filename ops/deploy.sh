@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 build <version-tag> | activate <release-dir> | rollback" >&2
+  echo "usage: $0 build <version-tag> | activate <release-dir> | rollback | prune [--dry-run]" >&2
   exit 2
 }
 
@@ -47,6 +47,103 @@ release_pending_migrations() {
   printf '%s\n' "$declared" | grep -Fxv -f <(printf '%s\n' "$applied") || true
 }
 
+# 배포는 한 번에 하나만 돈다. activate 도중 다른 activate가 끼어들면 심링크 교체와
+# 마이그레이션이 뒤섞이고, prune이 그 사이에 돌면 준비 중인 릴리스를 지울 수 있다.
+state_lock() {
+  exec 9>"$state_dir/deploy.lock"
+  flock -w "${JIMI_LOCK_WAIT:-600}" 9 \
+    || { echo "another deploy holds $state_dir/deploy.lock" >&2; exit 1; }
+}
+
+# 락을 이 호출 동안만 잡는다. build는 몇 분씩 걸리므로 전 구간을 잠그면 그동안
+# activate가 막힌다. 락 없이 두면 build의 사전 정리가, 마침 진행 중인 activate가
+# 켜려는 오래된 릴리스를 지울 수 있다.
+prune_locked() {
+  (
+    exec 9>"$state_dir/deploy.lock"
+    flock -w "${JIMI_LOCK_WAIT:-600}" 9 || exit 1
+    prune_releases "$@"
+  )
+}
+
+# 실행 중 프로세스가 물고 있는 릴리스. 재시작에 실패해 옛 릴리스로 계속 도는 프로세스가
+# 있으면 그 디렉터리를 지워선 안 된다 — 당장은 살아 있지만 다음 lazy import나 정적 파일
+# 읽기에서 죽고, 원인을 추적하기가 매우 어렵다.
+in_use_releases() {
+  local link target rest
+  for link in /proc/[0-9]*/cwd /proc/[0-9]*/exe; do
+    target="$(readlink -f "$link" 2>/dev/null)" || continue
+    [[ "$target" == "$releases_dir"/* ]] || continue
+    rest="${target#"$releases_dir"/}"
+    printf '%s\n' "$releases_dir/${rest%%/*}"
+  done
+}
+
+# 보존: 최근 keep개 또는 keep_days일 이내 중 넓은 쪽. current·previous·사용 중은 무조건 보호.
+prune_releases() {
+  local dry_run="${1:-}"
+  local keep="${JIMI_KEEP:-3}" keep_days="${JIMI_KEEP_DAYS:-14}"
+  # 잘못된 값은 조용히 다르게 동작한다 — `head -n 0`은 SIGPIPE로, `-n -1`은 "마지막
+  # 하나만 빼고"로 해석돼 보존 범위가 뜻과 어긋난다. 정리 전에 막는다.
+  [[ "$keep" =~ ^[0-9]+$ && "$keep_days" =~ ^[0-9]+$ ]] || {
+    echo "JIMI_KEEP/JIMI_KEEP_DAYS must be non-negative integers (got '$keep' / '$keep_days')" >&2
+    return 1
+  }
+  local protected release age
+  protected="$(
+    { readlink -f "$current_link" 2>/dev/null || true
+      readlink -f "$previous_link" 2>/dev/null || true
+      in_use_releases
+      # 최근 keep개는 mtime 기준으로 남긴다. keep=0이면 개수 보호를 쓰지 않겠다는
+      # 뜻인데, `head -n 0`은 SIGPIPE를 내고 pipefail과 겹쳐 정리 자체가 죽는다.
+      if ((keep > 0)); then
+        find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '[0-9a-f]*' \
+          -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n "$keep" | cut -d' ' -f2-
+      fi
+    } | sort -u
+  )"
+  while IFS= read -r release; do
+    [[ -n "$release" ]] || continue
+    grep -qxF "$release" <<<"$protected" && continue
+    # keep_days 이내면 남긴다 — 롤백 창을 개수만으로 좁히지 않는다.
+    age="$(find "$release" -maxdepth 0 -mtime "+$keep_days" -print 2>/dev/null)"
+    [[ -n "$age" ]] || continue
+    if [[ "$dry_run" == "--dry-run" ]]; then
+      echo "would remove $release"
+    else
+      echo "removing $release"
+      rm -rf -- "$release"
+    fi
+  done < <(find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '[0-9a-f]*' | sort)
+
+  # 죽은 build가 남긴 staging. 진행 중인 build를 지우지 않도록 하루 지난 것만 건드린다.
+  while IFS= read -r stale; do
+    [[ -n "$stale" ]] || continue
+    if [[ "$dry_run" == "--dry-run" ]]; then
+      echo "would remove $stale"
+    else
+      echo "removing $stale"
+      rm -rf -- "$stale"
+    fi
+  done < <(find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '.staging-*' -mtime +1 2>/dev/null)
+}
+
+# 재시작이 실제로 떴는지 확인한다. 전체 health-check.sh는 funnel·키 만료처럼 이 릴리스와
+# 무관한 항목까지 보므로 게이트로 쓰면 멀쩡한 배포가 남의 사정으로 롤백된다.
+wait_ready() {
+  local deadline=$((SECONDS + ${JIMI_READY_TIMEOUT:-120}))
+  local web="${JIMI_READY_URL:-http://127.0.0.1:23007/api/readyz}"
+  local proxy="${JIMI_PROXY_READY_URL:-http://127.0.0.1:10531/v1/models}"
+  while ((SECONDS < deadline)); do
+    if curl --fail --silent --max-time 5 "$web" >/dev/null 2>&1 \
+      && curl --fail --silent --max-time 5 "$proxy" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 case "$command_name" in
   build)
     [[ -n "$argument" ]] || usage
@@ -89,6 +186,9 @@ case "$command_name" in
     fi
     chmod 600 "$actions_key_file"
     actions_key="$(cat "$actions_key_file")"
+    # 빌드 전에 공간을 확보한다. 여기서 디스크가 차면 빌드 실패로 끝나지 않고 같은
+    # 디스크의 Postgres write까지 함께 실패한다.
+    prune_locked || true
     staging="$(mktemp -d "$releases_dir/.staging-${sha:0:12}.XXXXXX")"
     trap 'rm -rf -- "$staging"' EXIT
     git -C "$repo" archive "$sha" | tar -x -C "$staging"
@@ -118,6 +218,7 @@ case "$command_name" in
     ;;
   activate)
     [[ -n "$argument" && -d "$argument" && -f "$argument/.jimi-release" ]] || usage
+    state_lock
     [[ -f "$env_file" ]] || { echo "missing production env: $env_file" >&2; exit 1; }
     [[ "$(stat -c %a "$env_file")" == "600" ]] || { echo "production env must be mode 600" >&2; exit 1; }
     # 서비스를 멈추기 전에, 지금 떠 있는 운영 컨테이너가 정말 운영 설정에서 나왔는지 본다.
@@ -190,9 +291,17 @@ case "$command_name" in
     fi
     systemctl --user daemon-reload
     systemctl --user restart jimi-wiki-codex-proxy.service jimi-wiki-web.service jimi-wiki-worker.service
+    # 여기서 실패하면 stopped/swapped가 아직 1이므로 recover_old가 이전 릴리스를 되살린다.
+    # 재시작만 하고 끝내면 "배포 성공"이라고 말한 뒤 서비스가 죽어 있는 상태가 남는다.
+    wait_ready || { echo "release did not become ready in time; rolling back" >&2; exit 1; }
     stopped=0
     trap - EXIT
     echo "activated $argument"
+    prune_releases || true
+    ;;
+  prune)
+    state_lock
+    prune_releases "${argument:-}"
     ;;
   rollback)
     target="$(readlink -f "$previous_link" 2>/dev/null || true)"

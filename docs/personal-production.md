@@ -95,6 +95,16 @@ ops/rotate-db-password.sh
 
 `ops/deploy.sh activate` takes care of routine backups on its own: after stopping web/worker it compares the release's `prisma/migrations` against the production `_prisma_migrations` table, and runs `ops/backup.sh` right before `migrate deploy` whenever anything is pending (services are already stopped, so `backup.sh` leaves them alone and the snapshot matches the pre-migration state exactly). Releases with no pending migration skip it. A failed backup aborts the activation and leaves the previous release running. `JIMI_SKIP_MIGRATION_BACKUP=1` overrides this.
 
+`activate` and `prune` hold an exclusive `flock` on `~/.local/share/jimi-wiki/deploy.lock`, so a second deploy waits (`JIMI_LOCK_WAIT`, default 600s) instead of interleaving symlink swaps and migrations.
+
+After the restart, `activate` waits for the release to actually serve — `/api/readyz` on the web port and the codex proxy's `/v1/models`, both within `JIMI_READY_TIMEOUT` (default 120s). If it never becomes ready the activation fails and the previous release is restored and restarted, so "activated" is never printed over a dead service. The full `ops/health-check.sh` is deliberately *not* the gate: it also audits Funnel state and Hermes key expiry, which would roll back a healthy release for unrelated reasons.
+
+## Release retention
+
+`ops/deploy.sh prune` (also run automatically before a build and after a successful activation) keeps the newest `JIMI_KEEP` releases (default 3) plus anything newer than `JIMI_KEEP_DAYS` (default 14), and always protects `current`, `previous`, and **any release a running process still references** (`/proc/*/cwd`, `/proc/*/exe`). Deleting a release that a process is still running from does not kill it immediately — it dies later on the next lazy import or static-file read, which is very hard to trace. Stale `.staging-*` directories older than a day are removed too; younger ones are left alone so a concurrent build is never destroyed.
+
+Pruning before the build matters: this host keeps releases and Postgres on the same disk, so a full disk does not merely fail the build — it fails Postgres writes at the same time. Use `prune --dry-run` to see what would go.
+
 The steps below are the manual first-cutover procedure. Save `~/.config/jimi-wiki/backup-passphrase` in a password manager before proceeding. Stop every writer (tmux web/worker or the systemd units), then create and actually restore the encrypted backup:
 
 ```bash

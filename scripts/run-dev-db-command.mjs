@@ -21,6 +21,12 @@ function fail(message, hint = URL_HINT) {
 // docker 자체를 조회하지 못하는 환경(미설치·권한 없음)에서는 경고만 남기고 통과시킨다 —
 // 그런 환경은 애초에 이 compose 구성을 쓰지 않으므로 오탐으로 개발을 막지 않는다.
 function assertDevContainerOwnsPort(port) {
+  // CI: postgres는 워크플로가 5434에 전용으로 띄운 ephemeral service 컨테이너이고
+  // 이름은 러너가 자동 생성하므로 개발 컨테이너 이름 계약이 성립하지 않는다.
+  // host/port/name(위 URL 검사)으로 이미 개발 DB 계약을 만족했으니 이름 검사는 건너뛴다.
+  if (process.env.CI) {
+    return;
+  }
   // timeout: DOCKER_HOST가 불통인 원격을 가리키면 docker ps가 오래 멈춘다.
   // 그 동안 모든 개발 명령이 블로킹되므로, 확인을 포기하는 편이 낫다.
   const probe = spawnSync("docker", ["ps", "--filter", `publish=${port}`, "--format", "{{.Names}}"], {

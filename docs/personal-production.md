@@ -70,6 +70,54 @@ ops/prepare-env.sh \
 ops/install-systemd.sh
 ```
 
+The application-owned runtime root is `~/releases/jimi-wiki`. It is not a Git
+checkout: `releases/<sha>` contains immutable build artifacts, `current` and
+`previous` are atomic activation links, and `shared`/`backups` hold persistent
+state. Do not register this path with Harness `release-refresh`; that tool owns
+editable Git release checkouts, while Jimi Wiki enforces pushed version tags,
+pre-migration backups, and application-level rollback itself.
+
+Hosts using the legacy `~/.local/share/jimi-wiki` root should migrate that
+physical tree once from an updated source checkout. The compatibility symlink
+keeps the currently active older release usable until the next tagged release
+replaces its absolute `current`/`previous` links:
+
+```bash
+set -euo pipefail
+legacy="$HOME/.local/share/jimi-wiki"
+target="$HOME/releases/jimi-wiki"
+env_file="$HOME/.config/jimi-wiki/app.env"
+
+[[ -d "$legacy" && ! -L "$legacy" ]] || { echo "legacy runtime is missing or already migrated" >&2; exit 1; }
+[[ ! -e "$target" ]] || { echo "target already exists: $target" >&2; exit 1; }
+systemctl --user stop \
+  jimi-wiki-health.timer jimi-wiki-backup.timer jimi-wiki-restore-verify.timer
+for unit in jimi-wiki-health.service jimi-wiki-backup.service jimi-wiki-restore-verify.service; do
+  ! systemctl --user is-active --quiet "$unit" \
+    || {
+      systemctl --user start \
+        jimi-wiki-health.timer jimi-wiki-backup.timer jimi-wiki-restore-verify.timer
+      echo "$unit is active; wait for it to finish, then rerun" >&2
+      exit 1
+    }
+done
+
+systemctl --user stop \
+  jimi-wiki-worker.service jimi-wiki-web.service jimi-wiki-codex-proxy.service
+mkdir -p "$HOME/releases"
+mv -T "$legacy" "$target"
+ln -s "$target" "$legacy"
+sed -i "s|$legacy|$target|g" "$env_file"
+
+JIMI_START_TIMERS=0 ops/install-systemd.sh
+systemctl --user restart \
+  jimi-wiki-codex-proxy.service jimi-wiki-web.service jimi-wiki-worker.service
+JIMI_RELEASE_DIR="$target/current" ops/hermes-jimi-mcp.sh connect
+systemctl --user start \
+  jimi-wiki-health.timer jimi-wiki-backup.timer jimi-wiki-restore-verify.timer
+systemctl --user start jimi-wiki-health.service
+```
+
 The embedding container binds host port 8080 by default. On a host where something else already
 holds that port, pass `--embed-port <port>`: it writes both `EMBED_HOST_PORT` (the Compose host
 binding) and `EMBED_BASE_URL` (the address web/worker dial) into `app.env`. Keep the two in sync —
@@ -81,8 +129,8 @@ they disagree.
 Copy the existing blob archive into the persistent path before activation, then verify it byte-for-byte:
 
 ```bash
-rsync -a --checksum .blobs/ "$HOME/.local/share/jimi-wiki/shared/blobs/"
-pnpm content:manifest -- --blob-dir "$HOME/.local/share/jimi-wiki/shared/blobs" --output /tmp/jimi-before.json
+rsync -a --checksum .blobs/ "$HOME/releases/jimi-wiki/shared/blobs/"
+pnpm content:manifest -- --blob-dir "$HOME/releases/jimi-wiki/shared/blobs" --output /tmp/jimi-before.json
 ```
 
 Rotate PostgreSQL only after `app.env` exists. The script recreates DB/embedding through `ops/compose.sh`, so the role password, `DATABASE_URL`, and the production Compose container environment change together and the loopback-only bindings take effect. Rotating the password without also running `ALTER ROLE` on the live container is what left the two out of sync for weeks in 2026-07 — use the script rather than editing `app.env` by hand:
@@ -126,7 +174,7 @@ The steps below are the manual first-cutover procedure. Save `~/.config/jimi-wik
 ```bash
 JIMI_RELEASE_DIR="$release" ops/backup.sh
 JIMI_RELEASE_DIR="$release" ops/restore-verify.sh
-cat "$HOME/.local/share/jimi-wiki/backups/last-restore-verify.json"
+cat "$HOME/releases/jimi-wiki/backups/last-restore-verify.json"
 ```
 
 With writers still stopped, create a fresh manifest and reset only the browser-account mapping, sessions, unused invites, and old API keys:
@@ -201,6 +249,6 @@ All four application ports must be loopback-only, readiness must be 200, and Fun
 
 `ops/health-check.sh` runs every check to completion and reports all failures together rather than stopping at the first one. It used to exit early, so while readiness was failing with a 503 the loopback-binding check behind it never ran at all — that is how a database exposed to the tailnet stayed hidden for 26 days. Expect `Jimi Wiki health check FAILED (n):` followed by one line per failed check.
 
-The rollback target is whatever `$HOME/.local/share/jimi-wiki/previous` points at; read its `.jimi-tag` to see which release that is. Before the first research row is created, `ops/deploy.sh rollback` may swap the release symlink back and restart services. Once research rows exist, a rollback that also needs the old database contract must stop every writer and restore the encrypted backup taken immediately before this cutover; the release symlink alone is not a database rollback. For an account-reset rollback, restore that same database/blob backup, then run `ops/hermes-jimi-mcp.sh restore-pre-reset` to restore the protected matching Hermes key/config snapshot.
+The rollback target is whatever `$HOME/releases/jimi-wiki/previous` points at; read its `.jimi-tag` to see which release that is. Before the first research row is created, `ops/deploy.sh rollback` may swap the release symlink back and restart services. Once research rows exist, a rollback that also needs the old database contract must stop every writer and restore the encrypted backup taken immediately before this cutover; the release symlink alone is not a database rollback. For an account-reset rollback, restore that same database/blob backup, then run `ops/hermes-jimi-mcp.sh restore-pre-reset` to restore the protected matching Hermes key/config snapshot.
 
 `linger=yes` restarts user services after the WSL distribution starts. The Windows logon task starts the distribution; test a real Windows reboot separately because that also exercises Docker Desktop startup ordering.

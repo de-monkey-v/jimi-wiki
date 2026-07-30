@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-state_dir="${JIMI_STATE_DIR:-$HOME/.local/share/jimi-wiki}"
+state_dir="${JIMI_STATE_DIR:-$HOME/releases/jimi-wiki}"
 passphrase_file="${JIMI_BACKUP_PASSPHRASE_FILE:-$HOME/.config/jimi-wiki/backup-passphrase}"
 runtime_dir="${JIMI_RELEASE_DIR:-$state_dir/current}"
 latest="$(find "$state_dir/backups" -maxdepth 1 -type f -name 'jimi-wiki-*.tar.gpg' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"

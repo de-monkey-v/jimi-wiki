@@ -34,7 +34,7 @@ embed_port="${embed_port:-8080}"
 [[ "$embed_port" =~ ^[1-9][0-9]*$ ]] && (( embed_port < 65536 )) || usage
 
 config_dir="$HOME/.config/jimi-wiki"
-state_dir="${JIMI_STATE_DIR:-$HOME/.local/share/jimi-wiki}"
+state_dir="${JIMI_STATE_DIR:-$HOME/releases/jimi-wiki}"
 target="$config_dir/app.env"
 db_container="${JIMI_DB_CONTAINER:-jimi-wiki-db}"
 mkdir -p -m 700 "$config_dir" "$state_dir/shared/blobs" "$state_dir/shared/cache"

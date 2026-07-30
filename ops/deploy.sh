@@ -9,7 +9,7 @@ usage() {
 
 command_name="${1:-}"
 argument="${2:-}"
-state_dir="${JIMI_STATE_DIR:-$HOME/.local/share/jimi-wiki}"
+state_dir="${JIMI_STATE_DIR:-$HOME/releases/jimi-wiki}"
 releases_dir="$state_dir/releases"
 current_link="$state_dir/current"
 previous_link="$state_dir/previous"

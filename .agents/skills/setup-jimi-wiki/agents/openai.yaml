@@ -1,0 +1,4 @@
+interface:
+  display_name: "Jimi Wiki Setup"
+  short_description: "Jimi Wiki 로컬 설치·OAuth·임베딩 구성"
+  default_prompt: "Use $setup-jimi-wiki to install this checkout with personal Codex OAuth and local embeddings."

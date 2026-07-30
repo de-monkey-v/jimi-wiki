@@ -22,33 +22,64 @@ maintain the same wiki directly over REST/MCP.
 
 ## Getting started
 
-Prerequisites: Node 20+, pnpm, Docker.
+Prerequisites: Node 20+, Corepack/pnpm, and Docker. The bundled local-embedding
+Compose profile currently requires **x86_64 Linux/WSL, an NVIDIA GPU, and a
+Docker NVIDIA runtime**. Allow about 12 GiB for the image, model, and packages.
+On CPU-only systems or macOS, use an existing TEI endpoint or Gemini embeddings.
 
-```bash
-# 1. Dependencies
-pnpm install
+When Codex is open in this repository, invoke the checked-in project skill:
 
-# 2. Env vars — copy .env.example and fill values (at minimum GEMINI_API_KEY)
-cp .env.example .env
-
-# 3. Start development Postgres + local embedding on isolated ports 5434/8081
-# (matches EMBED_PROVIDER=local in .env.example)
-pnpm db:up:embedding
-
-# Start only the DB when using Gemini embedding or an existing TEI
-# pnpm db:up
-
-# 4. Apply schema migrations
-pnpm db:migrate
-
-# 5. Dev server (port 3007)
-pnpm dev
-
-# 6. In another terminal, the ingest worker
-pnpm worker:dev
+```text
+$setup-jimi-wiki Install this checkout with personal Codex OAuth and KURE local embeddings.
 ```
 
-Open http://localhost:3007 → **on first visit, create the first admin account at `/setup`** (see Auth
+For manual setup, the fresh-clone helper checks the host and creates secrets in
+a new `.env`. `prepare` never overwrites an existing `.env`.
+
+```bash
+# 1. Check host, Docker, GPU, ports, and disk
+node scripts/setup-local.mjs check --embedding local
+
+# 2. Fresh-clone env — generate DB/Auth secrets and select personal OAuth/KURE
+node scripts/setup-local.mjs prepare --oauth --embed-model nlpai-lab/KURE-v1
+
+# 3. Install dependencies and generate the gitignored Prisma client
+corepack pnpm install --frozen-lockfile
+corepack pnpm exec prisma generate
+
+# 4. Start development Postgres + local embedding on isolated ports 5434/8081
+# (matches EMBED_PROVIDER=local in .env.example)
+corepack pnpm db:up:embedding
+
+# Start only the DB when using Gemini embedding or an existing TEI
+# corepack pnpm db:up
+
+# 5. Apply schema migrations
+corepack pnpm db:migrate
+
+# 6. Start web + worker together (port 3006)
+corepack pnpm dev:all
+```
+
+Select the profile when creating a new `.env` for an existing TEI or Gemini:
+
+```bash
+node scripts/setup-local.mjs prepare --embedding external \
+  --embed-url <URL> --embed-model <MODEL> --oauth
+node scripts/setup-local.mjs prepare --embedding gemini --oauth
+```
+
+Put the Gemini API key directly in the generated `.env` rather than passing it
+through a CLI argument that remains in shell history. If `.env` already exists,
+configure it manually from `.env.example` instead of running `prepare`. After creating the first admin
+at `/setup`, connect personal OAuth with the device-code flow at
+`/admin/settings` or run `corepack pnpm openai:login`. Verify the running stack:
+
+```bash
+node scripts/setup-local.mjs verify --require-app --require-oauth
+```
+
+Open http://localhost:3006 → **on first visit, create the first admin account at `/setup`** (see Auth
 below). To reach it from a remote/other host, check `allowedDevOrigins` in `next.config`.
 
 ### Auth & accounts (`AUTH_MODE`)
@@ -109,7 +140,10 @@ On startup the `worker` logs the **active provider keys and their source (`.env`
 
 | Command | Description |
 |---|---|
-| `pnpm dev` | dev server (port 3007) |
+| `pnpm setup:local -- check` | diagnose host, Docker, GPU, ports, and config without exposing secrets |
+| `pnpm setup:local -- prepare --oauth --embed-model <MODEL>` | create a mode-0600 fresh-clone `.env`; refuse an existing file |
+| `pnpm setup:local -- verify --require-app --require-oauth` | verify DB, migrations, Prisma, embeddings, app, and OAuth store without a model call |
+| `pnpm dev` | dev server (port 3006) |
 | `pnpm dev:all` | web + worker together (merged logs, Ctrl-C stops both) |
 | `pnpm start:all` | production web (`start`) + worker together |
 | `pnpm worker` | production worker that processes pending ingest jobs |
@@ -178,7 +212,7 @@ the selected mode's session or Tailscale Serve identity; programmatic calls use 
 
    ```bash
    claude mcp add --scope local jimi-wiki \
-     -e JIMI_WIKI_URL=http://localhost:3007 \
+     -e JIMI_WIKI_URL=http://localhost:3006 \
      -e JIMI_WIKI_API_KEY=<key> \
      -e JIMI_WIKI_SLUG=<wiki-slug> \
      -- node <repo>/mcp/server.mjs

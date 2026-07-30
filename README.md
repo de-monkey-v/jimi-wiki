@@ -17,30 +17,59 @@ LLM이 유지보수자 역할을 맡는 협업 위키 플랫폼. 소스를 편�
 
 ## 시작하기
 
-사전 요구: Node 20+, pnpm, Docker.
+사전 요구: Node 20+, Corepack/pnpm, Docker. **로컬 임베딩 Compose는 현재
+x86_64 Linux/WSL + NVIDIA GPU·Docker NVIDIA runtime 전용**이며, 최초 이미지·모델·패키지에
+약 12 GiB의 여유 공간을 권장한다. CPU·macOS에서는 별도 TEI endpoint 또는 Gemini embedding을 사용한다.
+
+Codex에서 이 저장소를 열었다면 repo에 포함된 project skill을 바로 호출할 수 있다:
+
+```text
+$setup-jimi-wiki 이 PC에 개인 Codex OAuth와 KURE 로컬 임베딩으로 설치해줘
+```
+
+직접 설치할 때는 fresh clone 전용 helper가 사전 요구사항을 검사하고 새 `.env`의 secret을 생성한다.
+`prepare`는 기존 `.env`를 절대 덮어쓰지 않는다.
 
 ```bash
-# 1. 의존성
-pnpm install
+# 1. 호스트·Docker·GPU·포트·디스크 사전 검사
+node scripts/setup-local.mjs check --embedding local
 
-# 2. 환경변수 — .env.example을 복사해 값 채우기 (최소 GEMINI_API_KEY)
-cp .env.example .env
+# 2. fresh clone 환경변수 — DB/Auth secret 생성 + 개인 OAuth/KURE 선택
+node scripts/setup-local.mjs prepare --oauth --embed-model nlpai-lab/KURE-v1
 
-# 3. 개발 Postgres + local embedding 기동 — 운영과 분리된 5434/8081
+# 3. 의존성 + gitignore된 Prisma client 생성
+corepack pnpm install --frozen-lockfile
+corepack pnpm exec prisma generate
+
+# 4. 개발 Postgres + local embedding 기동 — 운영과 분리된 5434/8081
 # (.env.example의 EMBED_PROVIDER=local 기준)
-pnpm db:up:embedding
+corepack pnpm db:up:embedding
 
 # Gemini embedding이나 이미 실행 중인 별도 TEI를 쓸 때는 DB만 기동
-# pnpm db:up
+# corepack pnpm db:up
 
-# 4. 스키마 마이그레이션 적용
-pnpm db:migrate
+# 5. 스키마 마이그레이션 적용
+corepack pnpm db:migrate
 
-# 5. 개발 서버 (포트 3006)
-pnpm dev
+# 6. web + worker 동시 기동 (포트 3006)
+corepack pnpm dev:all
+```
 
-# 6. 별도 터미널에서 ingest worker
-pnpm worker:dev
+별도 TEI 또는 Gemini로 새 `.env`를 만들 때는 선택 프로필을 명시한다:
+
+```bash
+node scripts/setup-local.mjs prepare --embedding external \
+  --embed-url <URL> --embed-model <MODEL> --oauth
+node scripts/setup-local.mjs prepare --embedding gemini --oauth
+```
+
+Gemini API key는 shell history에 남는 CLI 인자로 넘기지 말고 생성된 `.env`의
+`GEMINI_API_KEY`에 직접 넣는다. 기존 `.env`가 있으면 `prepare` 대신
+`.env.example`을 참고해 직접 설정한다. 개인 OAuth는 `/setup`에서 첫 관리자를 만든 뒤 `/admin/settings`의 device-code
+로그인으로 연결하거나 `corepack pnpm openai:login`을 사용한다. 전체 기동 뒤 검증:
+
+```bash
+node scripts/setup-local.mjs verify --require-app --require-oauth
 ```
 
 http://localhost:3006 접속 → **최초 접속 시 `/setup`에서 첫 관리자 계정을 만든다**(아래 인증 참조). 원격/다른 호스트에서 접속하려면 `next.config`의 `allowedDevOrigins`를 확인한다.
@@ -100,6 +129,9 @@ http://localhost:3006 접속 → **최초 접속 시 `/setup`에서 첫 관리�
 
 | 명령 | 설명 |
 |---|---|
+| `pnpm setup:local -- check` | 설치 전 호스트·Docker·GPU·포트·설정 진단(비밀값 비노출) |
+| `pnpm setup:local -- prepare --oauth --embed-model <MODEL>` | fresh clone의 `.env`를 mode 0600으로 생성(기존 파일 거부) |
+| `pnpm setup:local -- verify --require-app --require-oauth` | DB·migration·Prisma·embedding·앱·OAuth 저장소 검증(실제 모델 호출 없음) |
 | `pnpm dev` | 개발 서버 (포트 3006) |
 | `pnpm dev:all` | web + worker 한 번에 기동(로그 합침, Ctrl-C로 둘 다 종료) |
 | `pnpm start:all` | 프로덕션 web(`start`) + worker 한 번에 기동 |

@@ -45,6 +45,12 @@ type PageWrite = {
   expectedVersion?: number;
 };
 
+const WIKI_CARD_PAGE_COUNT_WHERE = {
+  archivedAt: null,
+  kind: { notIn: ["note", "personal"] },
+  slug: { not: ONTOLOGY_SLUG },
+} satisfies Prisma.PageWhereInput;
+
 // ---------- 슬러그 ----------
 // check-then-create(TOCTOU) 대신 unique 위반(P2002)을 잡아 다음 접미로 재시도
 const isP2002 = (e: unknown) => (e as { code?: string })?.code === "P2002";
@@ -72,7 +78,7 @@ export function listOwnedWikis(userId: string) {
   return prisma.wiki.findMany({
     where: { createdById: userId, trashedAt: null },
     orderBy: { updatedAt: "desc" },
-    include: { _count: { select: { pages: true } } },
+    include: { _count: { select: { pages: { where: WIKI_CARD_PAGE_COUNT_WHERE } } } },
   });
 }
 
@@ -82,7 +88,7 @@ export async function listSharedWikis(userId: string) {
     where: { memberships: { some: { userId } }, NOT: { createdById: userId }, trashedAt: null },
     orderBy: { updatedAt: "desc" },
     include: {
-      _count: { select: { pages: true } },
+      _count: { select: { pages: { where: WIKI_CARD_PAGE_COUNT_WHERE } } },
       memberships: { where: { userId }, select: { role: true }, take: 1 },
       createdBy: { select: { name: true, email: true } },
     },

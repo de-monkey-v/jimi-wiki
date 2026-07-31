@@ -59,3 +59,6 @@ next-env.d.ts
 
 # Playwright MCP 브라우저 검증 산출물(스냅샷·콘솔 로그)
 /.playwright-mcp/
+
+# Claude Code 머신 로컬 설정(권한 허용 목록 등). 공유 설정은 .agents/에 둔다.
+/.claude/settings.local.json

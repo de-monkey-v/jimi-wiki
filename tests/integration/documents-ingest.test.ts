@@ -13,7 +13,7 @@ function assertIsolatedLocalDatabase(): void {
   }
 }
 
-test("documents, preserve/search scopes, promotion idempotency, and API-key isolation", async () => {
+test("documents, agent capture placement/idempotency, preserve/search scopes, promotion idempotency, and API-key isolation", async () => {
   assertIsolatedLocalDatabase();
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -897,7 +897,6 @@ test("documents, preserve/search scopes, promotion idempotency, and API-key isol
     });
     const externalHeaders = {
       authorization: `Bearer ${issued.token}`,
-      "x-jimi-model-trust": "external",
     };
     const allowedGate = await apiGate.apiWikiGate(new Request("http://localhost" , { headers: externalHeaders }), wiki.slug);
     assert.equal(allowedGate.ok, true);
@@ -905,6 +904,177 @@ test("documents, preserve/search scopes, promotion idempotency, and API-key isol
     const deniedGate = await apiGate.apiWikiGate(new Request("http://localhost", { headers: externalHeaders }), otherWiki.slug);
     assert.equal(deniedGate.ok, false);
     if (!deniedGate.ok) assert.equal(deniedGate.res.status, 404);
+
+    const categorySeed = await documents.writeDocument({
+      wikiId: wiki.id,
+      userId: user.id,
+      actor: "agent",
+      externalAgent: true,
+      title: "Build Systems Folder Seed",
+      body: "external category seed",
+      documentType: "reference",
+      category: "software-development/build-systems",
+    });
+    assert.equal(categorySeed.staged, false);
+
+    const humanCategorized = await documents.writeDocument({
+      wikiId: wiki.id,
+      userId: user.id,
+      actor: "human",
+      externalAgent: false,
+      title: "Human Categorized Document",
+      body: "human category body",
+      documentType: "reference",
+      category: "software-development/build-systems",
+    });
+    assert.equal(humanCategorized.staged, false);
+    if (humanCategorized.staged) throw new Error("unreachable");
+    const stagedPlacementResponse = await documentsRoute.POST(
+      new Request(`http://localhost/api/wikis/${wiki.slug}/documents`, {
+        method: "POST",
+        headers: { ...externalHeaders, "content-type": "application/json" },
+        body: JSON.stringify({
+          slug: humanCategorized.page.slug,
+          title: humanCategorized.page.title,
+          body: `${humanCategorized.page.body}\n\nagent proposal`,
+          expectedVersion: humanCategorized.page.currentVersion,
+        }),
+      }),
+      { params: Promise.resolve({ id: wiki.slug }) },
+    );
+    assert.equal(stagedPlacementResponse.status, 202);
+    const stagedPlacement = await stagedPlacementResponse.json() as {
+      staged: boolean;
+      category: string | null;
+      placement: { status: string; category: string | null; target: string };
+    };
+    assert.equal(stagedPlacement.staged, true);
+    assert.equal(stagedPlacement.category, "software-development/build-systems");
+    assert.deepEqual(stagedPlacement.placement, {
+      status: "staged",
+      requestedCategory: null,
+      category: "software-development/build-systems",
+      target: "category",
+      reason: "unspecified",
+    });
+
+    const capturePayload = {
+      title: "MSBuild와 CMake의 차이",
+      body: "BUILD_CAPTURE_IDEMPOTENCY_CANARY",
+      type: "reference",
+      documentAt: "2026-08-06T09:00:00.000+09:00",
+      category: "unknown/generated-folder",
+      idempotencyKey: "build-comparison:2026-08-06",
+    };
+    const captureRequest = (payload: Record<string, unknown>) => documentsRoute.POST(
+      new Request(`http://localhost/api/wikis/${wiki.slug}/documents`, {
+        method: "POST",
+        headers: { ...externalHeaders, "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+      { params: Promise.resolve({ id: wiki.slug }) },
+    );
+    const capturedResponse = await captureRequest(capturePayload);
+    assert.equal(capturedResponse.status, 201);
+    const captured = await capturedResponse.json() as {
+      slug: string;
+      origin: string;
+      category: string | null;
+      idempotentReplay: boolean;
+      placement: { target: string; category: string | null; reason: string };
+    };
+    assert.equal(captured.origin, "generated", "Bearer without a trust header must still be an agent write");
+    assert.equal(captured.category, null);
+    assert.equal(captured.idempotentReplay, false);
+    assert.deepEqual(captured.placement, {
+      status: "stored",
+      requestedCategory: "unknown/generated-folder",
+      category: null,
+      target: "inbox",
+      reason: "category-unavailable-fallback-inbox",
+    });
+    assert.equal((await prisma.page.findUniqueOrThrow({ where: { wikiId_slug: { wikiId: wiki.id, slug: captured.slug } } })).origin, "generated");
+
+    const replayResponse = await captureRequest(capturePayload);
+    assert.equal(replayResponse.status, 200);
+    const replayed = await replayResponse.json() as { slug: string; idempotentReplay: boolean };
+    assert.equal(replayed.slug, captured.slug);
+    assert.equal(replayed.idempotentReplay, true);
+    assert.equal(await prisma.page.count({ where: { wikiId: wiki.id, slug: captured.slug } }), 1);
+
+    const conflictResponse = await captureRequest({ ...capturePayload, body: "DIFFERENT_PAYLOAD" });
+    assert.equal(conflictResponse.status, 409);
+    assert.deepEqual(await conflictResponse.json(), { error: "idempotency_conflict" });
+
+    const categoryConflictResponse = await captureRequest({
+      ...capturePayload,
+      category: "another/unknown-folder",
+    });
+    assert.equal(categoryConflictResponse.status, 409);
+    assert.deepEqual(await categoryConflictResponse.json(), { error: "idempotency_conflict" });
+
+    const concurrentPayload = {
+      title: "Concurrent Capture",
+      body: "CONCURRENT_CAPTURE_CANARY",
+      idempotencyKey: "concurrent-capture:2026-08-06",
+    };
+    const concurrentResponses = await Promise.all(
+      Array.from({ length: 6 }, () => captureRequest(concurrentPayload)),
+    );
+    assert.deepEqual(
+      concurrentResponses.map((response) => response.status).sort(),
+      [200, 200, 200, 200, 200, 201],
+    );
+    assert.equal(await prisma.page.count({ where: { wikiId: wiki.id, body: concurrentPayload.body } }), 1);
+
+    const concurrentConflictPayload = {
+      title: "Concurrent Placement Conflict",
+      body: "CONCURRENT_PLACEMENT_CONFLICT_CANARY",
+      category: "unknown/first-choice",
+      idempotencyKey: "concurrent-placement-conflict:2026-08-06",
+    };
+    const concurrentConflictResponses = await Promise.all([
+      captureRequest(concurrentConflictPayload),
+      captureRequest({ ...concurrentConflictPayload, category: "unknown/second-choice" }),
+    ]);
+    assert.deepEqual(
+      concurrentConflictResponses.map((response) => response.status).sort(),
+      [201, 409],
+    );
+    assert.equal(
+      await prisma.page.count({ where: { wikiId: wiki.id, body: concurrentConflictPayload.body } }),
+      1,
+    );
+
+    const exactCategoryResponse = await captureRequest({
+      title: "Compiler Build Notes",
+      body: "exact existing category",
+      type: "reference",
+      category: "software-development/build-systems",
+      requireCategory: true,
+    });
+    assert.equal(exactCategoryResponse.status, 201);
+    const exactCategory = await exactCategoryResponse.json() as {
+      category: string | null;
+      placement: { reason: string; target: string };
+    };
+    assert.equal(exactCategory.category, "software-development/build-systems");
+    assert.deepEqual(exactCategory.placement, {
+      status: "stored",
+      requestedCategory: "software-development/build-systems",
+      category: "software-development/build-systems",
+      target: "category",
+      reason: "matched-existing-category",
+    });
+
+    const requiredMissingResponse = await captureRequest({
+      title: "Must Stay In Requested Folder",
+      body: "required category",
+      category: "missing/explicit-folder",
+      requireCategory: true,
+    });
+    assert.equal(requiredMissingResponse.status, 409);
+    assert.deepEqual(await requiredMissingResponse.json(), { error: "category_not_available" });
 
     const generatedBeforeMetadataOmission = await prisma.page.findUniqueOrThrow({ where: { id: generated.page.id } });
     const metadataOmissionResponse = await documentsRoute.POST(

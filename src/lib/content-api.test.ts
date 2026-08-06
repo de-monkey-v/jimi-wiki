@@ -19,19 +19,27 @@ test("modelAccess and expectedVersion input parsing is strict", () => {
   assert.equal(parseExpectedVersion("3"), null);
 });
 
-test("external model trust requires the explicit header value", () => {
+test("external model trust is derived from Bearer authentication, not a caller-controlled header", () => {
   assert.equal(requestsExternalModelScope(new Request("http://localhost")), false);
   assert.equal(
     requestsExternalModelScope(
       new Request("http://localhost", { headers: { "X-Jimi-Model-Trust": "external" } }),
     ),
+    false,
+  );
+  assert.equal(
+    requestsExternalModelScope(
+      new Request("http://localhost", { headers: { Authorization: "Bearer jw_agent" } }),
+    ),
     true,
   );
   assert.equal(
     requestsExternalModelScope(
-      new Request("http://localhost", { headers: { "X-Jimi-Model-Trust": "internal" } }),
+      new Request("http://localhost", {
+        headers: { Authorization: "Bearer jw_agent", "X-Jimi-Model-Trust": "internal" },
+      }),
     ),
-    false,
+    true,
   );
 });
 

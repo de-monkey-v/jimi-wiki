@@ -4,7 +4,9 @@ import {
   DocumentInputError,
   parseDocumentDate,
   parseDocumentType,
+  resolveExternalDocumentCategory,
   writeDocument,
+  writeDocumentIdempotently,
 } from "@/lib/documents";
 import {
   contentMutationErrorResponse,
@@ -13,7 +15,7 @@ import {
   withExternalModelResponseScope,
 } from "@/lib/content-api";
 import { normalizeCategoryForWrite } from "@/lib/governance";
-import { sanitizeCategorySlug } from "@/lib/ontology";
+import { EXTERNAL_MODEL_SCOPE, externalCategorySlugs } from "@/lib/model-access";
 
 export const dynamic = "force-dynamic";
 
@@ -120,23 +122,46 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (body.expectedVersion !== undefined && expectedVersion === undefined) {
     return NextResponse.json({ error: "invalid_expected_version" }, { status: 400 });
   }
+  if (body.requireCategory !== undefined && typeof body.requireCategory !== "boolean") {
+    return NextResponse.json({ error: "invalid_require_category" }, { status: 400 });
+  }
+  if (body.idempotencyKey !== undefined && typeof body.idempotencyKey !== "string") {
+    return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
+  }
+  const externalAgent = requestsExternalModelScope(req);
   let category: string | null | undefined;
+  let requestedCategory: string | null = null;
+  let placementReason = "unspecified";
   if (body.category !== undefined) {
     if (body.category !== null && typeof body.category !== "string") {
       return NextResponse.json({ error: "invalid_category" }, { status: 400 });
     }
-    category = body.category
-      ? requestsExternalModelScope(req)
-        ? sanitizeCategorySlug(body.category)
-        : await normalizeCategoryForWrite(gate.wiki.id, body.category)
-      : null;
   }
   try {
-    const result = await writeDocument({
+    if (externalAgent) {
+      const allowed = body.category || body.requireCategory
+        ? await externalCategorySlugs(gate.wiki.id, EXTERNAL_MODEL_SCOPE)
+        : new Set<string>();
+      const placement = resolveExternalDocumentCategory(
+        body.category as string | null | undefined,
+        allowed,
+        body.requireCategory === true,
+      );
+      category = placement.category;
+      requestedCategory = placement.requestedCategory;
+      placementReason = placement.reason;
+    } else {
+      category = body.category
+        ? await normalizeCategoryForWrite(gate.wiki.id, body.category as string)
+        : body.category === null || body.category === "" ? null : undefined;
+      requestedCategory = typeof body.category === "string" && body.category.trim() ? body.category.trim() : null;
+      placementReason = body.category === undefined ? "session-default" : "session-selected";
+    }
+    const input = {
       wikiId: gate.wiki.id,
       userId: gate.user.id,
-      actor: requestsExternalModelScope(req) ? "agent" : "human",
-      externalAgent: requestsExternalModelScope(req),
+      actor: externalAgent ? "agent" as const : "human" as const,
+      externalAgent,
       slug: typeof body.slug === "string" ? body.slug : undefined,
       title: body.title,
       body: body.body,
@@ -145,19 +170,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       category,
       expectedVersion,
       sourceSlugs,
-    });
-    if (result.staged) return NextResponse.json(result, { status: 202 });
+    };
+    const result = typeof body.idempotencyKey === "string"
+      ? await writeDocumentIdempotently(input, body.idempotencyKey, {
+          requestedCategory,
+          requireCategory: body.requireCategory === true,
+        })
+      : { ...await writeDocument(input), idempotentReplay: false };
+    const storedCategory = result.staged ? result.category : result.page.category;
+    const placement = {
+      status: result.staged ? "staged" : "stored",
+      requestedCategory,
+      category: storedCategory,
+      target: storedCategory ? "category" : "inbox",
+      reason: placementReason,
+    };
+    if (result.staged) return NextResponse.json({ ...result, placement }, { status: 202 });
     return NextResponse.json(
       {
         created: result.created,
         staged: false,
+        idempotentReplay: result.idempotentReplay,
         slug: result.page.slug,
         currentVersion: result.page.currentVersion,
         documentType: result.page.documentType,
         documentAt: result.page.documentAt,
+        category: result.page.category,
         origin: result.page.origin,
+        placement,
       },
-      { status: result.created ? 201 : 200 },
+      { status: result.created && !result.idempotentReplay ? 201 : 200 },
     );
   } catch (error) {
     return errorResponse(error);

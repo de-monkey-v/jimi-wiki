@@ -16,9 +16,17 @@
  * Hermes Agent 등 다른 하네스 등록법·권장 도구 필터는 skills/wiki-ingest/references/setup.md 참조.
  * ingest 워크플로우 규칙은 skills/wiki-ingest/SKILL.md 참조 (분류 규칙 정본 포함).
  */
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
+const MCP_VERSION = "0.7.0";
+if (process.argv.includes("--version")) {
+  console.log(`jimi-wiki-mcp ${MCP_VERSION}`);
+  process.exit(0);
+}
+
+const [{ McpServer }, { StdioServerTransport }, { z }] = await Promise.all([
+  import("@modelcontextprotocol/sdk/server/mcp.js"),
+  import("@modelcontextprotocol/sdk/server/stdio.js"),
+  import("zod"),
+]);
 
 const BASE = (process.env.JIMI_WIKI_URL || "http://localhost:3007").replace(/\/$/, "");
 const KEY = process.env.JIMI_WIKI_API_KEY;
@@ -52,7 +60,7 @@ async function api(method, path, body, { retries = 3, timeoutMs = 90_000 } = {})
         method,
         headers: {
           Authorization: `Bearer ${KEY}`,
-          // MCP는 외부 모델 data flow다. 일반 REST ACL과 별개로 internalOnly를 fail-closed 제외한다.
+          // 구버전 서버 호환용. 최신 서버는 Bearer 인증 자체에서 external-agent 범위를 파생한다.
           "X-Jimi-Model-Trust": "external",
           ...(body ? { "content-type": "application/json" } : {}),
         },
@@ -105,11 +113,12 @@ const profileInstructions = IS_PERSONAL
     : [];
 
 const server = new McpServer(
-  { name: "jimi-wiki", version: "0.6.0" },
+  { name: "jimi-wiki", version: MCP_VERSION },
   {
     instructions: [
       `jimi-wiki 위키("${WIKI}", kind=${WIKI_KIND})의 유지보수 도구다. 이 API 키의 위키 스코프 밖 리소스에는 접근하지 않는다.`,
-      "의도 라우팅: URL만 보냄/‘나중에 볼게’→본문을 읽고 3~5개 핵심 bullet과 ‘볼 가치’ 한 문장으로 요약한 뒤 save_link(summary), ‘조사해줘·비교해줘·보고서로 정리해줘’→웹을 심층 조사한 뒤 record_research_report, ‘원문만 그대로 보관해’→preserve_*, ‘정리해서 지식으로 저장해’→curate_*, ‘이 내용을 기록해’→record_document, ‘기존 문서에 추가해’→append_document, ‘저장한 링크를 정식 편입해’→promote_saved_link.",
+      "의도 라우팅: URL만 보냄/‘나중에 볼게’→본문을 읽고 3~5개 핵심 bullet과 ‘볼 가치’ 한 문장으로 요약한 뒤 save_link(summary), ‘조사해줘·비교해줘·보고서로 정리해줘’→웹을 심층 조사한 뒤 record_research_report, ‘원문만 그대로 보관해’→preserve_*, ‘정리해서 지식으로 저장해’→curate_*, ‘이 내용을 기록해’→필요하면 get_capture_context로 폴더 후보를 받은 뒤 record_document, ‘기존 문서에 추가해’→append_document, ‘저장한 링크를 정식 편입해’→promote_saved_link.",
+      "문서 저장 위치는 Jimi가 최종 결정한다. get_capture_context가 돌려준 기존 category slug만 선택하고 애매하면 category를 생략해 Inbox에 둔다. 사용자가 특정 폴더를 명시했으면 requireCategory=true로 조용한 Inbox 폴백 대신 실패시킨다. 일반 문서 제목에는 날짜 접두어를 자동으로 붙이지 말고 날짜는 documentAt에 넣는다. 예약·cron 작업만 그 작업의 명시적 제목 규칙을 따르고 안정적인 idempotencyKey를 보낸다.",
       "읽을거리는 항상 요약을 시도한다. 본문 추출이 실패한 경우에만 save_link(summaryUnavailableReason=구체적 사유)로 메타데이터를 저장하고 요약이 없음을 명시한다. URL이 여러 개면 각각 본문을 읽고 별도 SavedLink로 저장하며 성공/기존/실패를 나눠 보고한다. 삭제 의도가 명확하면 trash_*를 쓰고, 애매하면 먼저 확인한다. 휴지통은 14일간 복원할 수 있으며 영구 삭제와 위키 전체 삭제는 MCP에 없다.",
       "연구 보고서: 기본 8~12개의 독립 출처를 조사한다. 사용자가 준 링크는 seed로 쓰되 ‘이 링크만’이라고 하지 않으면 독립 출처로 교차검증한다. 인용할 URL은 먼저 preserve_url로 보존하고 반환된 sourceSlug를 본문 [@source-slug]와 sourceSlugs에 첫 등장 순서대로 넣는다. 보존 실패 시 접근 가능한 사실만 preserve_text로 명시적으로 캡처하고, 접근하지 못한 자료는 주장 근거로 쓰지 않는다.",
       "연구 보고서 구조: 요약 → 조사 범위·기준일 → 시각 개요(Mermaid 필요 시) → 핵심 설명 → 비교표/타임라인 → 반론·불확실성 → 실용적 결론. 완료 응답에는 보고서 링크, 출처 수, 보존 실패와 남은 불확실성을 함께 알린다.",
@@ -329,18 +338,81 @@ server.registerTool(
 
 const documentType = z.enum(["general", "worklog", "troubleshooting", "decision", "reference", "plan", "spec"]);
 const searchableDocumentType = z.enum(["general", "worklog", "troubleshooting", "decision", "reference", "plan", "spec", "research"]);
+const MAX_CAPTURE_CANDIDATES = 6;
+const SAFE_CATEGORY_SLUG = /^[a-z0-9가-힣/_-]{1,60}$/u;
+const SAFE_CATEGORY_LABEL = /^[a-z0-9가-힣 ()/_-]{1,60}$/iu;
+
+function projectCaptureCandidates(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const projected = [];
+  for (const candidate of value) {
+    if (!candidate || Array.isArray(candidate) || typeof candidate !== "object") continue;
+    const slug = typeof candidate.slug === "string" ? candidate.slug : "";
+    const score = candidate.score;
+    if (
+      !SAFE_CATEGORY_SLUG.test(slug) ||
+      slug.startsWith("/") || slug.endsWith("/") || slug.includes("//") ||
+      slug.split("/").length > 4 ||
+      typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 1 ||
+      seen.has(slug)
+    ) continue;
+    seen.add(slug);
+    const item = { slug, score };
+    if (typeof candidate.label === "string" && SAFE_CATEGORY_LABEL.test(candidate.label)) {
+      item.label = candidate.label;
+    }
+    projected.push(item);
+    if (projected.length === MAX_CAPTURE_CANDIDATES) break;
+  }
+  return projected;
+}
+
+server.registerTool(
+  "get_capture_context",
+  {
+    description:
+      "문서를 저장하기 직전에 제목·요약과 가까운 기존 external-safe 폴더 후보만 받는다. 전체 폴더 설명이나 자유형 정책은 노출하지 않는다. 후보가 애매하면 record_document에서 category를 생략해 Inbox를 선택한다.",
+    inputSchema: {
+      title: z.string().describe("저장할 문서의 의미상 제목(날짜 접두어 제외)"),
+      summary: z.string().optional().describe("분류에 필요한 짧은 주제 요약(본문 전체를 보내지 않아도 됨)"),
+    },
+  },
+  async ({ title, summary }) => {
+    try {
+      const matched = JSON.parse(await api("POST", "/categories/match", {
+        text: [title, summary].filter(Boolean).join("\n"),
+      }));
+      return asResult(JSON.stringify({
+        version: 1,
+        defaultTarget: { type: "inbox", category: null },
+        rules: {
+          allowedCategorySource: "existing-external-safe-candidates",
+          unknownCategory: "fallback-inbox",
+          explicitUserCategory: "set-requireCategory-true",
+          createFolder: false,
+        },
+        candidates: projectCaptureCandidates(matched?.candidates),
+      }));
+    } catch (e) {
+      return asError(e);
+    }
+  },
+);
 
 server.registerTool(
   "record_document",
   {
-    description: "독립 문서를 기록한다. 새 문서는 create-only가 기본이며 기존 slug를 갱신하려면 expectedVersion이 필수다. 사람/혼합 문서는 직접 덮지 않고 staged review를 반환한다.",
+    description: "독립 문서를 기록한다. category는 get_capture_context가 반환한 기존 후보만 채택되고, 없는 후보는 기본적으로 Inbox로 폴백한다. 응답의 placement가 실제 저장 위치다. 새 문서는 create-only이며 예약 작업은 idempotencyKey를 반드시 사용한다.",
     inputSchema: {
       slug: z.string().optional().describe("기존 문서 갱신 시 slug; 생략하면 새 문서 생성"),
-      title: z.string().describe("문서 제목"),
+      title: z.string().describe("의미상 문서 제목. 날짜는 documentAt에 두고, 명시적 시리즈 규칙이 없으면 날짜 접두어를 붙이지 않음"),
       body: z.string().describe("마크다운 본문"),
       type: documentType.optional().describe("문서 유형(기본 general)"),
       documentAt: z.string().optional().describe("ISO 8601 문서 시각(생략 시 현재)"),
-      category: z.string().optional().describe("선택 카테고리"),
+      category: z.string().optional().describe("get_capture_context가 반환한 기존 category slug. 생략하거나 사용할 수 없으면 Inbox"),
+      requireCategory: z.boolean().optional().describe("사용자가 특정 폴더를 명시한 경우 true. 폴더가 없으면 Inbox 폴백 대신 409"),
+      idempotencyKey: z.string().min(1).max(200).optional().describe("예약·cron create 재시도의 안정 키(예: daily-ai-trends:2026-08-06). 같은 payload는 같은 문서를 반환"),
       expectedVersion: z.number().int().min(1).optional().describe("기존 문서 갱신 시 현재 version (필수)"),
     },
   },

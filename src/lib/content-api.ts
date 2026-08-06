@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { parseBearer } from "@/lib/apikey-core";
 import type { ModelAccess, Prisma } from "@/generated/prisma/client";
 import { withExternalModelDispatchLock } from "@/lib/model-access";
 
@@ -40,9 +41,13 @@ export function optionalExpectedVersionFromRequest(req: Request): OptionalExpect
   return { state: "valid", value: queryVersion ?? headerVersion! };
 }
 
-/** 외부 모델/MCP 호출자가 명시한 fail-closed 데이터 범위. 일반 REST ACL과는 별개다. */
+/**
+ * Bearer 콘텐츠 API는 프로그램적 외부-agent 경계다. 모델 trust를 클라이언트가 보낸
+ * X-Jimi-Model-Trust 헤더에 맡기지 않는다 — 헤더를 빠뜨린 REST/Hermes 호출도 같은
+ * external-only 범위와 agent origin을 적용하고, 헤더만 위조한 세션 요청은 승격하지 않는다.
+ */
 export function requestsExternalModelScope(req: Request): boolean {
-  return req.headers.get("x-jimi-model-trust")?.trim() === "external";
+  return parseBearer(req.headers.get("authorization")) !== null;
 }
 
 /**

@@ -171,7 +171,7 @@ Health check:
 
 ## 프로그램적 접근 (REST / MCP)
 
-외부 에이전트가 앱 내부 AI 없이 위키를 유지보수할 수 있다. **웹 UI는 선택한 인증 모드의 세션 또는 Tailscale Serve 신원으로, 프로그램 호출은 API 키(Bearer)로 인증**한다.
+외부 에이전트가 앱 내부 AI 없이 위키를 유지보수할 수 있다. **웹 UI는 선택한 인증 모드의 세션 또는 Tailscale Serve 신원으로, 프로그램 호출은 API 키(Bearer)로 인증**한다. Bearer 콘텐츠 호출은 서버가 외부-agent 범위로 판정하므로 `internalOnly` 자료를 볼 수 없고, 별도 trust 헤더로 이 경계를 바꿀 수 없다.
 
 1. **API 키 발급**: 로그인 후 `/keys`에서 발급. 위키 스코프·상한 역할(읽기전용/편집)·만료를 지정할 수 있다. 발급 시 원문 키는 한 번만 노출된다.
 2. **REST**: `Authorization: Bearer <KEY>` 헤더로 `/api/wikis/{slug}/*` 호출. 전체 레퍼런스는 [`docs/rest-api.md`](docs/rest-api.md).
@@ -185,7 +185,7 @@ Health check:
      -- node <repo>/mcp/server.mjs
    ```
 
-> 내부 AI를 소비하는 라우트(`/query`, `/reindex`, `/lint?deep`)는 **세션 전용**이다. `POST /ingest`는 API 키에도 열려 있으며 `mode=preserve`는 원문만 보존하고 생성형 쿼터를 쓰지 않는다. `mode=curate`(기본값)는 기존 지식 합성 파이프라인과 일일 토큰 쿼터를 사용한다. 독립 작업 기록은 `/documents`, 읽을거리 승격은 `/saved-links/{id}/promote`를 쓴다. 자세한 정책은 `docs/rest-api.md` 참조.
+> 내부 AI를 소비하는 라우트(`/query`, `/reindex`, `/lint?deep`)는 **세션 전용**이다. `POST /ingest`는 API 키에도 열려 있으며 `mode=preserve`는 원문만 보존하고 생성형 쿼터를 쓰지 않는다. `mode=curate`(기본값)는 기존 지식 합성 파이프라인과 일일 토큰 쿼터를 사용한다. 독립 작업 기록은 `/documents`를 쓰며, 외부 agent가 고른 category는 기존 공개 폴더만 채택되고 불확실하면 Inbox로 간다. cron 재시도는 `idempotencyKey`로 중복을 막는다. 자세한 정책은 `docs/rest-api.md` 참조.
 
 ## 기여
 

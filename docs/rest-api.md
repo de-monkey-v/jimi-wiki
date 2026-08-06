@@ -12,7 +12,7 @@ http://localhost:3006/api/wikis/{slug}
 
 ## 인증
 
-프로그램 호출은 **API 키(Bearer)** 로 인증한다. 웹 UI는 쿠키 세션을 쓰며, 아래 "세션 전용 라우트"는 API 키로 접근할 수 없다.
+프로그램 호출은 **API 키(Bearer)** 로 인증한다. Bearer 콘텐츠 호출은 서버가 외부-agent 범위로 판정하며 `internalOnly` 페이지·원문을 제외하고 agent origin을 기록한다. `X-Jimi-Model-Trust` 같은 클라이언트 헤더로 이 경계를 승격·완화할 수 없다. 웹 UI는 쿠키 세션을 쓰며, 아래 "세션 전용 라우트"는 API 키로 접근할 수 없다.
 
 ```
 Authorization: Bearer <API_KEY>
@@ -108,6 +108,7 @@ Source와 연결 source note를 함께 14일 휴지통으로 이동하거나 복
   "slug": "기존 수정 시만", "title": "필수", "body": "마크다운",
   "type": "general|worklog|troubleshooting|decision|reference|plan|spec|research",
   "documentAt": "2026-07-21T12:30:00+09:00", "category": "옵션",
+  "requireCategory": false, "idempotencyKey": "daily-ai-trends:2026-08-06",
   "expectedVersion": 3,
   "sourceSlugs": ["source-a", "source-b"]
 }
@@ -118,6 +119,10 @@ slug 생략은 항상 신규(create-only). 기존 slug 수정은 `expectedVersio
 - research는 `sourceSlugs` 1~30개가 필수다. 같은 위키의 active `curationState=preserved` Source만 허용하며, 코드 블록 밖 `[@source-slug]` 첫 등장 순서와 정확히 같아야 한다. 새 category 기본값은 `research`.
 - research 갱신은 기존 research slug에만 허용하고 append는 `409 research_append_forbidden`이다.
 - 비밀 키 패턴은 `400 secret_material_rejected`.
+- Bearer 외부 agent의 `category`는 external-safe 페이지가 이미 쓰는 폴더 slug와 정확히 일치할 때만 채택한다. 없거나 잘못된 후보는 문서를 버리지 않고 Inbox(`category:null`)로 저장한다. 사용자가 특정 폴더를 명시했다면 `requireCategory:true`를 보내며, 폴더가 없으면 `409 category_not_available`로 멈춘다. 후보는 먼저 `POST /categories/match`로 좁힌다.
+- 일반 제목에는 날짜 접두어를 자동으로 붙이지 않고 의미상 시각은 `documentAt`에 둔다. 날짜 제목 형식이 필요한 정기 시리즈만 해당 작업의 명시 규칙을 따른다.
+- 예약·cron create는 1~200자의 안정적인 `idempotencyKey`를 보낸다. 같은 key와 같은 payload 재시도는 기존 단일 문서를 `200 idempotentReplay:true`로 반환하고, 같은 key의 다른 payload는 `409 idempotency_conflict`다. `slug`/`expectedVersion`과 함께 쓰거나 research에 쓰지 않는다.
+- 저장/검토 응답은 `placement:{status,requestedCategory,category,target,reason}`을 포함한다. 이것이 agent가 추측한 위치가 아니라 서버가 실제 결정한 위치다.
 
 #### `GET /documents?type=&from=&to=` — 목록 (viewer)
 `documentAt desc` 순으로 최대 200개. 날짜 범위와 DocumentType(`type=research` 포함)을 필터링한다.
@@ -136,7 +141,7 @@ body `{ "content":"추가할 마크다운", "expectedVersion":3 }`. document 전
 `200`: `{ ontology: { categories, relations, ... } }`
 
 #### `POST /categories/match` — 재사용 후보 (viewer)
-요청 `{ text }`. `200`: `{ candidates: [{ slug, label?, score }] }` (문자열+임베딩 병합, 자동 병합 아님)
+요청 `{ text }`. Bearer 응답은 external-safe 페이지가 실제로 쓰는 category만 후보로 삼는다. `200`: `{ candidates: [{ slug, label?, score }] }` (문자열+임베딩 병합, 자동 병합 아님). 점수는 자동 저장 확률이 아니므로 agent는 소수 후보 중 정확한 slug만 선택하고 애매하면 Inbox를 택한다.
 오류: `400 invalid_json | text_required`
 
 #### `POST /ontology/change` — 거버넌스 (editor)

@@ -64,6 +64,10 @@ ontology_rules_version: 3
 ## Document — 작업 기록과 일반 문서
 
 - `document`는 Source와 독립적이다. `sourceSlug`를 붙이지 않는다.
+- 분류가 필요하면 먼저 `get_capture_context(title, summary?)`로 external-safe 기존 폴더 후보만 받는다. 정확한 후보 하나를 고를 수 없으면 `category`를 생략해 Inbox에 둔다. 전체 폴더 설명·정책 문서를 프롬프트에 싣지 않는다.
+- 서버가 category를 다시 검증한다. 없는 폴더 힌트는 기본적으로 Inbox로 폴백하며 응답의 `placement`가 실제 위치다. 사용자가 폴더를 명시했으면 `requireCategory:true`로 폴백 대신 `409`를 받는다.
+- 일반 문서 제목은 의미상 제목만 쓰고 날짜는 `documentAt`에 둔다. 날짜 접두어는 명시적인 정기 시리즈 규칙이 있을 때만 쓴다.
+- cron·예약 create는 실행마다 바뀌지 않는 `idempotencyKey`(예: `daily-ai-trends:2026-08-06`)를 보낸다. 같은 payload 재시도는 같은 문서를 반환하며 다른 payload 재사용은 충돌이다.
 - `record_document`는 기본 create-only다. 기존 slug 수정과 `append_document`는 읽은 `currentVersion`을 `expectedVersion`으로 보낸다.
 - 외부 에이전트가 만든 문서는 CAS 성공 시 직접 갱신한다. 사람이 작성했거나 혼합된 문서는 `{staged:true}` 검토 초안을 반환하므로 직접 덮어썼다고 보고하지 않는다.
 - 프로젝트 worklog는 `목표 / 변경 사항 / 결정 / 문제와 해결 / 검증 / 남은 작업 / 참고 자료` 순서를 고정한다.

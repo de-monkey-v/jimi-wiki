@@ -1,7 +1,8 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { normalizeSlug } from "@/lib/markdown";
-import { isReservedSlug } from "@/lib/ontology";
+import { isReservedSlug, sanitizeCategorySlug } from "@/lib/ontology";
 import {
   MAX_RESEARCH_SOURCES,
   inspectResearchMarkdown,
@@ -14,7 +15,7 @@ import {
 } from "@/lib/content-store";
 import { stageExternalPageProposal } from "@/lib/builds";
 import { refreshPageDerivedState } from "@/lib/page-projections";
-import type { DocumentType, Page, RevisionActor } from "@/generated/prisma/client";
+import type { DocumentType, Page, Prisma, RevisionActor } from "@/generated/prisma/client";
 
 export const DOCUMENT_TYPES = [
   "general",
@@ -39,6 +40,7 @@ export const WORKLOG_SECTIONS = [
 
 export const MAX_DOCUMENT_BODY_BYTES = 1_048_576;
 export const MAX_DOCUMENT_APPEND_BYTES = 65_536;
+export const MAX_DOCUMENT_IDEMPOTENCY_KEY_LENGTH = 200;
 
 export class DocumentInputError extends Error {
   constructor(
@@ -48,6 +50,49 @@ export class DocumentInputError extends Error {
     super(code);
     this.name = "DocumentInputError";
   }
+}
+
+export type ExternalDocumentPlacement = {
+  requestedCategory: string | null;
+  category: string | null | undefined;
+  reason: "unspecified" | "matched-existing-category" | "category-unavailable-fallback-inbox";
+};
+
+/**
+ * 외부 agent의 category는 기존 external-safe 폴더를 정확히 고른 경우에만 채택한다.
+ * 점수 기반 자동 배치는 오분류를 영구 구조로 만들 수 있으므로 하지 않고, 힌트가 틀리면
+ * Inbox(null)로 보낸다. 사용자가 폴더를 명시한 흐름은 requireCategory로 fail-closed한다.
+ */
+export function resolveExternalDocumentCategory(
+  requested: string | null | undefined,
+  allowed: ReadonlySet<string>,
+  requireCategory = false,
+): ExternalDocumentPlacement {
+  const raw = typeof requested === "string" ? requested.trim() : requested;
+  if (!raw) {
+    if (requireCategory) throw new DocumentInputError("category_required");
+    return { requestedCategory: null, category: requested === undefined ? undefined : null, reason: "unspecified" };
+  }
+  const category = sanitizeCategorySlug(raw);
+  if (category && allowed.has(category)) {
+    return { requestedCategory: raw, category, reason: "matched-existing-category" };
+  }
+  if (requireCategory) throw new DocumentInputError("category_not_available", 409);
+  return {
+    requestedCategory: raw,
+    category: null,
+    reason: "category-unavailable-fallback-inbox",
+  };
+}
+
+/** 예약 작업의 재시도가 같은 문서를 가리키도록 opaque key를 안정적인 slug로 바꾼다. */
+export function documentIdempotencySlug(idempotencyKey: string): string {
+  const key = idempotencyKey.trim();
+  if (!key || key.length > MAX_DOCUMENT_IDEMPOTENCY_KEY_LENGTH) {
+    throw new DocumentInputError("invalid_idempotency_key");
+  }
+  const digest = createHash("sha256").update(key).digest("hex").slice(0, 24);
+  return `capture-${digest}`;
 }
 
 export function parseDocumentType(value: unknown, fallback?: DocumentType): DocumentType | null {
@@ -105,11 +150,28 @@ export type DocumentWriteInput = {
   category?: string | null;
   expectedVersion?: number;
   sourceSlugs?: string[];
+  /** create-only 내부 메타데이터. 외부 요청 본문에서 직접 받지 않는다. */
+  frontmatter?: Prisma.InputJsonValue;
+};
+
+export type DocumentIdempotencyContext = {
+  requestedCategory: string | null;
+  requireCategory: boolean;
 };
 
 export type DocumentWriteResult =
   | { created: boolean; staged: false; page: Page }
-  | { created: false; staged: true; slug: string; currentVersion: number; buildId: string; draftId: string };
+  | {
+      created: false;
+      staged: true;
+      slug: string;
+      currentVersion: number;
+      category: string | null;
+      buildId: string;
+      draftId: string;
+    };
+
+export type IdempotentDocumentWriteResult = DocumentWriteResult & { idempotentReplay: boolean };
 
 const isP2002 = (error: unknown) => (error as { code?: string })?.code === "P2002";
 
@@ -253,6 +315,7 @@ export async function writeDocument(input: DocumentWriteInput): Promise<Document
         staged: true,
         slug: existing.slug,
         currentVersion: existing.currentVersion,
+        category: input.category === undefined ? existing.category : input.category,
         ...staged,
       };
     }
@@ -293,6 +356,7 @@ export async function writeDocument(input: DocumentWriteInput): Promise<Document
         title: input.title.trim(),
         body: input.body,
         kind: "document",
+        frontmatter: input.frontmatter,
         documentType,
         documentAt,
         category: input.category === undefined
@@ -311,6 +375,94 @@ export async function writeDocument(input: DocumentWriteInput): Promise<Document
     }
   }
   throw new DocumentInputError("slug_exhausted", 409);
+}
+
+const CAPTURE_FRONTMATTER_KEY = "_jimiCapture";
+
+function idempotencyRequestHash(
+  input: DocumentWriteInput,
+  context: DocumentIdempotencyContext,
+): string {
+  return createHash("sha256").update(JSON.stringify({
+    version: 1,
+    title: input.title.trim(),
+    body: input.body,
+    documentType: input.documentType ?? "general",
+    documentAt: input.documentAt?.toISOString() ?? null,
+    category: input.category ?? null,
+    requestedCategory: context.requestedCategory,
+    requireCategory: context.requireCategory,
+    externalAgent: input.externalAgent,
+  })).digest("hex");
+}
+
+function storedIdempotencyRequestHash(page: Page): string | null {
+  if (!page.frontmatter || Array.isArray(page.frontmatter) || typeof page.frontmatter !== "object") return null;
+  const capture = (page.frontmatter as Record<string, unknown>)[CAPTURE_FRONTMATTER_KEY];
+  if (!capture || Array.isArray(capture) || typeof capture !== "object") return null;
+  const hash = (capture as Record<string, unknown>).requestHash;
+  return typeof hash === "string" ? hash : null;
+}
+
+function matchesIdempotentDocument(
+  page: Page,
+  input: DocumentWriteInput,
+  requestHash: string,
+): boolean {
+  const documentType = input.documentType ?? "general";
+  const category = input.category === undefined
+    ? documentType === "research" ? "research" : null
+    : input.category;
+  return page.kind === "document" &&
+    page.archivedAt === null &&
+    page.trashedAt === null &&
+    (!input.externalAgent || page.modelAccess === "external") &&
+    page.title === input.title.trim() &&
+    page.body === input.body &&
+    page.documentType === documentType &&
+    page.category === category &&
+    storedIdempotencyRequestHash(page) === requestHash &&
+    (input.documentAt === undefined || page.documentAt?.getTime() === input.documentAt.getTime());
+}
+
+/**
+ * 동일 idempotencyKey의 동일 payload는 기존 문서를 성공으로 돌려주고, payload가 달라지면
+ * 409로 멈춘다. create-only write의 slug unique constraint가 동시 재시도까지 직렬화한다.
+ */
+export async function writeDocumentIdempotently(
+  input: DocumentWriteInput,
+  idempotencyKey: string,
+  context: DocumentIdempotencyContext = {
+    requestedCategory: input.category ?? null,
+    requireCategory: false,
+  },
+): Promise<IdempotentDocumentWriteResult> {
+  if (input.slug !== undefined || input.expectedVersion !== undefined) {
+    throw new DocumentInputError("idempotency_key_create_only");
+  }
+  if (input.documentType === "research" || input.sourceSlugs !== undefined) {
+    throw new DocumentInputError("idempotency_key_research_unsupported");
+  }
+  const slug = documentIdempotencySlug(idempotencyKey);
+  const requestHash = idempotencyRequestHash(input, context);
+  const frontmatter: Prisma.InputJsonObject = {
+    [CAPTURE_FRONTMATTER_KEY]: { version: 1, requestHash },
+  };
+  try {
+    const result = await writeDocument({ ...input, slug, frontmatter });
+    return { ...result, idempotentReplay: false };
+  } catch (error) {
+    if (!(error instanceof DocumentInputError) || !["expected_version_required", "slug_conflict"].includes(error.code)) {
+      throw error;
+    }
+    const existing = await prisma.page.findUnique({
+      where: { wikiId_slug: { wikiId: input.wikiId, slug } },
+    });
+    if (!existing || !matchesIdempotentDocument(existing, input, requestHash)) {
+      throw new DocumentInputError("idempotency_conflict", 409);
+    }
+    return { created: false, staged: false, page: await finishPage(existing), idempotentReplay: true };
+  }
 }
 
 export async function appendDocument(input: {

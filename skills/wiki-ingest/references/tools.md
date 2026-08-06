@@ -24,7 +24,8 @@
 | 원문만 보존 | `preserve_url` / `preserve_text` | `POST /ingest {mode:"preserve",...}` | Source+pointer note, 생성형 큐레이션 없음 |
 | 정리 편입 | `curate_url` / `curate_text` | `POST /ingest {mode:"curate",...}` | 기존 `ingest_*`도 curate 별칭 |
 | 보존 원문 정리 | `curate_source(sourceSlug)` | `POST /sources/{slug}/curate` | blob-only 파일은 이때 추출/OCR 후 새 SourceRevision을 만들며, 게시 성공 뒤에만 curated 전환 |
-| 문서 기록 | `record_document(...)` | `POST /documents` | `general|worklog|troubleshooting|decision|reference|plan|spec` |
+| 문서 저장 맥락 | `get_capture_context(title, summary?)` | `POST /categories/match` | external-safe 기존 폴더 소수 후보 + 기본 Inbox 규칙 |
+| 문서 기록 | `record_document(...)` | `POST /documents` | 기존 폴더만 채택, 불확실하면 Inbox, cron은 `idempotencyKey` |
 | 연구 보고서 | `record_research_report(...)` | `POST /documents {type:"research"}` | preserved Source 1~30개, `[@slug]` 첫 등장 순서와 `sourceSlugs` 일치 |
 | 작업 기록 | `record_worklog(...)` | `POST /documents` | 7개 고정 heading |
 | 문서 추가 | `append_document(slug, content, expectedVersion)` | `POST /documents/{slug}/append` | document 전용, CAS |
@@ -61,6 +62,7 @@
 > "인증 경계 = 비용 경계." 내부 AI를 대량 소비하는 라우트는 원칙적으로 웹 UI 세션 전용이다. `POST /ingest`는 API 키에도 열려 있고, 그중 `mode=curate`에만 세션과 동일한 일일 생성 쿼터가 걸린다.
 
 - **API 키/MCP로 가능**: 위 표의 모든 도구 — 조회·작성·복구 가능한 휴지통/복원, 원문 저장/조회, 하이브리드 검색(+graph), 온톨로지, 기계 lint, 읽을거리, **위임형 ingest와 잡 폴링**. 영구 purge와 위키 전체 삭제는 불가다.
+- **Bearer는 외부-agent 경계**: trust 헤더와 무관하게 `internalOnly`를 볼 수 없고 쓰기는 agent origin으로 기록된다. 문서 category는 기존 external-safe 폴더만 채택되며 서버의 `placement` 응답이 최종 위치다.
 - **세션 전용(API 키 불가)**: `POST /query`, `POST /reindex`, `POST /lint {deep:true}`. 외부 에이전트는 자기 LLM이 있으므로 `/query` 대신 `search_wiki`로 근거를 받아 스스로 종합한다.
 - **ingest 쿼터**: `curate`만 위키 소유자의 일일 생성 토큰 상한(`DAILY_TOKEN_LIMIT`)을 소비한다. `preserve`는 생성형 쿼터를 소비하지 않는다. 초과 시 `429 daily_quota_exceeded`이며 임의 재시도하지 않는다.
 

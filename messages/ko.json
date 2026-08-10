@@ -791,6 +791,19 @@
     "pin": "폴더 고정",
     "pinned": "고정됨"
   },
+  "FolderSortControls": {
+    "label": "정렬",
+    "option": {
+      "auto": "자동",
+      "newest": "최신순",
+      "oldest": "오래된순",
+      "title": "이름순"
+    },
+    "autoEffective": "자동 정렬이 현재 {mode}으로 적용됩니다.",
+    "selected": "현재 {mode}으로 정렬합니다.",
+    "saving": "정렬 설정을 저장하는 중입니다.",
+    "saveError": "정렬 설정을 저장하지 못했습니다. 다시 시도하세요."
+  },
   "KnowledgeHistory": {
     "backToPage": "페이지로 돌아가기",
     "backToSource": "원문으로 돌아가기",

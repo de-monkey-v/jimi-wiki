@@ -100,7 +100,7 @@ export default async function PageView({
   const [backlinks, outlinks, { prev, next }] = await Promise.all([
     getBacklinks(wiki.id, page.id),
     getOutlinks(wiki.id, page.id),
-    getPrevNext(wiki.id, pageSlug),
+    getPrevNext(wiki.id, pageSlug, { userId }),
   ]);
 
   const isNote = page.kind === "note";

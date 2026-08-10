@@ -791,6 +791,19 @@
     "pin": "固定文件夹",
     "pinned": "已固定"
   },
+  "FolderSortControls": {
+    "label": "排序",
+    "option": {
+      "auto": "自动",
+      "newest": "最新优先",
+      "oldest": "最早优先",
+      "title": "名称"
+    },
+    "autoEffective": "自动排序当前使用“{mode}”。",
+    "selected": "当前按“{mode}”排序。",
+    "saving": "正在保存排序设置。",
+    "saveError": "无法保存排序设置，请重试。"
+  },
   "KnowledgeHistory": {
     "backToPage": "返回页面",
     "backToSource": "返回来源",

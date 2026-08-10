@@ -791,6 +791,19 @@
     "pin": "フォルダ固定",
     "pinned": "固定済み"
   },
+  "FolderSortControls": {
+    "label": "並び順",
+    "option": {
+      "auto": "自動",
+      "newest": "新しい順",
+      "oldest": "古い順",
+      "title": "名前順"
+    },
+    "autoEffective": "自動並び替えは現在「{mode}」です。",
+    "selected": "現在「{mode}」で並べています。",
+    "saving": "並び順を保存しています。",
+    "saveError": "並び順を保存できませんでした。もう一度お試しください。"
+  },
   "KnowledgeHistory": {
     "backToPage": "ページに戻る",
     "backToSource": "ソースに戻る",

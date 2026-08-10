@@ -17,6 +17,8 @@ import type { ModelAccess, PageKind, WikiKind } from "@/generated/prisma/client"
 import { promoteSavedLink } from "@/lib/saved-link-promotion";
 import { parseDocumentDate, parseDocumentType, writeDocument } from "@/lib/documents";
 import { saveSavedLink, trashSavedLink } from "@/lib/saved-links";
+import { saveFolderSortPreference } from "@/lib/folder-sort.server";
+import type { FolderSortSelection } from "@/lib/folder-sort";
 
 function formModelAccess(formData: FormData): ModelAccess {
   return String(formData.get("modelAccess") ?? "external") === "internalOnly" ? "internalOnly" : "external";
@@ -146,6 +148,23 @@ const isBareUrl = (s: string) => BARE_URL.test(s.trim());
 /** 링크 저장(개인·자동 라벨). 메타데이터만 읽으며 LLM은 호출하지 않는다. */
 async function saveLink(wikiId: string, userId: string, url: string): Promise<void> {
   await saveSavedLink({ wikiId, userId, url });
+}
+
+/** 폴더 정렬 개인 설정. viewer를 포함한 모든 멤버가 자기 행만 변경한다. */
+export async function setFolderSortPreferenceAction(
+  wikiSlug: string,
+  category: string,
+  selection: unknown,
+): Promise<FolderSortSelection> {
+  const userId = await getCurrentUserId();
+  const wiki = await getWikiForUser(userId, wikiSlug);
+  if (!wiki) throw new Error("접근 권한이 없습니다");
+  const saved = await saveFolderSortPreference(userId, wiki.id, category, selection);
+  const encodedWiki = encodeURIComponent(wikiSlug);
+  const encodedCategory = category.split("/").map(encodeURIComponent).join("/");
+  revalidatePath(`/wikis/${encodedWiki}`, "layout");
+  revalidatePath(`/wikis/${encodedWiki}/category/${encodedCategory}`);
+  return saved;
 }
 
 /** ⌘⇧N 빠른 캡처: 단일 URL이면 읽을거리로, 아니면 미분류(Inbox) 개인 노트로. */

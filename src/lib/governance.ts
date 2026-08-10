@@ -23,6 +23,8 @@ import {
   modelPolicyClient,
   type ExternalModelScope,
 } from "@/lib/model-access";
+import { categoryIsInSubtree } from "@/lib/folder-sort";
+import { relocateFolderSortPreferencesTx } from "@/lib/folder-sort.server";
 
 // category 거버넌스는 ontology.ts + search.ts 를 모두 조율하지만 그 둘은 governance를 import하지 않는다(순환 회피).
 
@@ -68,19 +70,22 @@ async function reconcile(wikiId: string): Promise<void> {
   await resyncCorpus(wikiId);
 }
 
-/** Page.category 벌크 이동: exact(from) + subpath(from/*). to=null이면 미분류. slug의 `_`가 LIKE 와일드카드라 left()로 접두 비교. */
+/** Page.category 벌크 이동: exact(from) + subpath(from/*). to=null이면 미분류. */
 async function movePageCategories(wikiId: string, from: string, to: string | null): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
-      const pages = await tx.page.findMany({
+      const candidates = await tx.page.findMany({
         where: {
           wikiId,
           archivedAt: null,
+          category: { not: null },
           OR: [{ category: from }, { category: { startsWith: `${from}/` } }],
         },
         select: { id: true, category: true, currentVersion: true },
         orderBy: { id: "asc" },
       });
+      // Prisma startsWith/SQL LIKE의 `_` 와일드카드 과매칭을 피하려고 실제 문자열 경계를 확인한다.
+      const pages = candidates.filter((page) => categoryIsInSubtree(page.category, from));
       for (const page of pages) {
         const category = to === null
           ? null
@@ -95,6 +100,7 @@ async function movePageCategories(wikiId: string, from: string, to: string | nul
           context: { actor: "human", reason: `category move: ${from} -> ${to ?? "(uncategorized)"}` },
         });
       }
+      await relocateFolderSortPreferencesTx(tx, wikiId, from, to);
     },
     { maxWait: 15_000, timeout: 120_000 },
   );
@@ -105,6 +111,7 @@ export async function renameCategory(wikiId: string, from: string, toRaw: string
   const to = sanitizeCategorySlug(toRaw);
   if (!to) throw new Error("유효하지 않은 category 이름");
   if (to === from) return;
+  if (to.startsWith(`${from}/`)) throw new Error("category를 자기 하위 경로로 이동할 수 없습니다");
   const onto = await getOntology(wikiId);
   if (onto.categories.some((c) => c.slug === to)) return mergeCategory(wikiId, from, to);
 
@@ -136,6 +143,7 @@ export async function renameCategory(wikiId: string, from: string, toRaw: string
 /** category 병합: from의 페이지·synonym을 into로 흡수하고 from 제거(가역: synonym 이력 보존). */
 export async function mergeCategory(wikiId: string, from: string, into: string): Promise<void> {
   if (from === into) return;
+  if (into.startsWith(`${from}/`)) throw new Error("category를 자기 하위 경로로 병합할 수 없습니다");
   const onto = await getOntology(wikiId);
   if (!onto.categories.some((c) => c.slug === into)) throw new Error(`병합 대상 category 없음: ${into}`);
 

@@ -791,6 +791,19 @@
     "pin": "Pin folder",
     "pinned": "Pinned"
   },
+  "FolderSortControls": {
+    "label": "Sort",
+    "option": {
+      "auto": "Auto",
+      "newest": "Newest",
+      "oldest": "Oldest",
+      "title": "Name"
+    },
+    "autoEffective": "Auto is currently using {mode}.",
+    "selected": "Currently sorted by {mode}.",
+    "saving": "Saving the folder sort setting.",
+    "saveError": "Could not save the sort setting. Try again."
+  },
   "KnowledgeHistory": {
     "backToPage": "Back to page",
     "backToSource": "Back to source",

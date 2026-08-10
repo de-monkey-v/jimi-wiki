@@ -120,6 +120,12 @@ enum DraftStatus {
   suppressed
 }
 
+enum FolderSortMode {
+  newest
+  oldest
+  title
+}
+
 // ---------- 앱 전역 설정 (단일행) ----------
 // 런타임에 UI(관리자)에서 바꾸는 설정. env 는 미설정 시 폴백. web·worker 가 같은 행을 읽는다.
 // ⚠️ EMBED_MODEL/EMBED_DIM 은 DB vector 컬럼·HNSW 인덱스와 결합되어 여기 두지 않는다(env 고정).
@@ -154,6 +160,7 @@ model User {
   createdInvites Invite[]     @relation("InviteCreatedBy")
   pagePins       PagePin[]
   folderPins     FolderPin[]
+  folderSortPreferences FolderSortPreference[]
   savedLinks     SavedLink[]
 }
 
@@ -284,6 +291,7 @@ model Wiki {
   invites          Invite[]
   pagePins         PagePin[]
   folderPins       FolderPin[]
+  folderSortPreferences FolderSortPreference[]
   savedLinks       SavedLink[]
   telegramBindings TelegramBinding[]
   knowledgeBuilds  KnowledgeBuild[]
@@ -766,6 +774,23 @@ model FolderPin {
   wiki      Wiki     @relation(fields: [wikiId], references: [id], onDelete: Cascade)
 
   @@unique([userId, wikiId, category]) // 토글 멱등
+  @@index([userId, wikiId])
+}
+
+// 유저별 폴더 정렬 override. 행이 없으면 Auto(하위 document 존재 시 newest, 아니면 title).
+model FolderSortPreference {
+  id        String         @id @default(cuid())
+  userId    String
+  wikiId    String
+  category  String
+  mode      FolderSortMode
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wiki      Wiki           @relation(fields: [wikiId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, wikiId, category])
+  @@index([wikiId, category])
   @@index([userId, wikiId])
 }
 

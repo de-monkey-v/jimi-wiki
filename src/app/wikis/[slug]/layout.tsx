@@ -27,7 +27,7 @@ export default async function WikiLayout({
   if (!wiki) notFound(); // 멤버 아니면 제목 유출 없이 404
   const canWrite = wiki.role !== "viewer";
   const [{ sections }, pagePins, folderPins] = await Promise.all([
-    getWikiToc(wiki.id),
+    getWikiToc(wiki.id, { userId: user.id }),
     listPins(wiki.id, user.id),
     listFolderPins(wiki.id, user.id),
   ]);

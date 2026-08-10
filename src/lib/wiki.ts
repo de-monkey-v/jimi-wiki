@@ -25,6 +25,8 @@ import type {
   RevisionActor,
 } from "@/generated/prisma/client";
 import type { Prisma } from "@/generated/prisma/client";
+import { sortFolderSubtreePages, type FolderSortablePage } from "@/lib/folder-sort";
+import { listFolderSortPreferences } from "@/lib/folder-sort.server";
 
 // 페이지 생성/수정 공통 입력. category/sourceId는 undefined=미변경, null=해제, 값=설정.
 // 호출부 호환을 유지하면서 revision 계층의 정책/작성 주체를 선택적으로 전달할 수 있게 한다.
@@ -173,7 +175,7 @@ export type { TocSection, TocEntry };
 
 /** category 경로("ai/architectures")로 페이지들을 폴더 트리(TocEntry[])로 배치. 미분류는 루트 leaf(=Inbox). */
 function buildCategoryTree(
-  pages: { slug: string; title: string; kind: PageKind; category: string | null; currentVersion: number; origin: PageOrigin; sourceId: string | null }[],
+  pages: (FolderSortablePage & { kind: PageKind; currentVersion: number; origin: PageOrigin; sourceId: string | null })[],
 ): TocEntry[] {
   const rootChildren: TocEntry[] = [];
   const folderByPath = new Map<string, TocFolder>();
@@ -212,22 +214,41 @@ function buildCategoryTree(
  */
 export async function getWikiToc(
   wikiId: string,
-  opts?: { includePersonal?: boolean },
+  opts?: { includePersonal?: boolean; userId?: string },
 ): Promise<{ sections: TocSection[]; flat: { slug: string; title: string }[] }> {
   const includePersonal = opts?.includePersonal ?? true;
-  const pages = await prisma.page.findMany({
-    where: { wikiId, archivedAt: null, slug: { not: ONTOLOGY_SLUG } }, // O1: system 온톨로지 페이지 숨김
-    orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
-    select: { slug: true, title: true, kind: true, category: true, currentVersion: true, origin: true, sourceId: true },
-  });
+  const [pages, preferences] = await Promise.all([
+    prisma.page.findMany({
+      where: { wikiId, archivedAt: null, slug: { not: ONTOLOGY_SLUG } }, // O1: system 온톨로지 페이지 숨김
+      orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
+      select: {
+        slug: true,
+        title: true,
+        kind: true,
+        category: true,
+        currentVersion: true,
+        origin: true,
+        sourceId: true,
+        documentAt: true,
+        createdAt: true,
+      },
+    }),
+    opts?.userId ? listFolderSortPreferences(opts.userId, wikiId) : Promise.resolve(null),
+  ]);
 
   const personalPages = includePersonal ? pages.filter((p) => p.kind === "personal") : [];
   const documentPages = pages.filter((p) => p.kind === "document");
   const derivedPages = pages.filter((p) => !["note", "document", "personal"].includes(p.kind)); // concept/entity/meta
 
-  const personalEntries = buildCategoryTree(personalPages);
-  const documentEntries = buildCategoryTree(documentPages);
-  const knowledgeEntries = buildCategoryTree(derivedPages);
+  // userId가 없는 공개 share 호출은 기존 sortOrder/title 삽입 순서를 그대로 보존한다.
+  // 인증 호출만 폴더별 개인 설정과 Auto를 적용하며, Auto 근거는 section 분리 전 전체 페이지다.
+  const ordered = <T extends typeof pages>(sectionPages: T): T =>
+    preferences
+      ? sortFolderSubtreePages(sectionPages, "", preferences, pages) as T
+      : sectionPages;
+  const personalEntries = buildCategoryTree(ordered(personalPages));
+  const documentEntries = buildCategoryTree(ordered(documentPages));
+  const knowledgeEntries = buildCategoryTree(ordered(derivedPages));
 
   const sections = [
     ...(includePersonal ? [{ key: "personal" as const, entries: personalEntries }] : []),
@@ -251,7 +272,7 @@ export async function getWikiToc(
 export async function getPrevNext(
   wikiId: string,
   slug: string,
-  opts?: { includePersonal?: boolean },
+  opts?: { includePersonal?: boolean; userId?: string },
 ): Promise<{ prev: { slug: string; title: string } | null; next: { slug: string; title: string } | null }> {
   const { sections } = await getWikiToc(wikiId, opts);
   for (const section of sections) {

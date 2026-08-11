@@ -352,6 +352,9 @@
   },
   "WikiToc": {
     "toggleToc": "展开/收起目录",
+    "resizeToc": "调整目录宽度",
+    "resizeTocHint": "拖动或使用方向键调整 · 双击恢复默认宽度",
+    "resizeTocValue": "目录宽度 {width}px",
     "myWikis": "我的 Wiki",
     "emptyTitle": "暂无页面",
     "emptyBody": "添加页面后，目录将显示在此处。",

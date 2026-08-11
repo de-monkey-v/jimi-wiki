@@ -352,6 +352,9 @@
   },
   "WikiToc": {
     "toggleToc": "目次の開閉",
+    "resizeToc": "目次の幅を調整",
+    "resizeTocHint": "ドラッグまたは矢印キーで調整 · ダブルクリックで初期化",
+    "resizeTocValue": "目次の幅 {width}px",
     "myWikis": "マイウィキ",
     "emptyTitle": "ページなし",
     "emptyBody": "ページが追加されると、ここに目次が表示されます。",

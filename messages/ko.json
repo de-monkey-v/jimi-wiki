@@ -352,6 +352,9 @@
   },
   "WikiToc": {
     "toggleToc": "목차 열기/닫기",
+    "resizeToc": "목차 너비 조절",
+    "resizeTocHint": "드래그하거나 방향키로 조절 · 두 번 클릭해 초기화",
+    "resizeTocValue": "목차 너비 {width}px",
     "myWikis": "내 위키",
     "emptyTitle": "페이지 없음",
     "emptyBody": "페이지가 추가되면 목차가 여기에 표시됩니다.",

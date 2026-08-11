@@ -3,6 +3,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { logoutAction } from "@/app/login/actions";
 import { useChatModal, useShortcutLabel } from "@/app/wikis/[slug]/chat/ChatModal";
 import { useWikiActions } from "@/app/wikis/[slug]/WikiActions";
@@ -12,14 +13,31 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageKebabMenu } from "@/components/PageKebabMenu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { TocSection, TocEntry } from "@/lib/kinds";
+import {
+  DEFAULT_WIKI_TOC_WIDTH,
+  MAX_WIKI_TOC_WIDTH,
+  MIN_WIKI_TOC_WIDTH,
+  WIKI_TOC_WIDTH_STORAGE_KEY,
+  displayedWikiTocWidth,
+  normalizeWikiTocWidth,
+  parseStoredWikiTocWidth,
+  wikiTocViewportMax,
+} from "@/lib/wiki-toc-width";
 import { isReservedWikiPageSlug } from "@/lib/wiki-routes";
 
 type PinnedItem =
   | { type: "page"; slug: string; title: string }
   | { type: "folder"; category: string };
 
-function linkCls(active: boolean) {
-  return `block truncate rounded-md py-1 pr-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+type TocResizeDrag = {
+  pointerId: number;
+  startX: number;
+  startWidth: number;
+};
+
+function linkCls(active: boolean, mobileTwoLines = false) {
+  const overflow = mobileTwoLines ? "line-clamp-2 md:block md:truncate" : "truncate";
+  return `block ${overflow} rounded-md py-1 pr-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
     active ? "bg-stone-200 text-stone-900 font-medium" : "text-stone-600 hover:bg-stone-100"
   }`;
 }
@@ -51,9 +69,11 @@ function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: No
   if (entry.type === "page") {
     return (
       <li className="group/leaf relative">
-        <Link href={`/wikis/${ctx.slug}/${entry.slug}`} className={linkCls(entry.slug === ctx.current)} style={{ paddingLeft: depth * 12 + 20 }}>
-          {entry.title}
-        </Link>
+        <Tooltip label={entry.title}>
+          <Link href={`/wikis/${ctx.slug}/${entry.slug}`} className={linkCls(entry.slug === ctx.current, true)} style={{ paddingLeft: depth * 12 + 20 }}>
+            {entry.title}
+          </Link>
+        </Tooltip>
         <PageKebabMenu
           wikiSlug={ctx.slug}
           pageSlug={entry.slug}
@@ -78,17 +98,19 @@ function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "f
   return (
     <li>
       <div className="group/folder flex items-center">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOverride({ open: !open, whenActive: active })}
-          className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-1 pr-2 text-sm text-stone-500 hover:bg-stone-100"
-          style={{ paddingLeft: depth * 12 + 4 }}
-        >
-          <span className="w-3 shrink-0 text-xs text-stone-400">{open ? "▾" : "▸"}</span>
-          <span className="min-w-0 flex-1 truncate text-left">{entry.name}</span>
-          <span className="text-xs text-stone-300">{leafCount(entry)}</span>
-        </button>
+        <Tooltip label={entry.name}>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOverride({ open: !open, whenActive: active })}
+            className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-1 pr-2 text-sm text-stone-500 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            style={{ paddingLeft: depth * 12 + 4 }}
+          >
+            <span className="w-3 shrink-0 text-xs text-stone-400">{open ? "▾" : "▸"}</span>
+            <span className="min-w-0 flex-1 truncate text-left">{entry.name}</span>
+            <span className="text-xs text-stone-300">{leafCount(entry)}</span>
+          </button>
+        </Tooltip>
         {ctx.newKind && actions && (
           <Tooltip label={ctx.newInFolderLabel(entry.name)}>
             <button
@@ -164,6 +186,83 @@ export function WikiToc({
   const toggleRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const navRef = useRef<HTMLElement>(null);
+  const [preferredTocWidth, setPreferredTocWidth] = useState(DEFAULT_WIKI_TOC_WIDTH);
+  const [viewportWidth, setViewportWidth] = useState<number | null>(null);
+  const [resizingToc, setResizingToc] = useState(false);
+  const preferredTocWidthRef = useRef(DEFAULT_WIKI_TOC_WIDTH);
+  const resizeDragRef = useRef<TocResizeDrag | null>(null);
+  const resizeBodyStyleRef = useRef<{ cursor: string; userSelect: string } | null>(null);
+  const desktopTocWidth = viewportWidth === null
+    ? DEFAULT_WIKI_TOC_WIDTH
+    : displayedWikiTocWidth(preferredTocWidth, viewportWidth);
+  const desktopTocMax = viewportWidth === null ? MAX_WIKI_TOC_WIDTH : wikiTocViewportMax(viewportWidth);
+
+  const rememberPreferredTocWidth = (value: number, persist: boolean) => {
+    const normalized = normalizeWikiTocWidth(value);
+    preferredTocWidthRef.current = normalized;
+    setPreferredTocWidth(normalized);
+    if (!persist) return;
+    try {
+      localStorage.setItem(WIKI_TOC_WIDTH_STORAGE_KEY, String(normalized));
+    } catch {
+      // 저장소가 차단돼도 현재 탭의 조절 동작은 유지한다.
+    }
+  };
+
+  const restoreResizeBodyStyles = () => {
+    const previous = resizeBodyStyleRef.current;
+    if (!previous) return;
+    document.body.style.cursor = previous.cursor;
+    document.body.style.userSelect = previous.userSelect;
+    resizeBodyStyleRef.current = null;
+  };
+
+  const finishTocResize = () => {
+    if (!resizeDragRef.current) return;
+    resizeDragRef.current = null;
+    setResizingToc(false);
+    restoreResizeBodyStyles();
+    rememberPreferredTocWidth(preferredTocWidthRef.current, true);
+  };
+
+  useEffect(() => {
+    const updateViewport = () => setViewportWidth(window.innerWidth);
+    const restoreStoredWidth = (raw: string | null) => {
+      const restored = parseStoredWikiTocWidth(raw);
+      preferredTocWidthRef.current = restored;
+      setPreferredTocWidth(restored);
+    };
+    try {
+      restoreStoredWidth(localStorage.getItem(WIKI_TOC_WIDTH_STORAGE_KEY));
+    } catch {
+      restoreStoredWidth(null);
+    }
+    updateViewport();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === WIKI_TOC_WIDTH_STORAGE_KEY) restoreStoredWidth(event.newValue);
+    };
+    window.addEventListener("resize", updateViewport);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (resizeDragRef.current) {
+      try {
+        localStorage.setItem(WIKI_TOC_WIDTH_STORAGE_KEY, String(preferredTocWidthRef.current));
+      } catch {
+        // 페이지 이탈 중 저장 실패는 무시한다.
+      }
+    }
+    const previous = resizeBodyStyleRef.current;
+    if (!previous) return;
+    document.body.style.cursor = previous.cursor;
+    document.body.style.userSelect = previous.userSelect;
+    resizeBodyStyleRef.current = null;
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -293,16 +392,19 @@ export function WikiToc({
         onClick={(e) => {
           if (open && (e.target as HTMLElement).closest("a")) setOpen(false);
         }}
-        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-72 shrink-0 transform flex-col overflow-x-hidden border-r border-stone-200 bg-white transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
+        style={{ "--wiki-toc-width": `${desktopTocWidth}px` } as CSSProperties}
+        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-[min(88vw,22rem)] shrink-0 transform flex-col border-r border-stone-200 bg-white transition-transform duration-200 md:relative md:z-auto md:w-[var(--wiki-toc-width)] md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
       <div className="border-b border-stone-100 px-3 py-3">
         <Link href="/wikis" className="text-xs text-stone-400 hover:text-stone-600">← {t("myWikis")}</Link>
         <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
-          <Link href={`/wikis/${slug}`} className="min-w-0 truncate text-base font-bold tracking-tight">
-            {title}
-          </Link>
+          <Tooltip label={title}>
+            <Link href={`/wikis/${slug}`} className="min-w-0 truncate text-base font-bold tracking-tight">
+              {title}
+            </Link>
+          </Tooltip>
           <RecentPopover
             slug={slug}
             current={current}
@@ -317,7 +419,7 @@ export function WikiToc({
         </div>
       </div>
 
-      <nav ref={navRef} className="flex-1 overflow-y-auto px-2 py-3">
+      <nav ref={navRef} className="flex-1 overflow-x-hidden overflow-y-auto px-2 py-3">
         {/* 고정 문서와 안정적인 사용자용 목차. 최근 기록은 헤더 팝오버에 격리한다. */}
         {pinned.length > 0 && (
           <div className="mb-3">
@@ -326,21 +428,25 @@ export function WikiToc({
               {pinned.map((p) =>
                 p.type === "folder" ? (
                   <li key={`f:${p.category}`}>
-                    <Link
-                      href={`/wikis/${slug}/category/${p.category.split("/").map(encodeURIComponent).join("/")}`}
-                      className={`flex items-center gap-1 ${linkCls(false)}`}
-                      style={{ paddingLeft: 20 }}
-                    >
-                      <span className="shrink-0 text-stone-400">📁</span>
-                      <span className="min-w-0 flex-1 truncate">{p.category.split("/").pop()}</span>
-                    </Link>
+                    <Tooltip label={p.category.split("/").pop() ?? p.category}>
+                      <Link
+                        href={`/wikis/${slug}/category/${p.category.split("/").map(encodeURIComponent).join("/")}`}
+                        className={`flex items-center gap-1 ${linkCls(false)}`}
+                        style={{ paddingLeft: 20 }}
+                      >
+                        <span className="shrink-0 text-stone-400">📁</span>
+                        <span className="min-w-0 flex-1 truncate">{p.category.split("/").pop()}</span>
+                      </Link>
+                    </Tooltip>
                   </li>
                 ) : (
                   <li key={`p:${p.slug}`}>
-                    <Link href={`/wikis/${slug}/${p.slug}`} className={`flex items-center gap-1 ${linkCls(p.slug === current)}`} style={{ paddingLeft: 20 }}>
-                      <span className="shrink-0 text-amber-500">★</span>
-                      <span className="min-w-0 flex-1 truncate">{p.title}</span>
-                    </Link>
+                    <Tooltip label={p.title}>
+                      <Link href={`/wikis/${slug}/${p.slug}`} className={`flex items-center gap-1 ${linkCls(p.slug === current)}`} style={{ paddingLeft: 20 }}>
+                        <span className="shrink-0 text-amber-500">★</span>
+                        <span className="min-w-0 flex-1 whitespace-normal line-clamp-2 md:block md:truncate">{p.title}</span>
+                      </Link>
+                    </Tooltip>
                   </li>
                 ),
               )}
@@ -551,6 +657,71 @@ export function WikiToc({
             <button className="w-full rounded-md px-2 py-1 text-left text-sm text-stone-600 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">{t("logout")}</button>
           </form>
         ) : null}
+      </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t("resizeToc")}
+        aria-valuemin={MIN_WIKI_TOC_WIDTH}
+        aria-valuemax={desktopTocMax}
+        aria-valuenow={desktopTocWidth}
+        aria-valuetext={t("resizeTocValue", { width: desktopTocWidth })}
+        title={t("resizeTocHint")}
+        tabIndex={0}
+        onPointerDown={(event) => {
+          if (!event.isPrimary || event.button !== 0) return;
+          event.preventDefault();
+          event.currentTarget.focus();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          resizeDragRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startWidth: desktopTocWidth,
+          };
+          resizeBodyStyleRef.current = {
+            cursor: document.body.style.cursor,
+            userSelect: document.body.style.userSelect,
+          };
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+          setResizingToc(true);
+        }}
+        onPointerMove={(event) => {
+          const drag = resizeDragRef.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          const next = displayedWikiTocWidth(drag.startWidth + event.clientX - drag.startX, window.innerWidth);
+          rememberPreferredTocWidth(next, false);
+        }}
+        onPointerUp={(event) => {
+          if (resizeDragRef.current?.pointerId !== event.pointerId) return;
+          finishTocResize();
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        }}
+        onPointerCancel={(event) => {
+          if (resizeDragRef.current?.pointerId === event.pointerId) finishTocResize();
+        }}
+        onLostPointerCapture={finishTocResize}
+        onDoubleClick={() => rememberPreferredTocWidth(DEFAULT_WIKI_TOC_WIDTH, true)}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const direction = event.key === "ArrowLeft" ? -1 : 1;
+          const step = event.shiftKey ? 48 : 16;
+          const next = displayedWikiTocWidth(desktopTocWidth + direction * step, window.innerWidth);
+          rememberPreferredTocWidth(next, true);
+        }}
+        className={`group/toc-resizer absolute inset-y-0 -right-1 z-20 hidden w-2 touch-none cursor-col-resize select-none outline-none md:block md:hover:bg-indigo-50/60 md:focus-visible:bg-indigo-50/80 md:active:bg-indigo-100/70 ${
+          resizingToc ? "bg-indigo-100/70" : ""
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute left-1/2 top-1/2 h-10 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm transition-colors motion-reduce:transition-none group-hover/toc-resizer:bg-indigo-300 group-focus-visible/toc-resizer:bg-indigo-500 group-active/toc-resizer:bg-indigo-500 ${
+            resizingToc ? "bg-indigo-500" : "bg-stone-300"
+          }`}
+        />
       </div>
       </aside>
     </>

@@ -352,6 +352,9 @@
   },
   "WikiToc": {
     "toggleToc": "Toggle table of contents",
+    "resizeToc": "Resize table of contents",
+    "resizeTocHint": "Drag or use arrow keys · Double-click to reset",
+    "resizeTocValue": "Table of contents width: {width}px",
     "myWikis": "My Wikis",
     "emptyTitle": "No pages",
     "emptyBody": "Once pages are added, the table of contents will appear here.",

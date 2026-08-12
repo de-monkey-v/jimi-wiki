@@ -1,0 +1,4 @@
+interface:
+  display_name: "Jimi Wiki Release"
+  short_description: "Jimi Wiki 태그 승격·빌드·활성화 검증"
+  default_prompt: "Use $release-jimi-wiki to promote and deploy the next Jimi Wiki release without skipping any checkpoint."

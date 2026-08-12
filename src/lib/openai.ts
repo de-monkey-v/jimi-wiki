@@ -1,7 +1,7 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, tool, jsonSchema, stepCountIs } from "ai";
+import { createCodexFetch } from "subauth";
 import type { ToolSpec, ToolLoopResult, LoopUsage, LoopMessage } from "@/lib/gemini";
 import { CODEX_BASE_URL, getFreshAccess } from "@/lib/openai-oauth";
 import { effectiveOpenAITransport, providerHasCredential } from "@/lib/model-config";
@@ -13,30 +13,10 @@ import { DEFAULT_OPENAI_MODEL } from "@/lib/model-defaults";
 //  3) oauth  — ChatGPT 구독 OAuth 를 codex 백엔드로 직접 태움(`pnpm openai:login` 또는 UI 로그인)
 // ⚠️ (2)(3) 은 개인 self-host 전용. 멀티유저/공개 배포에 쓰지 말 것(ChatGPT 약관).
 
-// ChatGPT(Codex) 백엔드는 표준 api.openai.com 이 아니고 요청마다 최신 토큰이 필요하다. custom fetch 로
-// 매 요청 Authorization·chatgpt-account-id 헤더를 주입하고, codex 백엔드가 요구하는 store:false 를 강제한다.
-const codexFetch = (async (input, init) => {
-  init?.signal?.throwIfAborted();
-  const { access, accountId } = await getFreshAccess();
-  init?.signal?.throwIfAborted();
-  const headers = new Headers(init?.headers);
-  headers.set("Authorization", `Bearer ${access}`);
-  if (accountId) headers.set("chatgpt-account-id", accountId);
-  headers.set("OpenAI-Beta", "responses=experimental");
-  // codex 백엔드는 인증된 Codex 클라이언트 요청으로 인식해야 모델을 허용한다(originator 누락 시 400).
-  headers.set("originator", "codex_cli_rs");
-  headers.set("session_id", randomUUID());
-  let body = init?.body;
-  if (typeof body === "string" && headers.get("content-type")?.includes("application/json")) {
-    try {
-      body = JSON.stringify({ ...JSON.parse(body), store: false });
-      headers.delete("content-length"); // 본문 길이 변경 — stale content-length 로 인한 truncation 방지
-    } catch {
-      /* JSON 이 아니면 그대로 둔다 */
-    }
-  }
-  return fetch(input, { ...init, headers, body });
-}) as typeof fetch;
+// ChatGPT(Codex) 백엔드는 표준 api.openai.com 이 아니고 요청마다 최신 토큰이 필요하다. subauth 의
+// 래퍼가 매 요청 Authorization·chatgpt-account-id·originator 헤더를 주입하고, codex 백엔드가 요구하는
+// store:false 를 강제한다(본문을 다시 쓸 때 stale content-length 도 함께 지운다).
+const codexFetch = createCodexFetch({ getFreshAccess });
 
 /** 선택된 연결 방식에 맞는 OpenAI provider 와 OAuth(codex) 여부. */
 function client(): { provider: ReturnType<typeof createOpenAI>; oauth: boolean } {

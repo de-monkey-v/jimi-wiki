@@ -1,0 +1,62 @@
+{
+  "scenarios": [
+    {
+      "added_at": "2026-08-12T09:55:07+00:00",
+      "class": "blackbox",
+      "entrypoint": "scripts/worker.ts 기동 -> refreshPreferredGptModel(true) -> src/lib/model-resolver.ts selectPreferredModel(probeOAuthModel) -> src/lib/openai.ts -> src/lib/openai-oauth.ts getFreshAccess(). 토큰 위치는 OPENAI_OAUTH_STORE, 토큰 엔드포인트는 400 invalid_grant 를 돌려주도록 가로챈다.",
+      "id": "oauth-revoked-worker-cold-start",
+      "journey": "ChatGPT 구독 세션이 서버에서 취소된(refresh 가 invalid_grant) 상태에서 운영자가 워커를 재시작한다. 워커는 기동 시 transport 설정과 무관하게 선호 GPT 모델 3개를 OAuth 로 순차 프로브한 뒤 첫 잡을 집는다.",
+      "oracle": "죽은 세션 인지 비용은 프로세스당 1회다. 첫 프로브만 회전 복구 예산(약 12초)을 쓰고 2·3번째는 10ms 미만으로 즉시 실패하며, 토큰 엔드포인트 호출은 총 1회다. invalid_grant 경고는 1회만 찍힌다. 토큰 파일은 바이트 단위로 보존된다. storeExists() 가 false 로 떨어져 effectiveOpenAITransport() 가 apikey 로 폴백한다.",
+      "origin": "escaped-defect",
+      "paths": [
+        "scripts/worker.ts",
+        "src/lib/model-config.ts",
+        "src/lib/model-resolver.ts",
+        "src/lib/openai-oauth.ts",
+        "src/lib/openai.ts"
+      ]
+    },
+    {
+      "added_at": "2026-08-12T09:55:07+00:00",
+      "class": "blackbox",
+      "entrypoint": "src/lib/openai-oauth.ts getFreshAccess(). 형제 프로세스가 회전 복구 예산 안(예: +2초)에 같은 파일에 새 세션을 기록하는 상황을 2프로세스로 재현한다.",
+      "id": "oauth-sibling-rotation-not-misjudged",
+      "journey": "web 과 worker 가 한 토큰 파일을 공유하는 중 형제 프로세스가 먼저 refresh token 을 회전시켜, 이쪽 요청이 400 invalid_grant 를 받는다. 이것은 정상적인 경합이지 세션 취소가 아니다.",
+      "oracle": "형제가 예산 안에 쓰면 invalid_grant 가 표면화되지 않고 새 access 를 채택한다. 살아 있는 세션이 강등되지 않으므로 revoke 경고 로그는 0회이고 storeExists() 는 true 로 남는다. 예산을 넘겨도 토큰 파일은 절대 삭제되지 않으며, 마커는 실패한 세션에 찍혀 형제가 기록한 새 세션은 그대로 사용 가능해야 한다.",
+      "origin": "escaped-defect",
+      "paths": [
+        "src/lib/openai-oauth.ts"
+      ]
+    },
+    {
+      "added_at": "2026-08-12T09:55:07+00:00",
+      "class": "blackbox",
+      "entrypoint": "src/lib/openai-oauth.ts 의 logout() / pollDeviceToken() complete / runBrowserLogin() 성공, 그리고 다른 프로세스가 토큰 파일만 갱신하는 경우.",
+      "id": "oauth-revoked-session-relogin",
+      "journey": "OAuth 세션이 죽어 앱이 OAuth 경로를 건너뛰는 상태에서 운영자가 관리자 화면이나 CLI 로 다시 로그인한다.",
+      "oracle": "네 경로 각각 직후에 storeExists() 가 true 로 돌아오고 getFreshAccess() 가 회전 복구 예산을 다시 물지 않고 새 access 를 반환한다. 재로그인했는데 계속 미로그인으로 보이는 락아웃이 없어야 한다.",
+      "origin": "escaped-defect",
+      "paths": [
+        "src/app/api/admin/openai/device/poll/route.ts",
+        "src/app/api/admin/openai/logout/route.ts",
+        "src/lib/openai-oauth.ts"
+      ]
+    },
+    {
+      "added_at": "2026-08-12T09:55:07+00:00",
+      "class": "blackbox",
+      "entrypoint": "src/app/admin/settings/page.tsx 가 계산하는 readStoreStatus() 와 openaiTransportAvailable('oauth') / effectiveOpenAITransport().",
+      "id": "admin-settings-dead-session-signal",
+      "journey": "운영자가 죽은 ChatGPT 세션 상태에서 /admin/settings 를 열어 현재 연결 상태를 확인한다.",
+      "oracle": "같은 화면의 값들이 서로 모순되지 않는다. oauth 선택지가 불가로 회색이 되는 동안 로그인 줄이 초록 '로그인됨' 으로 남아 있으면 안 된다 — 운영자가 고장을 알아차릴 단서가 있어야 한다.",
+      "origin": "escaped-defect",
+      "paths": [
+        "src/app/admin/settings/OAuthPanel.tsx",
+        "src/app/admin/settings/page.tsx",
+        "src/lib/model-config.ts",
+        "src/lib/openai-oauth.ts"
+      ]
+    }
+  ],
+  "version": 1
+}

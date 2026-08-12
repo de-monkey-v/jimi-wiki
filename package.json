@@ -84,6 +84,7 @@
     "remark-rehype": "^11.1.2",
     "sigma": "^3.0.3",
     "streamdown": "2.5.0",
+    "subauth": "github:de-monkey-v/subauth#v0.4.0",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "unpdf": "^1.7.0",

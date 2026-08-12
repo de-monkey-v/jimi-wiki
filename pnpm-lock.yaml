@@ -122,6 +122,9 @@ importers:
       streamdown:
         specifier: 2.5.0
         version: 2.5.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      subauth:
+        specifier: github:de-monkey-v/subauth#v0.4.0
+        version: https://codeload.github.com/de-monkey-v/subauth/tar.gz/9f0bf9b84073fe36169365ecf2b53372f515ccf6
       unified:
         specifier: ^11.0.5
         version: 11.0.5
@@ -4453,6 +4456,11 @@ packages:
 
   stylis@4.4.0:
     resolution: {integrity: sha512-5Z9ZpRzfuH6l/UAvCPAPUo3665Nk2wLaZU3x+TLHKVzIz33+sbJqbtrYoC3KD4/uVOr2Zp+L0LySezP9OHV9yA==}
+
+  subauth@https://codeload.github.com/de-monkey-v/subauth/tar.gz/9f0bf9b84073fe36169365ecf2b53372f515ccf6:
+    resolution: {tarball: https://codeload.github.com/de-monkey-v/subauth/tar.gz/9f0bf9b84073fe36169365ecf2b53372f515ccf6}
+    version: 0.4.0
+    engines: {node: '>=20'}
 
   supports-color@7.2.0:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
@@ -9554,6 +9562,8 @@ snapshots:
       '@babel/core': 7.29.7
 
   stylis@4.4.0: {}
+
+  subauth@https://codeload.github.com/de-monkey-v/subauth/tar.gz/9f0bf9b84073fe36169365ecf2b53372f515ccf6: {}
 
   supports-color@7.2.0:
     dependencies:

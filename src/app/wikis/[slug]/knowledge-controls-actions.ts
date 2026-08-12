@@ -23,7 +23,13 @@ import { reindexEmbeddings } from "@/lib/search";
 import { getCurrentUser } from "@/lib/session";
 import { getWikiForUser } from "@/lib/wiki";
 import type { ModelAccess, Role } from "@/generated/prisma/client";
-import { trashPage, trashSource } from "@/lib/trash";
+import {
+  trashPage,
+  trashPagesFromToc,
+  trashSource,
+  type TocBulkTrashRequest,
+  type TocBulkTrashResult,
+} from "@/lib/trash";
 
 export type KnowledgeControlState = {
   status: "idle" | "success" | "error";
@@ -226,6 +232,38 @@ export async function trashPageFromMenuAction(
   }
   revalidatePath(`/wikis/${wikiSlug}`, "layout");
   return { status: "success" };
+}
+
+/** WikiToc 선택 모드용 — 인증은 한 번, 실제 eligibility/version 판정은 항목별 서버 상태로 다시 한다. */
+export async function trashPagesFromTocAction(
+  wikiSlug: string,
+  items: TocBulkTrashRequest[],
+): Promise<TocBulkTrashResult> {
+  let result: TocBulkTrashResult;
+  try {
+    const { user, wiki } = await requireRole(wikiSlug, "editor");
+    result = await trashPagesFromToc({ wikiId: wiki.id, userId: user.id, items });
+  } catch {
+    const attempted = Array.isArray(items)
+      ? items.flatMap((item, index) =>
+          item && typeof item.slug === "string"
+            ? [{ slug: item.slug, outcome: index === 0 ? "failed" as const : "notAttempted" as const }]
+            : [],
+        )
+      : [];
+    return {
+      status: "error",
+      code: "failed",
+      movedCount: 0,
+      failedCount: attempted.length,
+      warningCount: 0,
+      items: attempted,
+    };
+  }
+  // 이동은 커밋됐는데 invalidation만 실패한 경우를 "이동하지 않음"으로 오보하지 않는다.
+  // 이 호출이 던지면 클라이언트가 결과 불확실 경로에서 authoritative refresh를 수행한다.
+  if (result.movedCount > 0) revalidatePath(`/wikis/${wikiSlug}`, "layout");
+  return result;
 }
 
 export async function restorePageAction(

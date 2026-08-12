@@ -1,11 +1,12 @@
 "use client";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { logoutAction } from "@/app/login/actions";
 import { useChatModal, useShortcutLabel } from "@/app/wikis/[slug]/chat/ChatModal";
+import { trashPagesFromTocAction } from "@/app/wikis/[slug]/knowledge-controls-actions";
 import { useWikiActions } from "@/app/wikis/[slug]/WikiActions";
 import { useQuickNav } from "@/app/wikis/[slug]/QuickNav";
 import { RecentPopover } from "@/app/wikis/[slug]/RecentList";
@@ -13,6 +14,14 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageKebabMenu } from "@/components/PageKebabMenu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { TocSection, TocEntry } from "@/lib/kinds";
+import {
+  addVisibleRange,
+  flattenTocPages,
+  reconcileTocSelection,
+  selectableSlugsInEntries,
+  setTocGroupSelected,
+  tocGroupSelectionState,
+} from "@/lib/toc-selection";
 import {
   DEFAULT_WIKI_TOC_WIDTH,
   MAX_WIKI_TOC_WIDTH,
@@ -33,6 +42,23 @@ type TocResizeDrag = {
   pointerId: number;
   startX: number;
   startWidth: number;
+};
+
+type TocSelectionDrag = {
+  pointerId: number;
+  value: boolean;
+  visited: Set<string>;
+  clientX: number;
+  clientY: number;
+  frame: number | null;
+};
+
+type TocSelectionView = {
+  selected: ReadonlySet<string>;
+  pending: boolean;
+  pageLabel: (title: string) => string;
+  unavailableLabel: (title: string) => string;
+  groupLabel: (name: string, count: number) => string;
 };
 
 function linkCls(active: boolean, mobileTwoLines = false) {
@@ -63,10 +89,124 @@ type NodeCtx = {
   movable?: boolean;
   canTrash: boolean;
   newInFolderLabel: (name: string) => string;
+  selection?: TocSelectionView;
 };
 
-function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: NodeCtx; depth: number; parentPath: string }) {
+type EntryNodeProps = {
+  entry: TocEntry;
+  ctx: NodeCtx;
+  depth: number;
+  parentPath: string;
+  onTogglePage?: (slug: string, shiftKey: boolean, allowRange: boolean) => void;
+  onToggleGroup?: (slugs: readonly string[], value: boolean) => void;
+  onCheckboxPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>, slug: string) => void;
+  onCheckboxPointerMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onCheckboxPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onCheckboxPointerCancel?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onCheckboxLostPointerCapture?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onCheckboxClick?: (event: ReactMouseEvent<HTMLButtonElement>, slug: string) => void;
+};
+
+function SelectionCheckbox({
+  checked,
+  mixed = false,
+  label,
+  disabled = false,
+  onClick,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  onLostPointerCapture,
+  draggable = false,
+}: {
+  checked: boolean;
+  mixed?: boolean;
+  label: string;
+  disabled?: boolean;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerCancel?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onLostPointerCapture?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  draggable?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={mixed ? "mixed" : checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onLostPointerCapture={onLostPointerCapture}
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-xs font-bold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 ${
+        checked || mixed
+          ? "border-indigo-500 bg-indigo-600 text-white hover:bg-indigo-700"
+          : "border-stone-300 bg-white text-transparent hover:border-indigo-400 hover:bg-indigo-50"
+      } ${draggable ? "cursor-cell touch-pan-y select-none" : ""}`}
+    >
+      <span aria-hidden="true">{mixed ? "−" : checked ? "✓" : "·"}</span>
+    </button>
+  );
+}
+
+function EntryNode({
+  entry,
+  ctx,
+  depth,
+  parentPath,
+  onTogglePage,
+  onToggleGroup,
+  onCheckboxPointerDown,
+  onCheckboxPointerMove,
+  onCheckboxPointerUp,
+  onCheckboxPointerCancel,
+  onCheckboxLostPointerCapture,
+  onCheckboxClick,
+}: EntryNodeProps) {
   if (entry.type === "page") {
+    if (ctx.selection) {
+      const selected = ctx.selection.selected.has(entry.slug);
+      return (
+        <li
+          data-toc-select-slug={entry.trashable ? entry.slug : undefined}
+          className={`relative rounded-md border-l-2 transition-colors motion-reduce:transition-none ${
+            selected ? "border-indigo-500 bg-indigo-50 text-indigo-950" : "border-transparent hover:bg-stone-50"
+          }`}
+        >
+          <div className="flex min-h-9 items-center gap-1.5 pr-1" style={{ paddingLeft: depth * 12 + 4 }}>
+            <SelectionCheckbox
+              checked={selected}
+              label={entry.trashable ? ctx.selection.pageLabel(entry.title) : ctx.selection.unavailableLabel(entry.title)}
+              disabled={!entry.trashable || ctx.selection.pending}
+              draggable={entry.trashable}
+              onClick={(event) => onCheckboxClick?.(event, entry.slug)}
+              onPointerDown={entry.trashable ? (event) => onCheckboxPointerDown?.(event, entry.slug) : undefined}
+              onPointerMove={entry.trashable ? onCheckboxPointerMove : undefined}
+              onPointerUp={entry.trashable ? onCheckboxPointerUp : undefined}
+              onPointerCancel={entry.trashable ? onCheckboxPointerCancel : undefined}
+              onLostPointerCapture={entry.trashable ? onCheckboxLostPointerCapture : undefined}
+            />
+            <button
+              type="button"
+              disabled={!entry.trashable || ctx.selection.pending}
+              onClick={(event) => onTogglePage?.(entry.slug, event.shiftKey, true)}
+              className={`min-w-0 flex-1 rounded px-1 py-1 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:bg-indigo-100 disabled:cursor-not-allowed ${
+                entry.trashable ? "text-stone-700 hover:text-stone-950" : "text-stone-400"
+              }`}
+            >
+              <span className="line-clamp-2 md:block md:truncate">{entry.title}</span>
+            </button>
+          </div>
+        </li>
+      );
+    }
     return (
       <li className="group/leaf relative">
         <Tooltip label={entry.title}>
@@ -87,31 +227,70 @@ function EntryNode({ entry, ctx, depth, parentPath }: { entry: TocEntry; ctx: No
       </li>
     );
   }
-  return <FolderNode entry={entry} ctx={ctx} depth={depth} />;
+  return (
+    <FolderNode
+      entry={entry}
+      ctx={ctx}
+      depth={depth}
+      onTogglePage={onTogglePage}
+      onToggleGroup={onToggleGroup}
+      onCheckboxPointerDown={onCheckboxPointerDown}
+      onCheckboxPointerMove={onCheckboxPointerMove}
+      onCheckboxPointerUp={onCheckboxPointerUp}
+      onCheckboxPointerCancel={onCheckboxPointerCancel}
+      onCheckboxLostPointerCapture={onCheckboxLostPointerCapture}
+      onCheckboxClick={onCheckboxClick}
+    />
+  );
 }
 
-function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "folder" }>; ctx: NodeCtx; depth: number }) {
+function FolderNode({
+  entry,
+  ctx,
+  depth,
+  onTogglePage,
+  onToggleGroup,
+  onCheckboxPointerDown,
+  onCheckboxPointerMove,
+  onCheckboxPointerUp,
+  onCheckboxPointerCancel,
+  onCheckboxLostPointerCapture,
+  onCheckboxClick,
+}: Omit<EntryNodeProps, "entry" | "parentPath"> & { entry: Extract<TocEntry, { type: "folder" }> }) {
   const actions = useWikiActions();
   const active = entryHasSlug(entry, ctx.current);
   const [override, setOverride] = useState<{ open: boolean; whenActive: boolean } | null>(null);
   const open = override && override.whenActive === active ? override.open : active || depth < 1;
+  const selectableSlugs = selectableSlugsInEntries(entry.children);
+  const selectionState = ctx.selection ? tocGroupSelectionState(ctx.selection.selected, selectableSlugs) : null;
   return (
     <li>
       <div className="group/folder flex items-center">
+        {ctx.selection && selectionState ? (
+          <div style={{ marginLeft: depth * 12 + 4 }} className="mr-1">
+            <SelectionCheckbox
+              checked={selectionState.checked}
+              mixed={selectionState.mixed}
+              label={ctx.selection.groupLabel(entry.name, selectableSlugs.length)}
+              disabled={selectableSlugs.length === 0 || ctx.selection.pending}
+              onClick={() => onToggleGroup?.(selectableSlugs, !selectionState.checked)}
+            />
+          </div>
+        ) : null}
         <Tooltip label={entry.name}>
           <button
             type="button"
             aria-expanded={open}
             onClick={() => setOverride({ open: !open, whenActive: active })}
             className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-1 pr-2 text-sm text-stone-500 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-            style={{ paddingLeft: depth * 12 + 4 }}
+            style={{ paddingLeft: ctx.selection ? 4 : depth * 12 + 4 }}
           >
             <span className="w-3 shrink-0 text-xs text-stone-400">{open ? "▾" : "▸"}</span>
             <span className="min-w-0 flex-1 truncate text-left">{entry.name}</span>
             <span className="text-xs text-stone-300">{leafCount(entry)}</span>
           </button>
         </Tooltip>
-        {ctx.newKind && actions && (
+        {!ctx.selection && ctx.newKind && actions && (
           <Tooltip label={ctx.newInFolderLabel(entry.name)}>
             <button
               type="button"
@@ -133,6 +312,14 @@ function FolderNode({ entry, ctx, depth }: { entry: Extract<TocEntry, { type: "f
               ctx={ctx}
               depth={depth + 1}
               parentPath={entry.path}
+              onTogglePage={onTogglePage}
+              onToggleGroup={onToggleGroup}
+              onCheckboxPointerDown={onCheckboxPointerDown}
+              onCheckboxPointerMove={onCheckboxPointerMove}
+              onCheckboxPointerUp={onCheckboxPointerUp}
+              onCheckboxPointerCancel={onCheckboxPointerCancel}
+              onCheckboxLostPointerCapture={onCheckboxLostPointerCapture}
+              onCheckboxClick={onCheckboxClick}
             />
           ))}
         </ul>
@@ -148,6 +335,90 @@ const SECTION_NEW_KIND: Record<TocSection["key"], string | undefined> = {
   knowledge: "concept",
   sources: undefined,
 };
+
+function SecondarySection({
+  section,
+  ctx,
+  label,
+  onTogglePage,
+  onToggleGroup,
+  onCheckboxPointerDown,
+  onCheckboxPointerMove,
+  onCheckboxPointerUp,
+  onCheckboxPointerCancel,
+  onCheckboxLostPointerCapture,
+  onCheckboxClick,
+}: {
+  section: TocSection;
+  ctx: NodeCtx;
+  label: string;
+} & Pick<
+  EntryNodeProps,
+  | "onTogglePage"
+  | "onToggleGroup"
+  | "onCheckboxPointerDown"
+  | "onCheckboxPointerMove"
+  | "onCheckboxPointerUp"
+  | "onCheckboxPointerCancel"
+  | "onCheckboxLostPointerCapture"
+  | "onCheckboxClick"
+>) {
+  const [open, setOpen] = useState(false);
+  const count = section.entries.reduce((total, entry) => total + leafCount(entry), 0);
+  const selectableSlugs = selectableSlugsInEntries(section.entries);
+  const selectionState = ctx.selection ? tocGroupSelectionState(ctx.selection.selected, selectableSlugs) : null;
+  return (
+    <div className="group/secondary">
+      <div className="flex items-center gap-1">
+        {ctx.selection && selectionState ? (
+          <SelectionCheckbox
+            checked={selectionState.checked}
+            mixed={selectionState.mixed}
+            label={ctx.selection.groupLabel(label, selectableSlugs.length)}
+            disabled={selectableSlugs.length === 0 || ctx.selection.pending}
+            onClick={() => onToggleGroup?.(selectableSlugs, !selectionState.checked)}
+          />
+        ) : null}
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="flex min-w-0 flex-1 items-center rounded-md px-1 py-1 text-xs font-semibold uppercase tracking-wide text-stone-400 hover:bg-stone-50 active:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        >
+          <span
+            className={`mr-1 text-[10px] transition-transform motion-reduce:transition-none ${open ? "rotate-90" : ""}`}
+            aria-hidden="true"
+          >
+            ▸
+          </span>
+          <span className="min-w-0 flex-1 text-left">{label}</span>
+          <span className="font-mono text-[10px] font-normal">{count}</span>
+        </button>
+      </div>
+      {open ? (
+        <ul className="mt-1 space-y-0.5">
+          {section.entries.map((entry) => (
+            <EntryNode
+              key={entry.type === "folder" ? `f:${entry.path}` : `p:${entry.slug}`}
+              entry={entry}
+              ctx={ctx}
+              depth={0}
+              parentPath=""
+              onTogglePage={onTogglePage}
+              onToggleGroup={onToggleGroup}
+              onCheckboxPointerDown={onCheckboxPointerDown}
+              onCheckboxPointerMove={onCheckboxPointerMove}
+              onCheckboxPointerUp={onCheckboxPointerUp}
+              onCheckboxPointerCancel={onCheckboxPointerCancel}
+              onCheckboxLostPointerCapture={onCheckboxLostPointerCapture}
+              onCheckboxClick={onCheckboxClick}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 export function WikiToc({
   slug,
@@ -172,12 +443,17 @@ export function WikiToc({
   const sub = seg[3];
   const inTrash = sub === "settings" && seg[4] === "trash";
   const current = sub && !isReservedWikiPageSlug(sub) ? sub : undefined;
+  const router = useRouter();
   const chatModal = useChatModal();
   const actions = useWikiActions();
   const quick = useQuickNav();
   const shortcut = useShortcutLabel();
   const isMac = shortcut.startsWith("⌘");
   const canWrite = role !== "viewer";
+  const canonicalPages = useMemo(() => flattenTocPages(sections), [sections]);
+  const pageBySlug = useMemo(() => new Map(canonicalPages.map((page) => [page.slug, page])), [canonicalPages]);
+  const selectablePages = useMemo(() => canonicalPages.filter((page) => page.trashable), [canonicalPages]);
+  const selectableSlugSet = useMemo(() => new Set(selectablePages.map((page) => page.slug)), [selectablePages]);
   const personalSection = sections.find((section) => section.key === "personal");
   const primarySections = sections.filter((section) => section.key === "documents" || section.key === "knowledge");
 
@@ -186,6 +462,21 @@ export function WikiToc({
   const toggleRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
   const navRef = useRef<HTMLElement>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [storedSelected, setStoredSelected] = useState<Set<string>>(() => new Set());
+  const selected = useMemo(
+    () => reconcileTocSelection(storedSelected, selectableSlugSet),
+    [storedSelected, selectableSlugSet],
+  );
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<{
+    tone: "success" | "warning" | "error";
+    message: string;
+    showTrash: boolean;
+  } | null>(null);
+  const [bulkPending, startBulkTransition] = useTransition();
+  const selectionDragRef = useRef<TocSelectionDrag | null>(null);
+  const suppressCheckboxClickRef = useRef(false);
   const [preferredTocWidth, setPreferredTocWidth] = useState(DEFAULT_WIKI_TOC_WIDTH);
   const [viewportWidth, setViewportWidth] = useState<number | null>(null);
   const [resizingToc, setResizingToc] = useState(false);
@@ -196,6 +487,220 @@ export function WikiToc({
     ? DEFAULT_WIKI_TOC_WIDTH
     : displayedWikiTocWidth(preferredTocWidth, viewportWidth);
   const desktopTocMax = viewportWidth === null ? MAX_WIKI_TOC_WIDTH : wikiTocViewportMax(viewportWidth);
+
+  const visibleSelectableSlugs = () =>
+    [...(navRef.current?.querySelectorAll<HTMLElement>("[data-toc-select-slug]") ?? [])]
+      .map((element) => element.dataset.tocSelectSlug)
+      .filter((value): value is string => !!value && selectableSlugSet.has(value));
+
+  const toggleSelectedPage = (pageSlug: string, shiftKey: boolean, allowRange: boolean) => {
+    if (bulkPending || !selectableSlugSet.has(pageSlug)) return;
+    setStoredSelected((previous) => {
+      const clean = reconcileTocSelection(previous, selectableSlugSet);
+      if (shiftKey && allowRange) {
+        return addVisibleRange(clean, visibleSelectableSlugs(), selectionAnchor, pageSlug);
+      }
+      if (clean.has(pageSlug)) clean.delete(pageSlug);
+      else clean.add(pageSlug);
+      return clean;
+    });
+    setSelectionAnchor(allowRange ? pageSlug : null);
+  };
+
+  const toggleSelectedGroup = (slugs: readonly string[], value: boolean) => {
+    if (bulkPending) return;
+    setStoredSelected((previous) =>
+      setTocGroupSelected(reconcileTocSelection(previous, selectableSlugSet), slugs, value),
+    );
+    setSelectionAnchor(null);
+  };
+
+  const paintSelectionDragSlug = (pageSlug: string) => {
+    const drag = selectionDragRef.current;
+    if (!drag || drag.visited.has(pageSlug) || !selectableSlugSet.has(pageSlug)) return;
+    drag.visited.add(pageSlug);
+    setStoredSelected((previous) =>
+      setTocGroupSelected(reconcileTocSelection(previous, selectableSlugSet), [pageSlug], drag.value),
+    );
+  };
+
+  const paintSelectionDragAt = (clientX: number, clientY: number) => {
+    const row = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-toc-select-slug]");
+    const pageSlug = row?.dataset.tocSelectSlug;
+    if (pageSlug) paintSelectionDragSlug(pageSlug);
+  };
+
+  const runSelectionAutoScroll = () => {
+    const drag = selectionDragRef.current;
+    const nav = navRef.current;
+    if (!drag || !nav) return;
+    const rect = nav.getBoundingClientRect();
+    const edge = 44;
+    const topDistance = drag.clientY - rect.top;
+    const bottomDistance = rect.bottom - drag.clientY;
+    const delta = topDistance < edge
+      ? -Math.ceil((edge - Math.max(0, topDistance)) / 4)
+      : bottomDistance < edge
+        ? Math.ceil((edge - Math.max(0, bottomDistance)) / 4)
+        : 0;
+    if (delta !== 0) {
+      nav.scrollTop += delta;
+      paintSelectionDragAt(drag.clientX, drag.clientY);
+      drag.frame = window.requestAnimationFrame(runSelectionAutoScroll);
+    } else {
+      drag.frame = null;
+    }
+  };
+
+  const scheduleSelectionAutoScroll = () => {
+    const drag = selectionDragRef.current;
+    if (drag && drag.frame === null) drag.frame = window.requestAnimationFrame(runSelectionAutoScroll);
+  };
+
+  const finishSelectionDrag = () => {
+    const drag = selectionDragRef.current;
+    if (!drag) return;
+    if (drag.frame !== null) window.cancelAnimationFrame(drag.frame);
+    selectionDragRef.current = null;
+  };
+
+  const onCheckboxPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, pageSlug: string) => {
+    if (bulkPending || event.pointerType === "touch" || !event.isPrimary || event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.focus();
+    if (event.shiftKey) {
+      suppressCheckboxClickRef.current = true;
+      toggleSelectedPage(pageSlug, true, true);
+      return;
+    }
+    event.currentTarget.setPointerCapture(event.pointerId);
+    suppressCheckboxClickRef.current = true;
+    selectionDragRef.current = {
+      pointerId: event.pointerId,
+      value: !selected.has(pageSlug),
+      visited: new Set(),
+      clientX: event.clientX,
+      clientY: event.clientY,
+      frame: null,
+    };
+    setSelectionAnchor(pageSlug);
+    paintSelectionDragSlug(pageSlug);
+  };
+
+  const onCheckboxPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = selectionDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.clientX = event.clientX;
+    drag.clientY = event.clientY;
+    paintSelectionDragAt(event.clientX, event.clientY);
+    scheduleSelectionAutoScroll();
+  };
+
+  const onCheckboxPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (selectionDragRef.current?.pointerId !== event.pointerId) return;
+    finishSelectionDrag();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const onCheckboxPointerCancel = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (selectionDragRef.current?.pointerId !== event.pointerId) return;
+    finishSelectionDrag();
+    suppressCheckboxClickRef.current = false;
+  };
+
+  const onCheckboxLostPointerCapture = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (selectionDragRef.current?.pointerId === event.pointerId) finishSelectionDrag();
+  };
+
+  const onCheckboxClick = (event: ReactMouseEvent<HTMLButtonElement>, pageSlug: string) => {
+    if (suppressCheckboxClickRef.current && event.detail > 0) {
+      suppressCheckboxClickRef.current = false;
+      return;
+    }
+    suppressCheckboxClickRef.current = false;
+    toggleSelectedPage(pageSlug, event.shiftKey, true);
+  };
+
+  const selectionView: TocSelectionView | undefined = selectionMode
+    ? {
+        selected,
+        pending: bulkPending,
+        pageLabel: (pageTitle) => t("selectPage", { title: pageTitle }),
+        unavailableLabel: (pageTitle) => t("unavailablePage", { title: pageTitle }),
+        groupLabel: (name, count) => t("selectGroup", { name, count }),
+      }
+    : undefined;
+
+  const toggleSelectionMode = () => {
+    if (bulkPending) return;
+    setSelectionMode((value) => !value);
+    setStoredSelected(new Set());
+    setSelectionAnchor(null);
+    setBulkNotice(null);
+    finishSelectionDrag();
+  };
+
+  const requestBulkTrash = () => {
+    if (bulkPending || selected.size === 0) return;
+    const items = [...selected].flatMap((pageSlug) => {
+      const page = pageBySlug.get(pageSlug);
+      return page ? [{ slug: page.slug, expectedVersion: page.currentVersion }] : [];
+    });
+    if (items.length === 0) return;
+    const includesCurrent = !!current && selected.has(current);
+    const confirmation = includesCurrent
+      ? t("bulkTrashConfirmCurrent", { count: items.length })
+      : t("bulkTrashConfirm", { count: items.length });
+    if (!window.confirm(confirmation)) return;
+    setBulkNotice(null);
+    startBulkTransition(async () => {
+      try {
+        const result = await trashPagesFromTocAction(slug, items);
+        const moved = new Set(
+          result.items
+            .filter((item) => item.outcome === "trashed" || item.outcome === "alreadyTrashed")
+            .map((item) => item.slug),
+        );
+        setStoredSelected((previous) => {
+          const next = reconcileTocSelection(previous, selectableSlugSet);
+          for (const pageSlug of moved) next.delete(pageSlug);
+          return next;
+        });
+        setSelectionAnchor(null);
+        if (result.code === "invalidInput") {
+          setBulkNotice({ tone: "error", message: t("bulkTrashInvalid"), showTrash: false });
+        } else if (result.code === "failed") {
+          setBulkNotice({ tone: "error", message: t("bulkTrashFailed"), showTrash: false });
+        } else if (result.code === "uncertain") {
+          setBulkNotice({ tone: "error", message: t("bulkTrashUncertain"), showTrash: result.movedCount > 0 });
+        } else if (result.failedCount > 0) {
+          setBulkNotice({
+            tone: "warning",
+            message: t("bulkTrashPartial", { moved: result.movedCount, failed: result.failedCount }),
+            showTrash: result.movedCount > 0,
+          });
+        } else if (result.warningCount > 0) {
+          setBulkNotice({
+            tone: "warning",
+            message: t("bulkTrashCleanupPending", { count: result.movedCount }),
+            showTrash: true,
+          });
+        } else {
+          setBulkNotice({
+            tone: "success",
+            message: t("bulkTrashSuccess", { count: result.movedCount }),
+            showTrash: true,
+          });
+        }
+        if (result.failedCount === 0 && result.code !== "invalidInput") setSelectionMode(false);
+        if (current && moved.has(current)) router.push(`/wikis/${encodeURIComponent(slug)}`);
+        else router.refresh();
+      } catch {
+        setBulkNotice({ tone: "error", message: t("bulkTrashUncertain"), showTrash: true });
+        router.refresh();
+      }
+    });
+  };
 
   const rememberPreferredTocWidth = (value: number, persist: boolean) => {
     const normalized = normalizeWikiTocWidth(value);
@@ -250,6 +755,11 @@ export function WikiToc({
   }, []);
 
   useEffect(() => () => {
+    const selectionDrag = selectionDragRef.current;
+    if (selectionDrag?.frame !== null && selectionDrag?.frame !== undefined) {
+      window.cancelAnimationFrame(selectionDrag.frame);
+    }
+    selectionDragRef.current = null;
     if (resizeDragRef.current) {
       try {
         localStorage.setItem(WIKI_TOC_WIDTH_STORAGE_KEY, String(preferredTocWidthRef.current));
@@ -297,6 +807,7 @@ export function WikiToc({
     });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (selectionMode) return;
         event.preventDefault();
         setOpen(false);
         return;
@@ -330,7 +841,7 @@ export function WikiToc({
       media.removeEventListener("change", onMediaChange);
       if (!media.matches) toggle?.focus();
     };
-  }, [open]);
+  }, [open, selectionMode]);
 
   useEffect(() => {
     const nav = navRef.current;
@@ -387,13 +898,38 @@ export function WikiToc({
         role={open ? "dialog" : undefined}
         aria-modal={open ? true : undefined}
         aria-label={open ? title : undefined}
+        aria-busy={bulkPending}
         tabIndex={open ? -1 : undefined}
+        onKeyDown={(event) => {
+          if (!selectionMode) return;
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            finishSelectionDrag();
+            if (selected.size > 0) {
+              setStoredSelected(new Set());
+              setSelectionAnchor(null);
+            } else if (!bulkPending) {
+              setSelectionMode(false);
+            }
+            return;
+          }
+          if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+            event.preventDefault();
+            toggleSelectedGroup(selectablePages.map((page) => page.slug), true);
+            return;
+          }
+          if (event.key === "Delete" && selected.size > 0) {
+            event.preventDefault();
+            requestBulkTrash();
+          }
+        }}
         // 모바일 드로어에서 내부 링크(<a>)를 누르면 네비게이션과 함께 닫는다(폴더 토글 <button>은 유지).
         onClick={(e) => {
           if (open && (e.target as HTMLElement).closest("a")) setOpen(false);
         }}
         style={{ "--wiki-toc-width": `${desktopTocWidth}px` } as CSSProperties}
-        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-[min(88vw,22rem)] shrink-0 transform flex-col border-r border-stone-200 bg-white transition-transform duration-200 md:relative md:z-auto md:w-[var(--wiki-toc-width)] md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-[min(88vw,22rem)] shrink-0 transform flex-col overscroll-contain border-r border-stone-200 bg-white transition-transform duration-200 md:relative md:z-auto md:w-[var(--wiki-toc-width)] md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -405,19 +941,64 @@ export function WikiToc({
               {title}
             </Link>
           </Tooltip>
-          <RecentPopover
-            slug={slug}
-            current={current}
-            heading={t("recentHeading")}
-            emptyText={t("recentEmpty")}
-            kindLabel={{
-              document: t("recentKind.document"),
-              concept: t("recentKind.concept"),
-              entity: t("recentKind.entity"),
-            }}
-          />
+          <div className="flex shrink-0 items-center gap-1">
+            {canWrite ? (
+              <button
+                type="button"
+                aria-pressed={selectionMode}
+                disabled={selectablePages.length === 0 || bulkPending}
+                onClick={toggleSelectionMode}
+                className={`rounded-md border px-2 py-1 text-xs font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 ${
+                  selectionMode
+                    ? "border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                    : "border-stone-200 bg-white text-stone-500 hover:border-stone-300 hover:bg-stone-50 hover:text-stone-700"
+                }`}
+              >
+                {selectionMode ? t("doneSelecting") : t("selectPages")}
+              </button>
+            ) : null}
+            {!selectionMode ? (
+              <RecentPopover
+                slug={slug}
+                current={current}
+                heading={t("recentHeading")}
+                emptyText={t("recentEmpty")}
+                kindLabel={{
+                  document: t("recentKind.document"),
+                  concept: t("recentKind.concept"),
+                  entity: t("recentKind.entity"),
+                }}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
+
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {bulkPending ? t("bulkTrashPending", { count: selected.size }) : ""}
+      </div>
+      {bulkNotice ? (
+        <div
+          role={bulkNotice.tone === "error" ? "alert" : "status"}
+          className={`mx-2 mt-2 rounded-lg border px-2.5 py-2 text-xs leading-5 ${
+            bulkNotice.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : bulkNotice.tone === "warning"
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+        >
+          <span>{bulkNotice.message}</span>
+          {bulkNotice.showTrash ? (
+            <Link
+              href={`/wikis/${encodeURIComponent(slug)}/settings/trash`}
+              className="ml-1 rounded font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+              {t("viewTrash")}
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
 
       <nav ref={navRef} className="flex-1 overflow-x-hidden overflow-y-auto px-2 py-3">
         {/* 고정 문서와 안정적인 사용자용 목차. 최근 기록은 헤더 팝오버에 격리한다. */}
@@ -425,31 +1006,72 @@ export function WikiToc({
           <div className="mb-3">
             <div className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-stone-400">{t("pinnedHeading")}</div>
             <ul className="space-y-0.5">
-              {pinned.map((p) =>
-                p.type === "folder" ? (
-                  <li key={`f:${p.category}`}>
-                    <Tooltip label={p.category.split("/").pop() ?? p.category}>
-                      <Link
-                        href={`/wikis/${slug}/category/${p.category.split("/").map(encodeURIComponent).join("/")}`}
-                        className={`flex items-center gap-1 ${linkCls(false)}`}
-                        style={{ paddingLeft: 20 }}
-                      >
-                        <span className="shrink-0 text-stone-400">📁</span>
-                        <span className="min-w-0 flex-1 truncate">{p.category.split("/").pop()}</span>
-                      </Link>
-                    </Tooltip>
-                  </li>
-                ) : (
-                  <li key={`p:${p.slug}`}>
+              {pinned.map((p) => {
+                if (p.type === "folder") {
+                  const folderName = p.category.split("/").pop() ?? p.category;
+                  return (
+                    <li key={`f:${p.category}`}>
+                      <Tooltip label={folderName}>
+                        {selectionMode ? (
+                          <div className="flex min-h-8 items-center gap-1 rounded-md px-2 text-sm text-stone-400" aria-disabled="true">
+                            <span className="shrink-0">📁</span>
+                            <span className="min-w-0 flex-1 truncate">{folderName}</span>
+                          </div>
+                        ) : (
+                          <Link
+                            href={`/wikis/${slug}/category/${p.category.split("/").map(encodeURIComponent).join("/")}`}
+                            className={`flex items-center gap-1 ${linkCls(false)}`}
+                            style={{ paddingLeft: 20 }}
+                          >
+                            <span className="shrink-0 text-stone-400">📁</span>
+                            <span className="min-w-0 flex-1 truncate">{folderName}</span>
+                          </Link>
+                        )}
+                      </Tooltip>
+                    </li>
+                  );
+                }
+                const canonical = pageBySlug.get(p.slug);
+                const pinnedSelected = selected.has(p.slug);
+                return (
+                  <li
+                    key={`p:${p.slug}`}
+                    className={selectionMode && pinnedSelected ? "rounded-md bg-indigo-50" : undefined}
+                  >
                     <Tooltip label={p.title}>
-                      <Link href={`/wikis/${slug}/${p.slug}`} className={`flex items-center gap-1 ${linkCls(p.slug === current)}`} style={{ paddingLeft: 20 }}>
-                        <span className="shrink-0 text-amber-500">★</span>
-                        <span className="min-w-0 flex-1 whitespace-normal line-clamp-2 md:block md:truncate">{p.title}</span>
-                      </Link>
+                      {selectionMode && canonical?.trashable ? (
+                        <div className="flex min-h-8 items-center gap-1.5 rounded-md px-1">
+                          <SelectionCheckbox
+                            checked={pinnedSelected}
+                            label={t("selectPage", { title: p.title })}
+                            disabled={bulkPending}
+                            onClick={(event) => toggleSelectedPage(p.slug, event.shiftKey, false)}
+                          />
+                          <button
+                            type="button"
+                            disabled={bulkPending}
+                            onClick={(event) => toggleSelectedPage(p.slug, event.shiftKey, false)}
+                            className="min-w-0 flex-1 rounded px-1 py-1 text-left text-sm text-stone-700 hover:bg-indigo-100 active:bg-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed"
+                          >
+                            <span className="mr-1 text-amber-500" aria-hidden="true">★</span>
+                            <span className="line-clamp-2 md:inline md:truncate">{p.title}</span>
+                          </button>
+                        </div>
+                      ) : selectionMode ? (
+                        <div className="flex min-h-8 items-center gap-1 rounded-md px-2 text-sm text-stone-400" aria-disabled="true">
+                          <span className="shrink-0 text-amber-400">★</span>
+                          <span className="min-w-0 flex-1 line-clamp-2 md:block md:truncate">{p.title}</span>
+                        </div>
+                      ) : (
+                        <Link href={`/wikis/${slug}/${p.slug}`} className={`flex items-center gap-1 ${linkCls(p.slug === current)}`} style={{ paddingLeft: 20 }}>
+                          <span className="shrink-0 text-amber-500">★</span>
+                          <span className="min-w-0 flex-1 whitespace-normal line-clamp-2 md:block md:truncate">{p.title}</span>
+                        </Link>
+                      )}
                     </Tooltip>
                   </li>
-                ),
-              )}
+                );
+              })}
             </ul>
           </div>
         )}
@@ -462,6 +1084,9 @@ export function WikiToc({
           <div className="space-y-4">
             {primarySections.map((s) => {
               const newKind = canWrite ? SECTION_NEW_KIND[s.key] : undefined;
+              const sectionLabel = t(`section.${s.key}`);
+              const sectionSlugs = selectableSlugsInEntries(s.entries);
+              const sectionSelection = tocGroupSelectionState(selected, sectionSlugs);
               const ctx: NodeCtx = {
                 slug,
                 current,
@@ -469,12 +1094,22 @@ export function WikiToc({
                 movable: canWrite && s.key === "personal",
                 canTrash: canWrite,
                 newInFolderLabel: (name) => t("newKindInFolder", { kind: t(`newKind.${s.key}`), name }),
+                selection: selectionView,
               };
               return (
                 <div key={s.key} className="group/section">
-                  <div className="flex items-center px-1 pb-1">
-                    <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-stone-400">{t(`section.${s.key}`)}</span>
-                    {newKind && actions && (
+                  <div className="flex items-center gap-1 px-1 pb-1">
+                    {selectionView ? (
+                      <SelectionCheckbox
+                        checked={sectionSelection.checked}
+                        mixed={sectionSelection.mixed}
+                        label={selectionView.groupLabel(sectionLabel, sectionSlugs.length)}
+                        disabled={sectionSlugs.length === 0 || bulkPending}
+                        onClick={() => toggleSelectedGroup(sectionSlugs, !sectionSelection.checked)}
+                      />
+                    ) : null}
+                    <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-stone-400">{sectionLabel}</span>
+                    {!selectionMode && newKind && actions && (
                       <Tooltip label={t(`newKind.${s.key}`)}>
                         <button
                           type="button"
@@ -489,45 +1124,112 @@ export function WikiToc({
                   </div>
                   <ul className="space-y-0.5">
                     {s.entries.map((e) => (
-                      <EntryNode key={e.type === "folder" ? `f:${e.path}` : `p:${e.slug}`} entry={e} ctx={ctx} depth={0} parentPath="" />
+                      <EntryNode
+                        key={e.type === "folder" ? `f:${e.path}` : `p:${e.slug}`}
+                        entry={e}
+                        ctx={ctx}
+                        depth={0}
+                        parentPath=""
+                        onTogglePage={toggleSelectedPage}
+                        onToggleGroup={toggleSelectedGroup}
+                        onCheckboxPointerDown={onCheckboxPointerDown}
+                        onCheckboxPointerMove={onCheckboxPointerMove}
+                        onCheckboxPointerUp={onCheckboxPointerUp}
+                        onCheckboxPointerCancel={onCheckboxPointerCancel}
+                        onCheckboxLostPointerCapture={onCheckboxLostPointerCapture}
+                        onCheckboxClick={onCheckboxClick}
+                      />
                     ))}
                   </ul>
                 </div>
               );
             })}
             {personalSection ? (
-              <details className="group/secondary">
-                <summary className="flex cursor-pointer list-none items-center rounded-md px-1 py-1 text-xs font-semibold uppercase tracking-wide text-stone-400 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 [&::-webkit-details-marker]:hidden">
-                  <span className="mr-1 text-[10px] transition-transform motion-reduce:transition-none group-open/secondary:rotate-90" aria-hidden="true">▸</span>
-                  <span className="min-w-0 flex-1">{t("section.personal")}</span>
-                  <span className="font-mono text-[10px] font-normal">
-                    {personalSection.entries.reduce((count, entry) => count + leafCount(entry), 0)}
-                  </span>
-                </summary>
-                <ul className="mt-1 space-y-0.5">
-                  {personalSection.entries.map((entry) => (
-                    <EntryNode
-                      key={entry.type === "folder" ? `f:${entry.path}` : `p:${entry.slug}`}
-                      entry={entry}
-                      ctx={{
-                        slug,
-                        current,
-                        newKind: canWrite ? SECTION_NEW_KIND.personal : undefined,
-                        movable: canWrite,
-                        canTrash: canWrite,
-                        newInFolderLabel: (name) => t("newKindInFolder", { kind: t("newKind.personal"), name }),
-                      }}
-                      depth={0}
-                      parentPath=""
-                    />
-                  ))}
-                </ul>
-              </details>
+              <SecondarySection
+                section={personalSection}
+                label={t("section.personal")}
+                ctx={{
+                  slug,
+                  current,
+                  newKind: canWrite ? SECTION_NEW_KIND.personal : undefined,
+                  movable: canWrite,
+                  canTrash: canWrite,
+                  newInFolderLabel: (name) => t("newKindInFolder", { kind: t("newKind.personal"), name }),
+                  selection: selectionView,
+                }}
+                onTogglePage={toggleSelectedPage}
+                onToggleGroup={toggleSelectedGroup}
+                onCheckboxPointerDown={onCheckboxPointerDown}
+                onCheckboxPointerMove={onCheckboxPointerMove}
+                onCheckboxPointerUp={onCheckboxPointerUp}
+                onCheckboxPointerCancel={onCheckboxPointerCancel}
+                onCheckboxLostPointerCapture={onCheckboxLostPointerCapture}
+                onCheckboxClick={onCheckboxClick}
+              />
             ) : null}
           </div>
         )}
       </nav>
 
+      {selectionMode ? (
+        <div
+          role="region"
+          aria-label={t("selectionActions")}
+          className="border-t border-indigo-100 bg-indigo-50/70 px-3 py-3 shadow-[0_-8px_20px_-18px_rgba(79,70,229,0.7)]"
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-sm font-semibold text-indigo-950">
+              {t("selectedCount", { count: selected.size })}
+            </div>
+            <div className="text-[11px] text-stone-500">
+              {t("selectableCount", { count: selectablePages.length })}
+            </div>
+          </div>
+          {canonicalPages.length > selectablePages.length ? (
+            <div className="mt-0.5 text-[11px] text-stone-500">
+              {t("excludedCount", { count: canonicalPages.length - selectablePages.length })}
+            </div>
+          ) : null}
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              disabled={bulkPending || selectablePages.length === 0}
+              onClick={() =>
+                toggleSelectedGroup(
+                  selectablePages.map((page) => page.slug),
+                  selected.size !== selectablePages.length,
+                )
+              }
+              className="rounded-md border border-indigo-200 bg-white px-2 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 active:bg-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {selected.size === selectablePages.length ? t("clearAll") : t("selectAll")}
+            </button>
+            <button
+              type="button"
+              disabled={bulkPending || selected.size === 0}
+              onClick={() => {
+                setStoredSelected(new Set());
+                setSelectionAnchor(null);
+              }}
+              className="rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 active:bg-stone-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {t("clearSelection")}
+            </button>
+          </div>
+          <button
+            type="button"
+            disabled={bulkPending || selected.size === 0}
+            onClick={requestBulkTrash}
+            className="mt-2 flex w-full items-center justify-center rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition-colors motion-reduce:transition-none hover:border-rose-300 hover:bg-rose-100 active:bg-rose-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {bulkPending ? t("bulkTrashPending", { count: selected.size }) : t("bulkTrashButton", { count: selected.size })}
+          </button>
+          <p className="mt-1.5 text-[11px] leading-4 text-stone-500">
+            <span className="hidden md:inline">{t("selectionHintDesktop")}</span>
+            <span className="md:hidden">{t("selectionHintMobile")}</span>
+          </p>
+        </div>
+      ) : (
       <div className="border-t border-stone-100 px-2 py-2">
         <ul className="space-y-0.5">
           <li>
@@ -649,6 +1351,7 @@ export function WikiToc({
           </li>
         </ul>
       </div>
+      )}
 
       <div className="border-t border-stone-200 px-3 py-2">
         <div className="mb-1 truncate px-1 text-xs text-stone-500">{email}</div>

@@ -47,6 +47,7 @@ jobs:
       - run: pnpm prisma migrate deploy
       - run: pnpm check:rules
       - run: pnpm check:i18n
+      - run: pnpm check:content-writes
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

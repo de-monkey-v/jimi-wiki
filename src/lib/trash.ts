@@ -18,6 +18,7 @@ import { refreshPageDerivedState, refreshSourceDerivedState } from "@/lib/page-p
 import { reindexEmbeddings } from "@/lib/search";
 import { queueIncrementalKnowledgeBuild } from "@/lib/builds";
 import { getBlobStore } from "@/lib/blob";
+import { isPageTrashEligible } from "@/lib/kinds";
 
 export const TRASH_RETENTION_DAYS = 14;
 export const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
@@ -76,6 +77,178 @@ export async function trashPage(input: {
   });
   await refreshPageDerivedState(input.wikiId, page.id);
   return page;
+}
+
+export const MAX_TOC_BULK_TRASH_PAGES = 1_000;
+
+export type TocBulkTrashRequest = { slug: string; expectedVersion: number };
+export type TocBulkTrashOutcome =
+  | "trashed"
+  | "alreadyTrashed"
+  | "versionConflict"
+  | "notEligible"
+  | "notFound"
+  | "failed"
+  | "notAttempted";
+export type TocBulkTrashItemResult = {
+  slug: string;
+  outcome: TocBulkTrashOutcome;
+  actualVersion?: number;
+  cleanupPending?: boolean;
+};
+export type TocBulkTrashResult = {
+  status: "success" | "partial" | "error";
+  code?: "invalidInput" | "failed" | "uncertain";
+  movedCount: number;
+  failedCount: number;
+  warningCount: number;
+  items: TocBulkTrashItemResult[];
+};
+
+function parseTocBulkTrashRequests(raw: unknown): TocBulkTrashRequest[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_TOC_BULK_TRASH_PAGES) return null;
+  const versions = new Map<string, number>();
+  for (const value of raw) {
+    if (!value || typeof value !== "object") return null;
+    const slug = (value as { slug?: unknown }).slug;
+    const expectedVersion = (value as { expectedVersion?: unknown }).expectedVersion;
+    if (
+      typeof slug !== "string" ||
+      slug.length === 0 ||
+      slug.length > 512 ||
+      typeof expectedVersion !== "number" ||
+      !Number.isSafeInteger(expectedVersion) ||
+      expectedVersion < 1
+    ) {
+      return null;
+    }
+    const previous = versions.get(slug);
+    if (previous !== undefined && previous !== expectedVersion) return null;
+    versions.set(slug, expectedVersion);
+  }
+  return [...versions].map(([slug, expectedVersion]) => ({ slug, expectedVersion }));
+}
+
+function tocBulkTrashResult(items: TocBulkTrashItemResult[], invalidInput = false): TocBulkTrashResult {
+  const movedCount = items.filter((item) => item.outcome === "trashed" || item.outcome === "alreadyTrashed").length;
+  const failedCount = items.length - movedCount;
+  const warningCount = items.filter((item) => item.cleanupPending).length;
+  const uncertain = items.some((item) => item.outcome === "failed");
+  return {
+    status: invalidInput || movedCount === 0 ? "error" : failedCount > 0 || warningCount > 0 ? "partial" : "success",
+    ...(invalidInput ? { code: "invalidInput" as const } : uncertain ? { code: "uncertain" as const } : {}),
+    movedCount,
+    failedCount,
+    warningCount,
+    items,
+  };
+}
+
+/**
+ * WikiToc 일괄 이동 코어. 요청은 한 번 받되 기존 단건 trashPage 경계를 항목별로 재사용한다.
+ * 한 문서의 stale version이 나머지 복구 가능한 이동을 막지 않으며, 결과를 slug별로 돌려줘
+ * 실패 항목만 최신 버전으로 다시 시도할 수 있다.
+ */
+export async function trashPagesFromToc(input: {
+  wikiId: string;
+  userId: string;
+  items: unknown;
+  now?: Date;
+}): Promise<TocBulkTrashResult> {
+  const requests = parseTocBulkTrashRequests(input.items);
+  if (!requests) return tocBulkTrashResult([], true);
+  const now = input.now ?? new Date();
+  const results: TocBulkTrashItemResult[] = [];
+
+  for (let index = 0; index < requests.length; index++) {
+    const request = requests[index];
+    try {
+      const page = await prisma.page.findUnique({
+        where: { wikiId_slug: { wikiId: input.wikiId, slug: request.slug } },
+        select: {
+          id: true,
+          slug: true,
+          kind: true,
+          origin: true,
+          sourceId: true,
+          currentVersion: true,
+          archivedAt: true,
+          trashedAt: true,
+        },
+      });
+      if (!page) {
+        results.push({ slug: request.slug, outcome: "notFound" });
+        continue;
+      }
+      if (page.trashedAt) {
+        let cleanupPending = false;
+        try {
+          await refreshPageDerivedState(input.wikiId, page.id);
+        } catch {
+          cleanupPending = true;
+        }
+        results.push({ slug: request.slug, outcome: "alreadyTrashed", cleanupPending });
+        continue;
+      }
+      if (page.archivedAt || !isPageTrashEligible(page)) {
+        results.push({ slug: request.slug, outcome: "notEligible" });
+        continue;
+      }
+      if (page.currentVersion !== request.expectedVersion) {
+        results.push({ slug: request.slug, outcome: "versionConflict", actualVersion: page.currentVersion });
+        continue;
+      }
+      await trashPage({
+        wikiId: input.wikiId,
+        pageId: page.id,
+        expectedVersion: request.expectedVersion,
+        userId: input.userId,
+        now,
+      });
+      results.push({ slug: request.slug, outcome: "trashed" });
+    } catch (error) {
+      if (error instanceof ContentVersionConflictError) {
+        results.push({ slug: request.slug, outcome: "versionConflict", actualVersion: error.actualVersion });
+        continue;
+      }
+      if (error instanceof ContentNotFoundError) {
+        results.push({ slug: request.slug, outcome: "notFound" });
+        continue;
+      }
+      if (error instanceof Error && ["system_page_cannot_be_trashed", "source_note_requires_source_trash"].includes(error.message)) {
+        results.push({ slug: request.slug, outcome: "notEligible" });
+        continue;
+      }
+
+      // archive/trash commit 뒤 projection refresh만 실패했을 수 있다. 실제 row를 다시 읽어
+      // 성공을 실패로 오보하지 않고 cleanup을 한 번 재시도한다.
+      try {
+        const committed = await prisma.page.findUnique({
+          where: { wikiId_slug: { wikiId: input.wikiId, slug: request.slug } },
+          select: { id: true, trashedAt: true },
+        });
+        if (committed?.trashedAt) {
+          let cleanupPending = false;
+          try {
+            await refreshPageDerivedState(input.wikiId, committed.id);
+          } catch {
+            cleanupPending = true;
+          }
+          results.push({ slug: request.slug, outcome: "trashed", cleanupPending });
+          continue;
+        }
+      } catch {
+        // authoritative read도 실패하면 아래에서 현재 항목과 미시도 항목을 구분해 반환한다.
+      }
+      results.push({ slug: request.slug, outcome: "failed" });
+      for (const remaining of requests.slice(index + 1)) {
+        results.push({ slug: remaining.slug, outcome: "notAttempted" });
+      }
+      break;
+    }
+  }
+
+  return tocBulkTrashResult(results);
 }
 
 export async function restoreTrashedPage(input: {

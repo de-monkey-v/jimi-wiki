@@ -84,6 +84,92 @@ test("14-day trash preserves revisions, source notes, saved links, and whole-wik
     assert.equal(restoredRevision.documentType, "decision");
     assert.equal(restoredRevision.documentAt?.toISOString(), documentAt.toISOString());
 
+    const [batchA, batchB, batchStale, batchInvalid] = await Promise.all(
+      ["a", "b", "stale", "invalid"].map((suffix) =>
+        content.createPageSnapshot({
+          wikiId: wiki.id,
+          slug: `batch-trash-${suffix}`,
+          title: `Batch Trash ${suffix}`,
+          body: `batch ${suffix}`,
+          kind: "document",
+          documentType: "general",
+          documentAt,
+          modelAccess: "internalOnly",
+          context: { actor: "human", userId: user.id },
+        }),
+      ),
+    );
+    await content.updatePageSnapshot({
+      wikiId: wiki.id,
+      pageId: batchStale.page.id,
+      expectedVersion: 1,
+      changes: { body: "changed after sidebar selection" },
+      context: { actor: "human", userId: user.id },
+    });
+    const bulkNow = new Date("2026-07-23T00:00:00.000Z");
+    const bulkResult = await trash.trashPagesFromToc({
+      wikiId: wiki.id,
+      userId: user.id,
+      now: bulkNow,
+      items: [
+        { slug: batchA.page.slug, expectedVersion: 1 },
+        { slug: batchStale.page.slug, expectedVersion: 1 },
+        { slug: batchB.page.slug, expectedVersion: 1 },
+      ],
+    });
+    assert.equal(bulkResult.status, "partial");
+    assert.equal(bulkResult.movedCount, 2);
+    assert.equal(bulkResult.failedCount, 1);
+    assert.deepEqual(
+      bulkResult.items.map((item) => [item.slug, item.outcome]),
+      [
+        [batchA.page.slug, "trashed"],
+        [batchStale.page.slug, "versionConflict"],
+        [batchB.page.slug, "trashed"],
+      ],
+    );
+    const [batchAAfter, batchBAfter, batchStaleAfter] = await Promise.all([
+      prisma.page.findUniqueOrThrow({ where: { id: batchA.page.id } }),
+      prisma.page.findUniqueOrThrow({ where: { id: batchB.page.id } }),
+      prisma.page.findUniqueOrThrow({ where: { id: batchStale.page.id } }),
+    ]);
+    assert.equal(batchAAfter.trashedAt?.toISOString(), bulkNow.toISOString());
+    assert.equal(batchBAfter.trashedAt?.toISOString(), bulkNow.toISOString());
+    assert.equal(batchAAfter.purgeAt?.getTime(), bulkNow.getTime() + trash.TRASH_RETENTION_MS);
+    assert.equal(batchBAfter.purgeAt?.getTime(), bulkNow.getTime() + trash.TRASH_RETENTION_MS);
+    assert.equal(batchStaleAfter.trashedAt, null);
+    assert.equal(batchStaleAfter.currentVersion, 2);
+
+    const retryResult = await trash.trashPagesFromToc({
+      wikiId: wiki.id,
+      userId: user.id,
+      items: [{ slug: batchA.page.slug, expectedVersion: 1 }],
+    });
+    assert.equal(retryResult.status, "success");
+    assert.equal(retryResult.items[0]?.outcome, "alreadyTrashed");
+    assert.equal(await prisma.pageRevision.count({ where: { pageId: batchA.page.id } }), 2, "retry must not append another archive revision");
+
+    const invalidBatch = await trash.trashPagesFromToc({
+      wikiId: wiki.id,
+      userId: user.id,
+      items: [
+        { slug: batchInvalid.page.slug, expectedVersion: 1 },
+        { slug: batchInvalid.page.slug, expectedVersion: 2 },
+      ],
+    });
+    assert.equal(invalidBatch.code, "invalidInput");
+    assert.equal((await prisma.page.findUniqueOrThrow({ where: { id: batchInvalid.page.id } })).trashedAt, null);
+
+    const uncertainBatch = await trash.trashPagesFromToc({
+      wikiId: wiki.id,
+      userId: user.id,
+      now: new Date(Number.NaN),
+      items: [{ slug: batchInvalid.page.slug, expectedVersion: 1 }],
+    });
+    assert.equal(uncertainBatch.code, "uncertain");
+    assert.equal(uncertainBatch.items[0]?.outcome, "failed");
+    assert.equal((await prisma.page.findUniqueOrThrow({ where: { id: batchInvalid.page.id } })).trashedAt, null);
+
     const source = await content.createSourceSnapshot({
       wikiId: wiki.id,
       slug: "trash-source",
@@ -103,6 +189,14 @@ test("14-day trash preserves revisions, source notes, saved links, and whole-wik
       modelAccess: "internalOnly",
       context: { actor: "human", userId: user.id },
     });
+    const ineligibleBatch = await trash.trashPagesFromToc({
+      wikiId: wiki.id,
+      userId: user.id,
+      items: [{ slug: note.page.slug, expectedVersion: 1 }],
+    });
+    assert.equal(ineligibleBatch.status, "error");
+    assert.equal(ineligibleBatch.items[0]?.outcome, "notEligible");
+    assert.equal((await prisma.page.findUniqueOrThrow({ where: { id: note.page.id } })).trashedAt, null);
     const trashedSource = await trash.trashSource({
       wikiId: wiki.id,
       sourceId: source.source.id,

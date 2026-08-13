@@ -1,6 +1,6 @@
 {
   "name": "jimi-wiki-app",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@10.28.1",

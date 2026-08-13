@@ -8,7 +8,7 @@ ontology_rules_version: 3
 
 배포된 jimi-wiki에 **앱 내부 AI 없이** 지식을 편입·정리하는 외부 유지보수자(너)용 스킬이다. 내부 ingest 에이전트와 **동일한 분류 규칙**([`references/ontology-rules.md`](./references/ontology-rules.md), 정본)을 따르므로, 웹 UI로 넣든 이 스킬로 넣든 위키의 분류가 일관된다.
 
-특정 에이전트에 묶이지 않는다. MCP를 지원하면 도구로, 아니면 REST로 **같은 워크플로우**를 실행한다.
+특정 에이전트에 묶이지 않는다. MCP를 지원하면 도구로, 아니면 REST로 **같은 워크플로우**를 실행한다. MCP가 연결되어 필요한 도구가 보이는 환경에서는 REST를 fallback으로 사용하지 않는다.
 
 ## 언제 쓰나
 
@@ -75,10 +75,10 @@ ontology_rules_version: 3
 ## Research — 출처가 연결된 장문 보고서
 
 1. 기본 8~12개의 독립 출처를 조사한다. 사용자가 준 링크는 seed로 사용하되 “이 링크만”이라는 지시가 없으면 다른 독립 출처로 교차검증한다.
-2. 주장에 인용할 URL은 먼저 `preserve_url`로 보존한다. 보존 실패 시 실제로 접근해 확인한 내용만 `preserve_text`로 캡처하고, 접근하지 못한 자료는 근거로 사용하지 않는다.
+2. 주장에 인용할 URL은 먼저 `preserve_url`로 보존한다. 이 호출은 비동기이므로 반환된 `runId`를 `get_run_status`로 `done`까지 확인하고 `output.sourceSlug`를 사용한다. 보존 실패 시 실제로 접근해 확인한 내용만 `preserve_text`로 캡처하고 같은 방식으로 완료를 확인한다. 접근하지 못한 자료는 근거로 사용하지 않는다.
 3. 본문 인용은 `[@source-slug]`로 쓴다. 코드 블록 속 표기는 인용이 아니다. `sourceSlugs`에는 본문에서 각 인용이 **처음 등장한 순서**를 중복 없이 그대로 보낸다(1~30개).
 4. 보고서는 `요약 → 조사 범위·기준일 → 시각 개요 → 핵심 설명 → 비교표/타임라인 → 반론·불확실성 → 실용적 결론` 순서를 따른다. Mermaid가 유용할 때만 쓰고 본문 내 `init` override와 `click` 지시는 사용하지 않는다.
-5. `record_research_report`로 즉시 게시한다. 기존 research slug를 명시해 갱신할 때만 `read_page`의 `currentVersion`을 `expectedVersion`으로 보낸다. 사람/혼합 보고서는 staged review가 되므로 직접 갱신됐다고 보고하지 않는다.
+5. MCP가 연결되어 있으면 `record_research_report`를 직접 호출해 즉시 게시한다. 게시를 위해 임의 shell·셸·code 실행이나 REST 우회 스크립트를 만들지 않는다. MCP 호출이 실패하면 준비한 원고와 `sourceSlug`를 유지하고 오류를 보고한다. 기존 research slug를 명시해 갱신할 때만 `read_page`의 `currentVersion`을 `expectedVersion`으로 보낸다. 사람/혼합 보고서는 staged review가 되므로 직접 갱신됐다고 보고하지 않는다.
 6. 완료 응답에 보고서 링크, 보존된 출처 수, 보존 실패와 남은 불확실성을 함께 적는다.
 
 ## Query — 조회 답변

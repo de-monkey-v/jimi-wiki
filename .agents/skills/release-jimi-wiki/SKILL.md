@@ -123,6 +123,10 @@ Apply these conditional gates:
 - authentication, account reset, Tailscale policy, or Hermes key changes:
   follow their dedicated runbook sections and obtain any additional authority
   before external control-plane or credential mutations.
+- `mcp/**`, `skills/wiki-ingest/**`, or `ops/hermes-jimi-mcp.sh`: activation
+  synchronizes the configured `wiki-personal` skill bundle and reloads an
+  already-running Hermes gateway. Treat a sync/verification failure as an
+  activation failure; do not bypass it by copying profile files manually.
 
 ## Build the immutable release
 
@@ -204,6 +208,15 @@ set -a
 source "$HOME/.config/jimi-wiki/app.env"
 set +a
 "$release/ops/health-check.sh"
+```
+
+When Hermes is configured, also prove the profile bundle and MCP surface match
+the active release:
+
+```bash
+diff -qr "$release/skills/wiki-ingest" \
+  "$HOME/.hermes/profiles/wiki-personal/skills/wiki-ingest"
+wiki-personal mcp test jimi-wiki | grep -F record_research_report
 ```
 
 If `service-audit` is available, run it as an additional run-from check. It does

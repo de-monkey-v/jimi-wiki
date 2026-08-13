@@ -5,6 +5,8 @@
 - **MCP** — `mcp/server.mjs`를 MCP 클라이언트에 등록하면 아래 도구가 노출된다(연결법은 [`setup.md`](./setup.md)).
 - **REST** — MCP가 없는 하네스(예: bash+curl만 있는 환경)는 REST를 직접 호출한다. 모든 요청은 `Authorization: Bearer <API_KEY>` 헤더. 베이스: `{BASE}/api/wikis/{SLUG}`.
 
+MCP가 연결되어 `record_research_report` 같은 목적별 도구가 보이면 그 도구를 직접 사용한다. REST는 MCP 자체가 없는 하네스의 fallback이며, MCP 도구 실패를 shell·code 실행으로 우회하는 재시도 경로가 아니다.
+
 전체 엔드포인트·응답 스키마·에러 코드는 저장소의 [`docs/rest-api.md`](../../../docs/rest-api.md)가 정본이다. 아래 표는 스킬 워크플로우에 필요한 최소 집합.
 
 ## 매핑 표
@@ -21,7 +23,7 @@
 | 원문 조회 | `read_source(slug)` | `GET /sources/{slug}` | 불변 |
 | 원문 저장 | `create_source({title, body, url?})` | `POST /sources` | → `{slug}` 반환. ingest 1단계 |
 | 원문 휴지통/복원 | `trash_source` / `restore_source` | `DELETE /sources/{slug}` / `POST /sources/{slug}/restore` | 연결 source note와 함께 처리, 14일 복구 가능 |
-| 원문만 보존 | `preserve_url` / `preserve_text` | `POST /ingest {mode:"preserve",...}` | Source+pointer note, 생성형 큐레이션 없음 |
+| 원문만 보존 | `preserve_url` / `preserve_text` | `POST /ingest {mode:"preserve",...}` | 비동기 `runId` → `get_run_status` done의 `output.sourceSlug`; Source+pointer note, 생성형 큐레이션 없음 |
 | 정리 편입 | `curate_url` / `curate_text` | `POST /ingest {mode:"curate",...}` | 기존 `ingest_*`도 curate 별칭 |
 | 보존 원문 정리 | `curate_source(sourceSlug)` | `POST /sources/{slug}/curate` | blob-only 파일은 이때 추출/OCR 후 새 SourceRevision을 만들며, 게시 성공 뒤에만 curated 전환 |
 | 문서 저장 맥락 | `get_capture_context(title, summary?)` | `POST /categories/match` | external-safe 기존 폴더 소수 후보 + 기본 Inbox 규칙 |

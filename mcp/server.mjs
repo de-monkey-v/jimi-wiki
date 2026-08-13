@@ -16,7 +16,7 @@
  * Hermes Agent 등 다른 하네스 등록법·권장 도구 필터는 skills/wiki-ingest/references/setup.md 참조.
  * ingest 워크플로우 규칙은 skills/wiki-ingest/SKILL.md 참조 (분류 규칙 정본 포함).
  */
-const MCP_VERSION = "0.7.0";
+const MCP_VERSION = "0.7.1";
 if (process.argv.includes("--version")) {
   console.log(`jimi-wiki-mcp ${MCP_VERSION}`);
   process.exit(0);
@@ -120,7 +120,8 @@ const server = new McpServer(
       "의도 라우팅: URL만 보냄/‘나중에 볼게’→본문을 읽고 3~5개 핵심 bullet과 ‘볼 가치’ 한 문장으로 요약한 뒤 save_link(summary), ‘조사해줘·비교해줘·보고서로 정리해줘’→웹을 심층 조사한 뒤 record_research_report, ‘원문만 그대로 보관해’→preserve_*, ‘정리해서 지식으로 저장해’→curate_*, ‘이 내용을 기록해’→필요하면 get_capture_context로 폴더 후보를 받은 뒤 record_document, ‘기존 문서에 추가해’→append_document, ‘저장한 링크를 정식 편입해’→promote_saved_link.",
       "문서 저장 위치는 Jimi가 최종 결정한다. get_capture_context가 돌려준 기존 category slug만 선택하고 애매하면 category를 생략해 Inbox에 둔다. 사용자가 특정 폴더를 명시했으면 requireCategory=true로 조용한 Inbox 폴백 대신 실패시킨다. 일반 문서 제목에는 날짜 접두어를 자동으로 붙이지 말고 날짜는 documentAt에 넣는다. 예약·cron 작업만 그 작업의 명시적 제목 규칙을 따르고 안정적인 idempotencyKey를 보낸다.",
       "읽을거리는 항상 요약을 시도한다. 본문 추출이 실패한 경우에만 save_link(summaryUnavailableReason=구체적 사유)로 메타데이터를 저장하고 요약이 없음을 명시한다. URL이 여러 개면 각각 본문을 읽고 별도 SavedLink로 저장하며 성공/기존/실패를 나눠 보고한다. 삭제 의도가 명확하면 trash_*를 쓰고, 애매하면 먼저 확인한다. 휴지통은 14일간 복원할 수 있으며 영구 삭제와 위키 전체 삭제는 MCP에 없다.",
-      "연구 보고서: 기본 8~12개의 독립 출처를 조사한다. 사용자가 준 링크는 seed로 쓰되 ‘이 링크만’이라고 하지 않으면 독립 출처로 교차검증한다. 인용할 URL은 먼저 preserve_url로 보존하고 반환된 sourceSlug를 본문 [@source-slug]와 sourceSlugs에 첫 등장 순서대로 넣는다. 보존 실패 시 접근 가능한 사실만 preserve_text로 명시적으로 캡처하고, 접근하지 못한 자료는 주장 근거로 쓰지 않는다.",
+      "연구 보고서: 기본 8~12개의 독립 출처를 조사한다. 사용자가 준 링크는 seed로 쓰되 ‘이 링크만’이라고 하지 않으면 독립 출처로 교차검증한다. 인용할 URL은 먼저 preserve_url로 보존하고 반환된 runId를 get_run_status로 done까지 확인한 뒤 output.sourceSlug를 본문 [@source-slug]와 sourceSlugs에 첫 등장 순서대로 넣는다. 보존 실패 시 접근 가능한 사실만 preserve_text로 명시적으로 캡처하고 같은 방식으로 완료를 확인한다. 접근하지 못한 자료는 주장 근거로 쓰지 않는다.",
+      "연구 게시: Jimi MCP가 연결되어 있으면 record_research_report를 직접 호출한다. 게시를 위해 임의 shell·code·REST 우회 스크립트를 만들지 않는다. MCP 호출이 실패하면 원고와 sourceSlug를 유지한 채 오류를 보고하고 다른 쓰기 경로로 우회하지 않는다.",
       "연구 보고서 구조: 요약 → 조사 범위·기준일 → 시각 개요(Mermaid 필요 시) → 핵심 설명 → 비교표/타임라인 → 반론·불확실성 → 실용적 결론. 완료 응답에는 보고서 링크, 출처 수, 보존 실패와 남은 불확실성을 함께 알린다.",
       "편입에는 두 방식이 있다. preserve는 불변 원문과 pointer note만 저장하고 생성형 큐레이션을 실행하지 않는다. curate는 원문→note→concept/entity 합성을 수행하며 비동기이므로 get_run_status로 완료를 확인한다.",
       "직접 큐레이션 절차: (1) create_source로 원문을 불변 저장 → (2) search_wiki/list_pages로 기존 페이지 확인 → (3) write_page로 kind=note 소스 노트 작성(sourceSlug 연결, 원문 복붙 금지·네 말로 요약) → (4) 영향받는 concept/entity 페이지 갱신·신설(sourceSlug로 기여 기록, 내부 링크 [[slug]] 적극 사용, category 재사용 우선) → (5) 모순 점검(필수): 원문 핵심 주장마다 search_wiki→read_page로 관련 기존 페이지 본문을 받아 상충 여부를 대조하고, 상충 시 '> [!warning] 상충' 콜아웃으로 양쪽 주장·출처를 병기(기존 내용 삭제 금지).",
@@ -207,12 +208,12 @@ function registerTextIngestTool(name, mode, description) {
 registerUrlIngestTool(
   "preserve_url",
   "preserve",
-  "URL의 읽기용 본문을 불변 원문과 pointer note로만 보존한다. 생성형 큐레이션·KnowledgeBuild·생성형 쿼터를 사용하지 않는다.",
+  "URL의 읽기용 본문을 불변 원문과 pointer note로만 보존하는 비동기 잡을 시작한다. 반환된 runId를 get_run_status로 done까지 확인하고 output.sourceSlug를 사용한다. 생성형 큐레이션·KnowledgeBuild·생성형 쿼터를 사용하지 않는다.",
 );
 registerTextIngestTool(
   "preserve_text",
   "preserve",
-  "입력 문자열을 그대로 불변 원문으로 보존하고 pointer note만 만든다. 생성형 큐레이션은 실행하지 않는다.",
+  "입력 문자열을 그대로 불변 원문으로 보존하고 pointer note만 만드는 비동기 잡을 시작한다. 반환된 runId를 get_run_status로 done까지 확인하고 output.sourceSlug를 사용한다. 생성형 큐레이션은 실행하지 않는다.",
 );
 registerUrlIngestTool("curate_url", "curate", `URL을 정리해 지식으로 편입한다. ${CURATE_NOTE}`);
 registerTextIngestTool("curate_text", "curate", `텍스트를 정리해 지식으로 편입한다. ${CURATE_NOTE}`);
@@ -240,8 +241,8 @@ server.registerTool(
   "get_run_status",
   {
     description:
-      "ingest 잡의 상태를 조회한다(pending|running|done|error). done이면 output에 요약·sourceSlug·수정된 페이지가 담긴다. ingest_url/ingest_text 직후 바로 완료되지 않으므로 잠시 후 폴링하라. status=error에 published:true가 함께 오면 콘텐츠는 이미 발행됐고 검색 색인만 미완인 상태이니 재편입하지 말고 '저장됐지만 검색 색인이 미완'이라고 알려라. published 없이 status=error면 실제 실패이므로 error 내용을 사용자에게 전하라(임의 재시도 금지 — 원인이 쿼터·인증이면 반복해도 실패한다).",
-    inputSchema: { runId: z.string().describe("ingest_url/ingest_text가 반환한 runId") },
+      "ingest 잡의 상태를 조회한다(pending|running|done|error). done이면 output에 요약·sourceSlug·수정된 페이지가 담긴다. preserve_*/curate_*/ingest_* 직후 바로 완료되지 않으므로 잠시 후 폴링하라. status=error에 published:true가 함께 오면 콘텐츠는 이미 발행됐고 검색 색인만 미완인 상태이니 재편입하지 말고 '저장됐지만 검색 색인이 미완'이라고 알려라. published 없이 status=error면 실제 실패이므로 error 내용을 사용자에게 전하라(임의 재시도 금지 — 원인이 쿼터·인증이면 반복해도 실패한다).",
+    inputSchema: { runId: z.string().describe("preserve_*/curate_*/ingest_*가 반환한 runId") },
   },
   async ({ runId }) => {
     try {

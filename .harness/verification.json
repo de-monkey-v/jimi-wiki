@@ -1,0 +1,21 @@
+{
+  "scenarios": [
+    {
+      "added_at": "2026-08-13T06:57:28+00:00",
+      "class": "lifecycle",
+      "entrypoint": "wiki-personal gateway → jimi-wiki MCP record_research_report",
+      "id": "hermes-research-publish-approval-timeout",
+      "journey": "Hermes가 리서치 원고와 출처를 준비한 뒤 개인 위키에 장문 research 보고서를 게시한다",
+      "note": "2026-08-13 실제 장애: 활성 wiki-ingest 스킬이 release보다 뒤처져 record_research_report 안내가 없었고 Hermes가 execute_code REST 스크립트로 우회해 303초 승인 timeout",
+      "oracle": "execute_code/terminal 승인 요청 없이 MCP 발행이 완료되고 보고서가 정확히 한 개 생성된다",
+      "origin": "escaped-defect",
+      "paths": [
+        "mcp/server.mjs",
+        "ops/deploy.sh",
+        "ops/hermes-jimi-mcp.sh",
+        "skills/wiki-ingest/SKILL.md"
+      ]
+    }
+  ],
+  "version": 1
+}

@@ -60,6 +60,7 @@ mcp_servers:
 
 - **개인 위키 프로필**(위 `include`): 검색·원문 보존·직접/위임 정리·문서 기록·읽을거리 관리를 허용한다. 보호 메모(`personal/internalOnly`)는 MCP에서 보이지 않는다.
 - Hermes의 일반 문서 저장은 `get_capture_context → record_document` 순서로 두고, 정기 cron은 날짜/대상별 안정적인 `idempotencyKey`를 보낸다. 폴더 정책 전문을 SOUL/job prompt에 복사하지 않는다.
+- 운영 프로필의 스킬과 MCP child process는 release activation 때 `ops/hermes-jimi-mcp.sh sync-skill`로 같은 immutable release에 맞춰진다. 수동으로 MCP를 다시 연결할 때도 `connect`가 스킬 동기화와 활성 gateway 재시작을 함께 수행한다.
 - **유지보수 프로필**: `include`를 지우면 `run_lint`를 포함한 전체 비파괴 도구가 추가로 노출된다.
 - 휴지통 도구는 14일 복구 가능하므로 개인 프로필에도 노출한다. 영구 purge와 위키 전체 삭제 도구는 MCP 서버 자체에 없다.
 - Claude Code 프로젝트 위키는 프로젝트 전용 키와 slug로 위 명령을 `--scope local` 등록한다. 그 키로 개인/다른 프로젝트 위키를 요청하면 `404`가 정상이다.

@@ -26,6 +26,21 @@ keep_marker=".jimi-keep"
 db_container="${JIMI_DB_CONTAINER:-jimi-wiki-db}"
 db_user="${JIMI_DB_USER:-jimi}"
 db_name="${JIMI_DB_NAME:-jimi}"
+script_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+hermes_sync_script="$script_dir/hermes-jimi-mcp.sh"
+hermes_profile_dir="${HERMES_PERSONAL_PROFILE_DIR:-$HOME/.hermes/profiles/wiki-personal}"
+
+hermes_is_configured() {
+  [[ -f "$hermes_profile_dir/config.yaml" ]] \
+    && grep -q '^  jimi-wiki:$' "$hermes_profile_dir/config.yaml"
+}
+
+sync_hermes_release() {
+  local release_dir="$1"
+  HERMES_PERSONAL_PROFILE_DIR="$hermes_profile_dir" \
+    JIMI_RELEASE_DIR="$release_dir" \
+    "$hermes_sync_script" sync-skill
+}
 
 # 릴리스가 선언한 마이그레이션에서 운영 DB에 이미 적용된 것을 뺀 목록을 출력한다.
 # `prisma migrate status` 출력 파싱은 Prisma 버전에 종속이라 쓰지 않는다.
@@ -260,6 +275,7 @@ case "$command_name" in
     old_target="$(readlink -f "$current_link" 2>/dev/null || true)"
     stopped=0
     swapped=0
+    hermes_touched=0
     recover_old() {
       if (( stopped == 1 )); then
         if (( swapped == 1 )) && [[ -n "$old_target" && -f "$old_target/.jimi-release" ]]; then
@@ -269,6 +285,10 @@ case "$command_name" in
         fi
         systemctl --user daemon-reload || true
         systemctl --user restart jimi-wiki-codex-proxy.service jimi-wiki-web.service jimi-wiki-worker.service || true
+        if ((hermes_touched == 1)) && [[ -n "$old_target" && -f "$old_target/.jimi-release" ]]; then
+          sync_hermes_release "$old_target" \
+            || { echo "warning: failed to restore Hermes to $old_target" >&2; systemctl --user restart hermes-gateway.service || true; }
+        fi
       fi
     }
     trap recover_old EXIT
@@ -320,6 +340,13 @@ case "$command_name" in
     # 여기서 실패하면 stopped/swapped가 아직 1이므로 recover_old가 이전 릴리스를 되살린다.
     # 재시작만 하고 끝내면 "배포 성공"이라고 말한 뒤 서비스가 죽어 있는 상태가 남는다.
     wait_ready || { echo "release did not become ready in time; rolling back" >&2; exit 1; }
+    # Hermes는 MCP child process와 wiki-ingest 스킬을 gateway 시작 때 읽는다. 앱 current만
+    # 바꾸면 둘이 이전 릴리스에 남아 도구 선택이 REST/execute_code로 우회할 수 있으므로,
+    # 구성된 프로필에 한해 같은 릴리스의 번들을 원자적으로 맞추고 gateway를 재시작한다.
+    if hermes_is_configured; then
+      hermes_touched=1
+      sync_hermes_release "$argument"
+    fi
     # previous는 이 릴리스가 실제로 뜬 뒤에만 옮긴다. 교체를 readiness 앞에 두면
     # 실패한 배포가 previous를 자기 직전 값으로 덮어써, recover_old가 current를
     # 되살려도 진짜 직전 릴리스가 사라진다 = 다음 rollback이 제자리를 맴돈다.

@@ -13,7 +13,7 @@ test("MCP personal/project profiles expose the intended tools and route payloads
     encoding: "utf8",
   });
   assert.equal(version.status, 0, version.stderr);
-  assert.equal(version.stdout.trim(), "jimi-wiki-mcp 0.7.0");
+  assert.equal(version.stdout.trim(), "jimi-wiki-mcp 0.7.1");
 
   const seen: SeenRequest[] = [];
   const http = createServer((req, res) => {
@@ -88,6 +88,10 @@ test("MCP personal/project profiles expose the intended tools and route payloads
     assert.match(personal.client.getInstructions() ?? "", /읽을거리는 항상 요약을 시도한다/);
     assert.match(personal.client.getInstructions() ?? "", /기본 8~12개의 독립 출처/);
     assert.match(personal.client.getInstructions() ?? "", /먼저 preserve_url/);
+    assert.match(personal.client.getInstructions() ?? "", /runId를 get_run_status로 done까지 확인/);
+    assert.match(personal.client.getInstructions() ?? "", /output\.sourceSlug/);
+    assert.match(personal.client.getInstructions() ?? "", /record_research_report를 직접 호출/);
+    assert.match(personal.client.getInstructions() ?? "", /임의 shell·code·REST 우회/);
     assert.match(personal.client.getInstructions() ?? "", /일반 문서 제목에는 날짜 접두어를 자동으로 붙이지 말고/);
     assert.match(personal.client.getInstructions() ?? "", /안정적인 idempotencyKey/);
 

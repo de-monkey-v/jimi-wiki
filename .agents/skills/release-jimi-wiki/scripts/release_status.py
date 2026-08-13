@@ -22,11 +22,14 @@ from typing import Any, Iterable
 TAG_PATTERN = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)$")
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 ATTESTATION_DOMAIN = b"jimi-wiki-release-snapshot-v1"
-UNITS = (
+RESTARTED_UNITS = (
     "jimi-wiki-web.service",
     "jimi-wiki-worker.service",
+)
+SHARED_UNITS = (
     "jimi-wiki-codex-proxy.service",
 )
+UNITS = RESTARTED_UNITS + SHARED_UNITS
 READY_URLS = (
     ("runtime.web-ready", os.environ.get("JIMI_READY_URL", "http://127.0.0.1:23007/api/readyz")),
     ("runtime.proxy-ready", os.environ.get("JIMI_PROXY_READY_URL", "http://127.0.0.1:10531/v1/models")),
@@ -117,6 +120,25 @@ def read_text(path: Path) -> str | None:
         return path.read_text(encoding="utf-8").strip()
     except OSError:
         return None
+
+
+def immutable_release_root_for_path(path: Path | None, releases_root: Path) -> Path | None:
+    if path is None:
+        return None
+    try:
+        relative = path.relative_to(releases_root)
+    except ValueError:
+        return None
+    if not relative.parts or not SHA_PATTERN.fullmatch(relative.parts[0]):
+        return None
+    release_root = releases_root / relative.parts[0]
+    if (
+        release_root.is_symlink()
+        or not release_root.is_dir()
+        or read_text(release_root / ".jimi-release") != release_root.name
+    ):
+        return None
+    return release_root if inside(path, release_root) else None
 
 
 def load_attestation_key(path: Path) -> tuple[bytes | None, str | None]:
@@ -303,11 +325,22 @@ def validate_previous_snapshot(
         f"previous={previous_target or 'missing'} snapshot={previous_release or 'missing'}",
     )
     previous_pids = previous.get("pids") if isinstance(previous.get("pids"), dict) else {}
-    for unit in UNITS:
+    for unit in RESTARTED_UNITS:
         old_pid = previous_pids.get(unit)
         new_pid = current_units.get(unit, {}).get("pid")
         changed = type(old_pid) is int and old_pid > 0 and type(new_pid) is int and new_pid > 0 and old_pid != new_pid
         add(checks, f"pid.changed.{unit}", changed, f"old={old_pid or 0} new={new_pid or 0}")
+    for unit in SHARED_UNITS:
+        old_pid = previous_pids.get(unit)
+        new_pid = current_units.get(unit, {}).get("pid")
+        unchanged = (
+            type(old_pid) is int
+            and old_pid > 0
+            and type(new_pid) is int
+            and new_pid > 0
+            and old_pid == new_pid
+        )
+        add(checks, f"pid.unchanged.{unit}", unchanged, f"old={old_pid or 0} new={new_pid or 0}")
     return checks
 
 
@@ -543,6 +576,7 @@ class Inspector:
         }
 
     def _runtime_checks(self, units: dict[str, dict[str, Any]], release: Path | None) -> None:
+        releases_root = (self.state_dir / "releases").resolve()
         for unit, state in units.items():
             active = state.get("command_ok") and state.get("active") == "active" and int(state.get("pid") or 0) > 0
             add(
@@ -552,11 +586,20 @@ class Inspector:
                 f"active={state.get('active')} sub={state.get('sub')} pid={state.get('pid')} error={state.get('error') or '-'}",
             )
             cwd = Path(state["cwd"]) if state.get("cwd") else None
+            if unit in RESTARTED_UNITS:
+                expected_root = release.resolve() if release else None
+                cwd_ok = bool(expected_root) and inside(cwd, expected_root)
+            else:
+                expected_root = immutable_release_root_for_path(cwd, releases_root)
+                cwd_ok = expected_root is not None
             add(
                 self.checks,
                 f"unit.cwd.{unit}",
-                bool(release) and inside(cwd, release.resolve()),
-                f"cwd={cwd or 'missing'} release={release or 'missing'}",
+                bool(release) and cwd_ok,
+                (
+                    f"cwd={cwd or 'missing'} expected={expected_root or 'immutable release directory'} "
+                    f"ownership={'restarted' if unit in RESTARTED_UNITS else 'shared'}"
+                ),
             )
         for code, url in READY_URLS:
             ok, detail = probe(url)

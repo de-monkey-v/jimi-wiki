@@ -193,7 +193,9 @@ do not claim success merely because build or push succeeded.
 
 ## Verify runtime identity and behavior
 
-First prove that the active release and processes changed:
+First prove that the active release and process ownership contract match: the
+web and worker restart onto the new release, while the shared Codex proxy stays
+healthy without being restarted by this app's deployment:
 
 ```bash
 python3 "$skill_dir/scripts/release_status.py" --phase active --tag "$tag" \
@@ -249,7 +251,7 @@ A completion report must include every item below:
 - remote annotated tag confirmation;
 - immutable release directory;
 - `current` symlink target;
-- old and new PID for web, worker, and Codex proxy;
+- old and new PID for web and worker, plus the unchanged shared Codex proxy PID;
 - readiness and full health result;
 - change-specific production observation;
 - whether migrations, systemd, containers, env, auth, or Hermes required a

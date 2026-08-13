@@ -72,6 +72,21 @@
         "ops/hermes-jimi-mcp.sh",
         "skills/wiki-ingest/SKILL.md"
       ]
+    },
+    {
+      "added_at": "2026-08-13T08:40:00+00:00",
+      "class": "lifecycle",
+      "entrypoint": "ops/deploy.sh activate → release_status.py --phase active",
+      "id": "release-shared-proxy-pid-stability",
+      "journey": "jimi-wiki 릴리스를 활성화할 때 이 앱이 소유하지 않은 공용 Codex proxy를 끊지 않고 실제로 재시작된 서비스만 검증한다",
+      "note": "2026-08-13 원격 v0.4.11의 proxy 비재시작 정책과 release_status의 전 서비스 PID 변경 계약이 충돌함",
+      "oracle": "web·worker PID는 바뀌고 Codex proxy PID는 같은 채로 active·ready를 유지하며, 활성 검증기가 이 계약을 정확히 통과시킨다",
+      "origin": "escaped-defect",
+      "paths": [
+        ".agents/skills/release-jimi-wiki/scripts/release_status.py",
+        ".agents/skills/release-jimi-wiki/scripts/test_release_status.py",
+        "ops/deploy.sh"
+      ]
     }
   ],
   "version": 1

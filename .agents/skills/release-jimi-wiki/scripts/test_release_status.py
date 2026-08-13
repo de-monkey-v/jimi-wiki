@@ -178,13 +178,14 @@ class ReleaseStatusTests(unittest.TestCase):
             (fixture.state / "previous").symlink_to(fixture.old_release)
 
             def fake_unit_state(unit: str) -> dict[str, object]:
+                restarted = unit in release_status.RESTARTED_UNITS
                 return {
                     "unit": unit,
                     "command_ok": True,
                     "active": "active",
                     "sub": "running",
-                    "pid": release_status.UNITS.index(unit) + 200,
-                    "cwd": str(release),
+                    "pid": release_status.UNITS.index(unit) + (200 if restarted else 100),
+                    "cwd": str(release if restarted else fixture.old_release),
                     "error": None,
                 }
 
@@ -209,7 +210,54 @@ class ReleaseStatusTests(unittest.TestCase):
             self.assertTrue(all(check.ok for check in inspector.checks), inspector.checks)
             self.assertEqual(inspector.snapshot["release_sha"], sha)
 
-    def test_previous_snapshot_requires_a_different_release_and_new_pids(self) -> None:
+    def test_active_rejects_shared_proxy_outside_an_immutable_release_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            sha = fixture.promote()
+            release = fixture.build(sha)
+            (fixture.state / "current").symlink_to(release)
+            (fixture.state / "previous").symlink_to(fixture.old_release)
+            mutable = fixture.state / "releases" / "mutable-proxy-checkout"
+            mutable.mkdir()
+            previous = {
+                "schema_version": 1,
+                "phase": "current",
+                "ok": True,
+                "repo": str(fixture.repo),
+                "state_dir": str(fixture.state),
+                "snapshot": {
+                    "release_dir": str(fixture.old_release),
+                    "release_sha": fixture.old_sha,
+                    "release_tag": "v0.4.8",
+                    "pids": {unit: index + 100 for index, unit in enumerate(release_status.UNITS)},
+                },
+            }
+            release_status.attest_snapshot(previous, ATTESTATION_KEY)
+
+            def fake_unit_state(unit: str) -> dict[str, object]:
+                restarted = unit in release_status.RESTARTED_UNITS
+                return {
+                    "unit": unit,
+                    "command_ok": True,
+                    "active": "active",
+                    "sub": "running",
+                    "pid": release_status.UNITS.index(unit) + (200 if restarted else 100),
+                    "cwd": str(release if restarted else mutable),
+                    "error": None,
+                }
+
+            inspector = release_status.Inspector(fixture.repo, fixture.state, "v0.4.9")
+            with (
+                mock.patch.object(release_status, "unit_state", side_effect=fake_unit_state),
+                mock.patch.object(release_status, "probe", return_value=(True, "HTTP 200 fixture")),
+            ):
+                inspector.active(previous, ATTESTATION_KEY)
+            self.assertEqual(
+                [check.code for check in inspector.checks if not check.ok],
+                [f"unit.cwd.{release_status.SHARED_UNITS[0]}"],
+            )
+
+    def test_previous_snapshot_requires_owned_pid_changes_and_shared_pid_stability(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repo = root / "repo"
@@ -247,11 +295,13 @@ class ReleaseStatusTests(unittest.TestCase):
                 attestation_key=ATTESTATION_KEY,
             )
             self.assertTrue(any(not check.ok and check.code == "previous.release" for check in failed))
-            self.assertEqual(sum(not check.ok for check in failed if check.code.startswith("pid.changed.")), 3)
+            self.assertEqual(sum(not check.ok for check in failed if check.code.startswith("pid.changed.")), 2)
+            self.assertFalse(any(not check.ok for check in failed if check.code.startswith("pid.unchanged.")))
 
-            changed_units = {
-                unit: {"pid": index + 200} for index, unit in enumerate(release_status.UNITS)
-            }
+            changed_units = {}
+            for index, unit in enumerate(release_status.UNITS):
+                offset = 200 if unit in release_status.RESTARTED_UNITS else 100
+                changed_units[unit] = {"pid": index + offset}
             passed = release_status.validate_previous_snapshot(
                 old,
                 target_sha="d" * 40,
@@ -261,6 +311,22 @@ class ReleaseStatusTests(unittest.TestCase):
                 attestation_key=ATTESTATION_KEY,
             )
             self.assertTrue(all(check.ok for check in passed), passed)
+
+            restarted_shared = copy.deepcopy(changed_units)
+            for unit in release_status.SHARED_UNITS:
+                restarted_shared[unit]["pid"] += 100
+            disrupted = release_status.validate_previous_snapshot(
+                old,
+                target_sha="d" * 40,
+                current_units=restarted_shared,
+                repo=repo,
+                state_dir=state,
+                attestation_key=ATTESTATION_KEY,
+            )
+            self.assertEqual(
+                [check.code for check in disrupted if not check.ok],
+                [f"pid.unchanged.{release_status.SHARED_UNITS[0]}"],
+            )
 
             unsigned_forgery = copy.deepcopy(old)
             unsigned_forgery.pop("attestation")
@@ -304,7 +370,12 @@ class ReleaseStatusTests(unittest.TestCase):
             old["snapshot"]["release_tag"] = "v9.9.9"
             old["snapshot"]["release_dir"] = str(root / "not-a-release")
             old["snapshot"]["pids"] = {
-                unit: 900_000 + index for index, unit in enumerate(release_status.UNITS)
+                unit: (
+                    900_000 + index
+                    if unit in release_status.RESTARTED_UNITS
+                    else changed_units[unit]["pid"]
+                )
+                for index, unit in enumerate(release_status.UNITS)
             }
             release_status.attest_snapshot(old, ATTESTATION_KEY)
             forged = release_status.validate_previous_snapshot(

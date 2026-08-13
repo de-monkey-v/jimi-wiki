@@ -24,6 +24,12 @@ const TRANSPORTS: OpenAITransport[] = ["apikey", "oauth", "proxy"];
 function isTransport(x: string): x is OpenAITransport {
   return (TRANSPORTS as string[]).includes(x);
 }
+/**
+ * 선택한 방식이 불가할 때 넘어갈 순서. apikey 를 마지막에 두는 이유: proxy 경로는 @ai-sdk 가
+ * 값을 요구해서 OPENAI_API_KEY 에 더미를 넣어두는 구성이라(local/codex-proxy/README.md),
+ * apikey 를 먼저 고르면 그 더미가 api.openai.com 으로 나가 조용히 전부 실패한다.
+ */
+const FALLBACK_ORDER: OpenAITransport[] = ["proxy", "oauth", "apikey"];
 // env 폴백/자동 추론(하위호환): OPENAI_TRANSPORT 우선, 아니면 기존 우선순위로 추론.
 function envOpenAITransport(): OpenAITransport {
   const t = (process.env.OPENAI_TRANSPORT ?? "").trim();
@@ -137,9 +143,17 @@ export function ingestModel(): string {
 export function openaiTransport(): OpenAITransport {
   return getConfigCached().openaiTransport;
 }
+/**
+ * 진짜 OpenAI API 키인지. 존재만 보면 안 되는 이유: proxy 경로를 쓰는 구성은 @ai-sdk 가 값을
+ * 요구해서 OPENAI_API_KEY 에 더미를 채워둔다(`codex-...`). 그걸 자격증명으로 인정하면 관리자가
+ * "API 키" 를 고를 수 있게 되고, 그 순간 모든 요청이 api.openai.com 에서 거부된다.
+ */
+function hasRealOpenAIApiKey(): boolean {
+  return (process.env.OPENAI_API_KEY ?? "").trim().startsWith("sk-");
+}
 /** 해당 방식의 자격증명이 준비됐는지. */
 export function openaiTransportAvailable(t: OpenAITransport): boolean {
-  if (t === "apikey") return !!process.env.OPENAI_API_KEY;
+  if (t === "apikey") return hasRealOpenAIApiKey();
   if (t === "proxy") return !!process.env.OPENAI_BASE_URL;
   return storeExists(); // oauth: 로그인 토큰 존재
 }
@@ -147,7 +161,7 @@ export function openaiTransportAvailable(t: OpenAITransport): boolean {
 export function effectiveOpenAITransport(): OpenAITransport {
   const sel = openaiTransport();
   if (openaiTransportAvailable(sel)) return sel;
-  return TRANSPORTS.find(openaiTransportAvailable) ?? sel;
+  return FALLBACK_ORDER.find(openaiTransportAvailable) ?? sel;
 }
 
 // ---------- provider 사용 가능 게이트 ----------

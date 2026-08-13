@@ -177,12 +177,13 @@ wait_ready() {
   }
   local deadline=$((SECONDS + timeout))
   local web="${JIMI_READY_URL:-http://127.0.0.1:23007/api/readyz}"
-  local proxy="${JIMI_PROXY_READY_URL:-http://127.0.0.1:10531/v1/models}"
+  # codex 프록시는 여기서 보지 않는다. 그것은 pr-review-bot 도 쓰는 공용 인프라라,
+  # 그쪽이 아플 때 이 앱의 멀쩡한 배포까지 롤백시킬 이유가 없다. 프록시 상태는
+  # ops/health-check.sh 가 계속 감시한다.
   # 최소 한 번은 실제로 찔러본다. 조건을 앞에 두면 timeout=0에서 한 번도 확인하지
   # 않고 실패로 단정해 멀쩡한 배포가 항상 롤백된다.
   while :; do
-    if curl --fail --silent --max-time 5 "$web" >/dev/null 2>&1 \
-      && curl --fail --silent --max-time 5 "$proxy" >/dev/null 2>&1; then
+    if curl --fail --silent --max-time 5 "$web" >/dev/null 2>&1; then
       return 0
     fi
     ((SECONDS < deadline)) || return 1
@@ -284,7 +285,8 @@ case "$command_name" in
           mv -T "$rollback_link" "$current_link"
         fi
         systemctl --user daemon-reload || true
-        systemctl --user restart jimi-wiki-codex-proxy.service jimi-wiki-web.service jimi-wiki-worker.service || true
+        # 프록시는 이 앱 소유가 아니다(pr-review-bot 공용) — 롤백이 남의 서비스를 흔들지 않는다.
+        systemctl --user restart jimi-wiki-web.service jimi-wiki-worker.service || true
         if ((hermes_touched == 1)) && [[ -n "$old_target" && -f "$old_target/.jimi-release" ]]; then
           sync_hermes_release "$old_target" \
             || { echo "warning: failed to restore Hermes to $old_target" >&2; systemctl --user restart hermes-gateway.service || true; }
@@ -336,7 +338,9 @@ case "$command_name" in
     mv -T "$next_link" "$current_link"
     swapped=1
     systemctl --user daemon-reload
-    systemctl --user restart jimi-wiki-codex-proxy.service jimi-wiki-web.service jimi-wiki-worker.service
+    # 프록시는 재시작하지 않는다. 이 앱의 릴리스 트리에 얹혀 있을 뿐 소유자는 아니며,
+    # pr-review-bot 이 리뷰마다 이 포트를 찌른다 — 배포 때마다 끊을 이유가 없다.
+    systemctl --user restart jimi-wiki-web.service jimi-wiki-worker.service
     # 여기서 실패하면 stopped/swapped가 아직 1이므로 recover_old가 이전 릴리스를 되살린다.
     # 재시작만 하고 끝내면 "배포 성공"이라고 말한 뒤 서비스가 죽어 있는 상태가 남는다.
     wait_ready || { echo "release did not become ready in time; rolling back" >&2; exit 1; }

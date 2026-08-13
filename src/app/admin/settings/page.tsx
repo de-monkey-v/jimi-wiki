@@ -9,7 +9,7 @@ import {
   openaiTransport,
   openaiTransportAvailable,
 } from "@/lib/model-config";
-import { readStoreStatus } from "@/lib/openai-oauth";
+import { canLogoutFromApp, readStoreStatus } from "@/lib/openai-oauth";
 import { ModelsForm } from "./ModelsForm";
 import { OAuthPanel } from "./OAuthPanel";
 import { refreshCatalogAction } from "./actions";
@@ -74,7 +74,12 @@ export default async function AdminSettings() {
         </p>
       </section>
 
-      <OAuthPanel status={oauthStatus} transport={openaiTransport()} avail={openaiAvail} />
+      <OAuthPanel
+        status={oauthStatus}
+        transport={openaiTransport()}
+        avail={openaiAvail}
+        canLogout={canLogoutFromApp()}
+      />
 
       <form action={refreshCatalogAction}>
         <button className="ui-link rounded text-xs">{t("refreshCatalog")}</button>

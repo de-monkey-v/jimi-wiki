@@ -8,10 +8,10 @@ import { logoutOAuthAction, setOpenAITransportAction } from "./actions";
 type Status = { exists: boolean; accountId?: string; expires?: number };
 type Avail = { apikey: boolean; oauth: boolean; proxy: boolean };
 
-const TRANSPORT_OPTIONS: { id: OpenAITransport; hint: string }[] = [
-  { id: "apikey", hint: "OPENAI_API_KEY" },
-  { id: "oauth", hint: "" },
-  { id: "proxy", hint: "OPENAI_BASE_URL" },
+const TRANSPORT_OPTIONS: { id: OpenAITransport }[] = [
+  { id: "apikey" },
+  { id: "oauth" },
+  { id: "proxy" },
 ];
 type PollResult = { status: "complete" | "error" | "expired" | "cancelled"; message?: string };
 
@@ -49,7 +49,18 @@ async function pollDevice(
   return signal.aborted ? { status: "cancelled" } : { status: "expired" };
 }
 
-export function OAuthPanel({ status, transport, avail }: { status: Status; transport: OpenAITransport; avail: Avail }) {
+export function OAuthPanel({
+  status,
+  transport,
+  avail,
+  canLogout,
+}: {
+  status: Status;
+  transport: OpenAITransport;
+  avail: Avail;
+  /** false 면 이 자격증명은 codex CLI 와 공유하는 것이라 앱에서 지우면 안 된다. */
+  canLogout: boolean;
+}) {
   const router = useRouter();
   const t = useTranslations("AdminSettingsOAuthPanel");
   const [device, setDevice] = useState<{ userCode: string; url: string } | null>(null);
@@ -118,13 +129,14 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
           {TRANSPORT_OPTIONS.map((o) => {
             const ok = avail[o.id];
             const current = transport === o.id;
-            const hintText = o.id === "oauth" ? t("transport.oauthHint") : o.hint;
             return (
               <form key={o.id} action={setOpenAITransportAction}>
                 <input type="hidden" name="transport" value={o.id} />
                 <button
                   disabled={!ok || current}
-                  title={ok ? "" : t("optionUnavailable", { hint: hintText })}
+                  // 방식마다 완성된 한 문장을 쓴다. 예전에는 "{hint} 없음" 틀에 값을 끼웠는데,
+                  // oauth 의 hint 가 "로그인 필요" 라서 "로그인 필요 없음" 이라는 반대말이 나왔다.
+                  title={ok ? "" : t(`unavailableReason.${o.id}`)}
                   className={`rounded-lg border px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed ${
                     current
                       ? "border-stone-900 bg-stone-900 text-white"
@@ -163,12 +175,17 @@ export function OAuthPanel({ status, transport, avail }: { status: Status; trans
             {t("cancel")}
           </button>
         )}
-        {status.exists && (
+        {status.exists && canLogout && (
           <form action={logoutOAuthAction}>
             <button className="btn-danger text-sm">{t("logout")}</button>
           </form>
         )}
       </div>
+
+      {/* 공유 자격증명이면 앱에 로그아웃 수단을 두지 않는다 — 지우면 codex CLI 로그인까지 끊긴다. */}
+      {status.exists && !canLogout && (
+        <p className="text-xs text-stone-500">{t("logoutViaCodexCli")}</p>
+      )}
 
       {device && (
         <div className="surface-panel-muted space-y-1 p-3 text-sm">

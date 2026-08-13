@@ -25,10 +25,13 @@
     "transport": {
       "apikey": "API key",
       "oauth": "ChatGPT subscription (OAuth)",
-      "proxy": "Proxy",
-      "oauthHint": "Sign-in required"
+      "proxy": "Proxy"
     },
-    "optionUnavailable": "No {hint}",
+    "unavailableReason": {
+      "apikey": "OPENAI_API_KEY is not set (a real key starting with sk- is required)",
+      "oauth": "Sign in with ChatGPT first",
+      "proxy": "OPENAI_BASE_URL is not set"
+    },
     "unavailable": "(unavailable)",
     "currentDescription": "Current: <b>{transport}</b> — GPT models are called this way. Even if a key is set, only the <b>selected method</b> is used.",
     "loggedIn": "Signed in",
@@ -39,6 +42,7 @@
     "loginWithChatGPT": "Sign in with ChatGPT",
     "cancel": "Cancel",
     "logout": "Sign out",
+    "logoutViaCodexCli": "This credential is shared with the codex CLI — run `codex logout` to sign out.",
     "step1": "1)",
     "openLink": "Open",
     "step2": "2) Enter code: ",

@@ -25,10 +25,13 @@
     "transport": {
       "apikey": "API 密钥",
       "oauth": "ChatGPT 订阅（OAuth）",
-      "proxy": "代理",
-      "oauthHint": "需要登录"
+      "proxy": "代理"
     },
-    "optionUnavailable": "无 {hint}",
+    "unavailableReason": {
+      "apikey": "未设置 OPENAI_API_KEY（需要以 sk- 开头的真实密钥）",
+      "oauth": "需要先登录 ChatGPT",
+      "proxy": "未设置 OPENAI_BASE_URL"
+    },
     "unavailable": "（不可用）",
     "currentDescription": "当前：<b>{transport}</b> — 以此方式调用 GPT 模型。即使已配置密钥，也只使用<b>所选方式</b>。",
     "loggedIn": "已登录",
@@ -39,6 +42,7 @@
     "loginWithChatGPT": "使用 ChatGPT 登录",
     "cancel": "取消",
     "logout": "退出登录",
+    "logoutViaCodexCli": "此凭据与 codex CLI 共享 — 请使用 `codex logout` 退出登录。",
     "step1": "1)",
     "openLink": "打开",
     "step2": "2) 输入代码：",

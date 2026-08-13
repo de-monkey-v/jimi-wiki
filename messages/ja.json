@@ -25,10 +25,13 @@
     "transport": {
       "apikey": "API キー",
       "oauth": "ChatGPT サブスクリプション（OAuth）",
-      "proxy": "プロキシ",
-      "oauthHint": "ログインが必要"
+      "proxy": "プロキシ"
     },
-    "optionUnavailable": "{hint} なし",
+    "unavailableReason": {
+      "apikey": "OPENAI_API_KEY が設定されていません（sk- で始まる実際のキーが必要です）",
+      "oauth": "ChatGPT へのログインが必要です",
+      "proxy": "OPENAI_BASE_URL が設定されていません"
+    },
     "unavailable": "（不可）",
     "currentDescription": "現在: <b>{transport}</b> — この方式で GPT モデルを呼び出します。キーがあっても<b>選択した方式</b>のみが使用されます。",
     "loggedIn": "ログイン済み",
@@ -39,6 +42,7 @@
     "loginWithChatGPT": "ChatGPT でログイン",
     "cancel": "キャンセル",
     "logout": "ログアウト",
+    "logoutViaCodexCli": "この認証情報は codex CLI と共有しています — ログアウトするには `codex logout` を使ってください。",
     "step1": "1)",
     "openLink": "開く",
     "step2": "2) コード入力: ",

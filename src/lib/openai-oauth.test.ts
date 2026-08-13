@@ -8,7 +8,15 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -16,6 +24,8 @@ import {
   CLIENT_ID,
   CODEX_BASE_URL,
   ISSUER,
+  SharedCredentialError,
+  canLogoutFromApp,
   generatePKCE,
   getFreshAccess,
   logout,
@@ -39,14 +49,18 @@ async function withTempStore(run: (file: string) => Promise<void> | void): Promi
     store: process.env.OPENAI_OAUTH_STORE,
     personal: process.env.OPENAI_OAUTH_PERSONAL,
     baseUrl: process.env.OPENAI_BASE_URL,
+    codexHome: process.env.CODEX_HOME,
   };
   process.env.OPENAI_OAUTH_STORE = path.join(dir, "store.json");
+  // 실제 ~/.codex 를 소유권 판정에 끌어들이지 않는다.
+  process.env.CODEX_HOME = path.join(dir, "codex");
   try {
     await run(process.env.OPENAI_OAUTH_STORE);
   } finally {
     setEnv("OPENAI_OAUTH_STORE", saved.store);
     setEnv("OPENAI_OAUTH_PERSONAL", saved.personal);
     setEnv("OPENAI_BASE_URL", saved.baseUrl);
+    setEnv("CODEX_HOME", saved.codexHome);
     rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -234,6 +248,93 @@ test("logout 은 세션을 지우고, 지운 뒤 조회는 미로그인이다", 
     assert.deepEqual(readStoreStatus(), { exists: false });
     logout(); // 두 번째 호출도 조용히 성공해야 한다(이미 없음 = 성공)
   });
+});
+
+test("codex CLI 와 공유하는 자격증명은 앱에서 지우지 않는다", async () => {
+  await withTempStore(async () => {
+    const codexHome = process.env.CODEX_HOME as string;
+    const shared = path.join(codexHome, "auth.json");
+    mkdirSync(codexHome, { recursive: true });
+    // codex CLI 형식이 아니어도 된다 — 판정은 경로로 하고, 요점은 "지우지 않는다" 이다.
+    writeFileSync(shared, JSON.stringify({ access: "a", refresh: "r", expires: Date.now() + 3_600_000 }), {
+      mode: 0o600,
+    });
+    const before = readFileSync(shared);
+
+    process.env.OPENAI_OAUTH_STORE = shared;
+    assert.equal(canLogoutFromApp(), false, "공유 파일에서는 앱 로그아웃이 불가해야 한다");
+
+    assert.throws(
+      () => logout(),
+      (e: Error & { code?: string }) => {
+        assert.equal(e.code, "shared_credential");
+        assert.ok(e instanceof SharedCredentialError);
+        return true;
+      },
+    );
+
+    // 거부됐으니 파일은 바이트 그대로 남아야 한다 — codex CLI 와 로컬 프록시가 이걸 계속 쓴다.
+    assert.ok(existsSync(shared));
+    assert.deepEqual(readFileSync(shared), before);
+  });
+});
+
+test("심볼릭 링크로 codex 파일을 가리켜도 공유로 판정한다", async () => {
+  await withTempStore(async (file) => {
+    const codexHome = process.env.CODEX_HOME as string;
+    const shared = path.join(codexHome, "auth.json");
+    mkdirSync(codexHome, { recursive: true });
+    writeFileSync(shared, JSON.stringify({ access: "a", refresh: "r", expires: Date.now() + 3_600_000 }), {
+      mode: 0o600,
+    });
+    // 앱 전용처럼 보이는 경로가 실제로는 codex 파일을 가리킨다. subauth 의 store 도 링크를 따라가므로
+    // 여기서 raw 경로만 비교하면 앱이 codex 로그인을 지울 수 있게 된다.
+    symlinkSync(shared, file);
+
+    assert.equal(canLogoutFromApp(), false);
+    assert.throws(() => logout(), (e: Error & { code?: string }) => e.code === "shared_credential");
+    assert.ok(existsSync(shared), "링크 대상이 남아 있어야 한다");
+  });
+});
+
+test("앱 전용 토큰 파일은 지금처럼 로그아웃으로 지운다", async () => {
+  await withTempStore(async (file) => {
+    writeFileSync(file, JSON.stringify({ access: "a", refresh: "r", expires: Date.now() + 3_600_000 }), {
+      mode: 0o600,
+    });
+
+    assert.equal(canLogoutFromApp(), true);
+    logout();
+    assert.equal(existsSync(file), false);
+    assert.equal(storeExists(), false);
+  });
+});
+
+test("사용 불가 안내 문구는 방식마다 완성된 문장이다(뜻이 뒤집히지 않는다)", () => {
+  // 예전에는 "{hint} 없음" 틀에 oauth 의 hint("로그인 필요")를 끼워 "로그인 필요 없음" 이 됐다.
+  // 조합 자체를 없앴는지 4개 로케일에서 확인한다.
+  for (const loc of ["ko", "en", "ja", "zh"]) {
+    const messages = JSON.parse(
+      readFileSync(path.join(process.cwd(), "messages", `${loc}.json`), "utf8"),
+    ) as Record<string, Record<string, unknown>>;
+    const ns = messages.AdminSettingsOAuthPanel;
+
+    assert.equal(ns.optionUnavailable, undefined, `${loc}: 뜻이 뒤집히던 조합 틀이 남아 있다`);
+    assert.equal(
+      (ns.transport as Record<string, unknown>).oauthHint,
+      undefined,
+      `${loc}: 조합용 조각 문구가 남아 있다`,
+    );
+
+    const reason = ns.unavailableReason as Record<string, string>;
+    for (const id of ["apikey", "oauth", "proxy"]) {
+      assert.equal(typeof reason?.[id], "string", `${loc}: unavailableReason.${id} 가 없다`);
+      assert.ok(reason[id].length > 0, `${loc}: unavailableReason.${id} 가 비었다`);
+      // 완성 문장이어야 하므로 치환 슬롯이 남아 있으면 안 된다.
+      assert.ok(!reason[id].includes("{"), `${loc}: unavailableReason.${id} 에 치환 슬롯이 남아 있다`);
+    }
+    assert.equal(typeof ns.logoutViaCodexCli, "string", `${loc}: logoutViaCodexCli 가 없다`);
+  }
 });
 
 test("동시 호출은 refresh 를 한 번만 수행한다", async () => {

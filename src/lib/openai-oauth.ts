@@ -9,6 +9,8 @@
  * ⚠️ 개인 self-host 전용. 멀티유저/공개 배포에 쓰지 말 것 — 개인 구독으로 서비스를 구동하는 것은
  *    ChatGPT 약관 위반이다. (server-only 를 붙이지 않는다: CLI 스크립트와 서버가 함께 import 한다.)
  */
+import { realpathSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   CLIENT_ID,
@@ -41,6 +43,44 @@ const USER_AGENT = "jimi-wiki/oauth";
 /** 토큰 파일 위치 — 앱 정책이다. subauth 는 기본 경로를 갖지 않는다. */
 export function storePath(): string {
   return process.env.OPENAI_OAUTH_STORE || path.join(process.cwd(), ".openai-oauth.json");
+}
+
+/** codex CLI 가 자기 로그인을 두는 곳. 이 앱이 그 파일을 가리킬 수도 있다. */
+function codexAuthPath(): string {
+  return path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "auth.json");
+}
+
+/**
+ * 심볼릭 링크를 따라간 실제 경로. subauth 의 store 도 같은 방식으로 해석하므로(store-path.ts),
+ * 링크로 codex 파일을 가리켜 두면 실제 쓰기는 그쪽으로 간다 — 가드가 raw 경로만 보면 뚫린다.
+ */
+function realPathOf(p: string): string {
+  const absolute = path.resolve(p);
+  try {
+    return realpathSync(absolute);
+  } catch {
+    return absolute; // 아직 없는 파일은 그대로 비교한다
+  }
+}
+
+/**
+ * 이 토큰 파일을 앱이 단독으로 소유하는가.
+ *
+ * codex CLI 의 auth.json 을 가리키고 있다면 그 파일은 codex CLI·로컬 codex 프록시와 함께 쓰는
+ * 공유 자산이다. 앱이 지우면 그 둘의 로그인까지 같이 끊긴다 — 관리자 화면의 로그아웃 버튼 한 번이
+ * codex CLI 전체와 프록시를 통해 나가던 모든 요청을 죽인다. 그래서 공유 파일일 때는 삭제를 거부한다.
+ */
+export function canLogoutFromApp(): boolean {
+  return realPathOf(storePath()) !== realPathOf(codexAuthPath());
+}
+
+/** 공유 자격증명이라 앱에서 지울 수 없을 때. 소비자는 `code` 로 분기한다. */
+export class SharedCredentialError extends Error {
+  readonly code = "shared_credential";
+  constructor() {
+    super("codex CLI 와 공유하는 자격증명이라 이 앱에서는 지울 수 없습니다 — `codex logout` 을 사용하세요.");
+    this.name = "SharedCredentialError";
+  }
 }
 
 // storePath() 는 호출마다 평가된다(스크립트·테스트가 env 로 경로를 바꾼다). 경로가 그대로면 같은
@@ -169,8 +209,14 @@ export async function pollDeviceToken(deviceAuthId: string, userCode: string): P
   return result;
 }
 
-/** 로그아웃 — 저장된 토큰 삭제. */
+/**
+ * 로그아웃 — 저장된 토큰 삭제.
+ *
+ * 앱이 단독 소유한 파일에서만 지운다. codex CLI 와 공유하는 파일이면 거부한다 — 남의 로그인을
+ * 앱 버튼으로 끊지 않기 위해서다.
+ */
 export function logout(): void {
+  if (!canLogoutFromApp()) throw new SharedCredentialError();
   auth().logout();
   clearRevoked();
 }

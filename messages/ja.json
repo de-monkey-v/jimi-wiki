@@ -290,7 +290,9 @@
     "fullscreen": "全画面表示",
     "exitFullscreen": "全画面を閉じる",
     "copyTable": "表をコピー",
-    "downloadTable": "表をダウンロード"
+    "downloadTable": "表をダウンロード",
+    "wrapLongLines": "長い行を折り返す",
+    "showOriginalWidth": "元の幅で表示"
   },
   "ReadingProvenanceCard": {
     "sectionLabel": "原文 (Source)",

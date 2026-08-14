@@ -290,7 +290,9 @@
     "fullscreen": "전체 화면",
     "exitFullscreen": "전체 화면 닫기",
     "copyTable": "표 복사",
-    "downloadTable": "표 다운로드"
+    "downloadTable": "표 다운로드",
+    "wrapLongLines": "긴 줄 맞춤",
+    "showOriginalWidth": "원본 폭으로 보기"
   },
   "ReadingProvenanceCard": {
     "sectionLabel": "원문 (Source)",

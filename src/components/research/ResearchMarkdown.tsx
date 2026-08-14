@@ -4,12 +4,19 @@ import { createMermaidPlugin } from "@streamdown/mermaid";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useTransition } from "react";
-import { defaultRemarkPlugins, Streamdown, type MermaidErrorComponentProps } from "streamdown";
+import {
+  CodeBlockCopyButton,
+  CodeBlockDownloadButton,
+  defaultRemarkPlugins,
+  Streamdown,
+  type MermaidErrorComponentProps,
+} from "streamdown";
 import type { PluggableList } from "unified";
 import { createFromWikilinkAction } from "@/app/wikis/actions";
 import { SelectionToolbar } from "@/components/SelectionToolbar";
 import { useHoverPreview } from "@/components/ui/HoverPreview";
 import { remarkWikiLink } from "@/lib/markdown";
+import { ResearchCodePre, type ResearchCodeLabels } from "./ResearchCodeBlock";
 import {
   guardResearchMermaid,
   remarkResearchCallouts,
@@ -70,6 +77,12 @@ export function ResearchMarkdown({
   const root = useRef<HTMLDivElement>(null);
   const existing = useMemo(() => new Set(existingSlugs), [existingSlugs]);
   const guarded = useMemo(() => guardResearchMermaid(body).body, [body]);
+  const codeLabels: ResearchCodeLabels = {
+    copy: t("copy"),
+    download: t("download"),
+    showOriginalWidth: t("showOriginalWidth"),
+    wrapLongLines: t("wrapLongLines"),
+  };
   const remarkPlugins = useMemo<PluggableList>(
     () => [
       ...Object.values(defaultRemarkPlugins),
@@ -151,7 +164,9 @@ export function ResearchMarkdown({
       <Streamdown
         mode="static"
         controls={{
-          code: { copy: true, download: true },
+          // 일반 code controls는 ResearchCodePre가 원문을 넘겨 직접 렌더한다.
+          // Mermaid는 별도 controls 설정을 그대로 사용한다.
+          code: false,
           table: { copy: true, download: true, fullscreen: true },
           mermaid: { copy: true, download: true, fullscreen: true, panZoom: true },
         }}
@@ -167,6 +182,30 @@ export function ResearchMarkdown({
           errorComponent: MermaidFallback,
         }}
         components={{
+          pre: ({ children }) => (
+            <ResearchCodePre
+              labels={codeLabels}
+              renderSourceActions={({ code, language }) => (
+                <>
+                  <CodeBlockDownloadButton
+                    aria-label={codeLabels.download}
+                    className="research-code-action"
+                    code={code}
+                    language={language}
+                    title={codeLabels.download}
+                  />
+                  <CodeBlockCopyButton
+                    aria-label={codeLabels.copy}
+                    className="research-code-action"
+                    code={code}
+                    title={codeLabels.copy}
+                  />
+                </>
+              )}
+            >
+              {children}
+            </ResearchCodePre>
+          ),
           a: ({ href, children, node, ...props }) => {
             void node;
             const safe = typeof href === "string" ? safeResearchUrl(href) : "";

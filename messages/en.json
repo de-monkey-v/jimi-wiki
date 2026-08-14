@@ -290,7 +290,9 @@
     "fullscreen": "View fullscreen",
     "exitFullscreen": "Exit fullscreen",
     "copyTable": "Copy table",
-    "downloadTable": "Download table"
+    "downloadTable": "Download table",
+    "wrapLongLines": "Wrap long lines",
+    "showOriginalWidth": "Show original width"
   },
   "ReadingProvenanceCard": {
     "sectionLabel": "Source",

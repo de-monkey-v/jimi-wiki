@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { EmptyState } from "@/components/EmptyState";
 import { PageKebabMenu } from "@/components/PageKebabMenu";
-import { isPageTrashEligible } from "@/lib/kinds";
+import { isPageMoveEligible, isPageTrashEligible } from "@/lib/kinds";
 import { HomeActions } from "./HomeActions";
 import { ReindexForm } from "./ReindexForm";
 import { RunStatusBadge } from "./RunStatusBadge";
@@ -70,14 +70,14 @@ export default async function WikiHome({
         where: documentsWhere,
         orderBy: [{ documentAt: "desc" }, { createdAt: "desc" }],
         take: 10,
-        select: { id: true, slug: true, title: true, documentType: true, documentAt: true, staleAt: true, kind: true, origin: true, sourceId: true, currentVersion: true },
+        select: { id: true, slug: true, title: true, category: true, documentType: true, documentAt: true, staleAt: true, kind: true, origin: true, sourceId: true, currentVersion: true },
       }),
       prisma.page.count({ where: documentsWhere }),
       prisma.page.findMany({
         where: knowledgeWhere,
         orderBy: { updatedAt: "desc" },
         take: 12,
-        select: { id: true, slug: true, title: true, kind: true, origin: true, sourceId: true, currentVersion: true },
+        select: { id: true, slug: true, title: true, category: true, kind: true, origin: true, sourceId: true, currentVersion: true },
       }),
       prisma.page.findMany({
         where: { ...knowledgeWhere, category: { not: null } },
@@ -226,8 +226,8 @@ export default async function WikiHome({
                   wikiSlug={slug}
                   pageSlug={document.slug}
                   currentVersion={document.currentVersion}
-                  currentCategory={null}
-                  canMove={false}
+                  currentCategory={document.category}
+                  canMove={canWrite && isPageMoveEligible(document)}
                   canTrash={canWrite && isPageTrashEligible(document)}
                   triggerClassName="-my-1 ml-auto flex h-8 w-8 shrink-0 items-center justify-center self-center rounded text-base text-stone-400"
                 />
@@ -266,8 +266,8 @@ export default async function WikiHome({
                   wikiSlug={slug}
                   pageSlug={p.slug}
                   currentVersion={p.currentVersion}
-                  currentCategory={null}
-                  canMove={false}
+                  currentCategory={p.category}
+                  canMove={canWrite && isPageMoveEligible(p)}
                   canTrash={canWrite && isPageTrashEligible(p)}
                   triggerClassName="-my-1 ml-auto flex h-8 w-8 shrink-0 items-center justify-center self-center rounded text-base text-stone-400"
                 />

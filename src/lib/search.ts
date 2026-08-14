@@ -8,6 +8,7 @@ import {
   modelPolicyClient,
   normalizeModelAccess,
   withExternalModelDispatchLock,
+  withModelPolicyWriteLock,
   type ExternalModelScope,
   type ModelAccessValue,
 } from "@/lib/model-access";
@@ -304,6 +305,85 @@ export async function indexCategory(wikiId: string, slug: string, _text: string)
 /** rename/retire 시 category 코퍼스 행 삭제(합성 refId라 cascade 없음). */
 export async function deleteCategoryChunk(wikiId: string, slug: string): Promise<void> {
   await modelPolicyClient(wikiId).searchChunk.deleteMany({ where: { wikiId, refType: "category", refId: catRef(slug) } });
+}
+
+/**
+ * 여러 페이지의 category 이동 뒤 영향받은 category와 조상 경로만 한 번에 재투영한다.
+ * 페이지 FTS 본문에는 category가 들어가지 않으므로 page 청크를 1,000번 다시 만들지 않고,
+ * category 전용 코퍼스를 한 exclusive transaction에서 정리한 뒤 embedding backfill을 한 번만 요청한다.
+ */
+export async function refreshCategorySearchProjection(
+  wikiId: string,
+  categoryPaths: readonly (string | null)[],
+): Promise<{ projected: number; remainingEmbeddings: number }> {
+  const affected = new Set<string>();
+  for (const category of categoryPaths) {
+    if (!category) continue;
+    const parts = category.split("/").filter(Boolean);
+    for (let index = 1; index <= parts.length; index++) affected.add(parts.slice(0, index).join("/"));
+  }
+  if (affected.size === 0) return { projected: 0, remainingEmbeddings: 0 };
+
+  const affectedSlugs = [...affected];
+  const affectedRefs = affectedSlugs.map(catRef);
+  const projected = await withModelPolicyWriteLock(wikiId, async (tx) => {
+    const usedRows = await tx.page.findMany({
+      where: {
+        wikiId,
+        archivedAt: null,
+        trashedAt: null,
+        modelAccess: "external",
+        kind: { not: "personal" },
+        category: { not: null },
+      },
+      select: { category: true },
+      distinct: ["category"],
+    });
+    const eligible = new Set<string>();
+    for (const row of usedRows) {
+      const parts = row.category?.split("/").filter(Boolean) ?? [];
+      for (let index = 1; index <= parts.length; index++) eligible.add(parts.slice(0, index).join("/"));
+    }
+
+    const existing = await tx.searchChunk.findMany({
+      where: { wikiId, refType: "category", refId: { in: affectedRefs } },
+      select: { id: true, refId: true, text: true, hash: true, modelAccess: true },
+    });
+    const validExisting = new Set<string>();
+    const deleteIds: string[] = [];
+    for (const chunk of existing) {
+      const slug = chunk.refId.replace(/^category:/, "");
+      if (
+        eligible.has(slug) &&
+        affected.has(slug) &&
+        chunk.text === slug &&
+        chunk.hash === sha(slug) &&
+        chunk.modelAccess === "external"
+      ) {
+        validExisting.add(slug);
+      } else {
+        deleteIds.push(chunk.id);
+      }
+    }
+    if (deleteIds.length > 0) await tx.searchChunk.deleteMany({ where: { id: { in: deleteIds } } });
+
+    const create = affectedSlugs
+      .filter((slug) => eligible.has(slug) && !validExisting.has(slug))
+      .map((slug) => ({
+        wikiId,
+        refType: "category",
+        refId: catRef(slug),
+        heading: "",
+        text: slug,
+        hash: sha(slug),
+        modelAccess: "external" as const,
+      }));
+    if (create.length > 0) await tx.searchChunk.createMany({ data: create, skipDuplicates: true });
+    return create.length + validExisting.size;
+  });
+
+  const embeddings = await reindexEmbeddings(wikiId);
+  return { projected, remainingEmbeddings: embeddings.remaining };
 }
 
 /** 코퍼스 내 category 쌍 중 코사인 유사도가 높은(중복 의심) 쌍. lint의 병합 후보 탐지용. */

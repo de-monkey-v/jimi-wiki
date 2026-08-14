@@ -64,8 +64,32 @@ export function isPageTrashEligible(page: {
   );
 }
 
+/** 폴더 이동 가능 여부. 현재는 휴지통과 같은 콘텐츠 정책을 따르지만, UI/서버 계약은
+ * 서로 다른 작업이므로 별도 판정으로 유지한다. 역할(editor+)과 active 상태는 호출측에서 AND. */
+export function isPageMoveEligible(page: {
+  slug: string;
+  kind: PageKind;
+  origin: PageOrigin;
+  sourceId: string | null;
+}): boolean {
+  return (
+    page.origin !== "system" &&
+    !(page.kind === "note" && page.sourceId !== null) &&
+    !isReservedWikiPageSlug(page.slug)
+  );
+}
+
 // ---------- P2: 탐색기(VSCode식) 폴더 트리 ----------
-export type TocLeaf = { type: "page"; slug: string; title: string; kind: PageKind; currentVersion: number; trashable: boolean };
+export type TocLeaf = {
+  type: "page";
+  slug: string;
+  title: string;
+  kind: PageKind;
+  category: string | null;
+  currentVersion: number;
+  movable: boolean;
+  trashable: boolean;
+};
 export type TocFolder = { type: "folder"; name: string; path: string; children: TocEntry[] };
 export type TocEntry = TocLeaf | TocFolder;
 /** 사용자용 목차 섹션. sources는 하위 호환 타입으로 남지만 기본 목차에서는

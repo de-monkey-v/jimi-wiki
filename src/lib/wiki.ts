@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { normalizeSlug } from "@/lib/markdown";
-import { KIND_LABEL, isPageTrashEligible } from "@/lib/kinds";
+import { KIND_LABEL, isPageMoveEligible, isPageTrashEligible } from "@/lib/kinds";
 import type { TocSection, TocEntry, TocFolder, TocLeaf, WikiGraph, GraphNode, GraphEdge } from "@/lib/kinds";
 import { isReservedSlug, ONTOLOGY_SLUG } from "@/lib/ontology";
 import {
@@ -191,16 +191,18 @@ function buildCategoryTree(
     return folder;
   };
   for (const p of pages) {
+    // 빈 세그먼트 정규화("ai/models/"·"ai//models" → "ai/models")로 빈 폴더/분열 방지
+    const cat = p.category?.split("/").map((s) => s.trim()).filter(Boolean).join("/") || null;
     const leaf: TocLeaf = {
       type: "page",
       slug: p.slug,
       title: p.title,
       kind: p.kind,
+      category: cat,
       currentVersion: p.currentVersion,
+      movable: isPageMoveEligible(p),
       trashable: isPageTrashEligible(p),
     };
-    // 빈 세그먼트 정규화("ai/models/"·"ai//models" → "ai/models")로 빈 폴더/분열 방지
-    const cat = p.category?.split("/").map((s) => s.trim()).filter(Boolean).join("/");
     if (cat) ensureFolder(cat).children.push(leaf);
     else rootChildren.push(leaf); // 미분류는 섹션 루트에(Inbox)
   }

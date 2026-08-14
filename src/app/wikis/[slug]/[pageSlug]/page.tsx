@@ -9,7 +9,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { detectLang } from "@/lib/lang";
 import { getPageTranslation } from "@/lib/translate";
 import { checkDailyQuota } from "@/lib/usage";
-import { isAiExcludedKind, isPageTrashEligible } from "@/lib/kinds";
+import { isAiExcludedKind, isPageMoveEligible, isPageTrashEligible } from "@/lib/kinds";
 import { PageKebabMenu } from "@/components/PageKebabMenu";
 import { isLocale } from "@/i18n/locales";
 import { ReadingPane } from "@/components/ReadingPane";
@@ -190,7 +190,7 @@ export default async function PageView({
       pageSlug={pageSlug}
       currentVersion={page.currentVersion}
       currentCategory={page.category}
-      canMove={page.kind === "personal" && !page.archivedAt}
+      canMove={!page.archivedAt && !page.trashedAt && isPageMoveEligible(page)}
       canTrash={!page.trashedAt && isPageTrashEligible(page)}
       afterTrash="goHome"
       triggerClassName="btn-secondary btn-compact text-stone-500"

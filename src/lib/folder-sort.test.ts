@@ -96,7 +96,9 @@ test("category 페이지용 TOC flatten은 sidebar section/재귀 순서를 보�
     slug,
     title: slug,
     kind: "document" as const,
+    category: "ai",
     currentVersion: 1,
+    movable: true,
     trashable: true,
   });
   const sections: TocSection[] = [

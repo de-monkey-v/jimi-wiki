@@ -14,18 +14,18 @@ const sections: TocSection[] = [
   {
     key: "documents",
     entries: [
-      { type: "page", slug: "root", title: "Root", kind: "document", currentVersion: 1, trashable: true },
+      { type: "page", slug: "root", title: "Root", kind: "document", category: null, currentVersion: 1, movable: true, trashable: true },
       {
         type: "folder",
         name: "Folder",
         path: "folder",
         children: [
-          { type: "page", slug: "hidden-a", title: "Hidden A", kind: "document", currentVersion: 2, trashable: true },
-          { type: "page", slug: "protected", title: "Protected", kind: "document", currentVersion: 1, trashable: false },
-          { type: "page", slug: "hidden-b", title: "Hidden B", kind: "document", currentVersion: 3, trashable: true },
+          { type: "page", slug: "hidden-a", title: "Hidden A", kind: "document", category: "folder", currentVersion: 2, movable: true, trashable: true },
+          { type: "page", slug: "protected", title: "Protected", kind: "document", category: "folder", currentVersion: 1, movable: false, trashable: false },
+          { type: "page", slug: "hidden-b", title: "Hidden B", kind: "document", category: "folder", currentVersion: 3, movable: true, trashable: true },
         ],
       },
-      { type: "page", slug: "last", title: "Last", kind: "document", currentVersion: 1, trashable: true },
+      { type: "page", slug: "last", title: "Last", kind: "document", category: null, currentVersion: 1, movable: true, trashable: true },
     ],
   },
 ];
@@ -42,6 +42,7 @@ test("목차 선택은 canonical 순서를 보존하고 삭제 불가 leaf를 �
   assert.equal(folder.type, "folder");
   if (folder.type === "folder") {
     assert.deepEqual(selectableSlugsInEntries(folder.children), ["hidden-a", "hidden-b"]);
+    assert.deepEqual(selectableSlugsInEntries(folder.children, "move"), ["hidden-a", "hidden-b"]);
   }
 });
 

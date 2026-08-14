@@ -2,15 +2,21 @@
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import { flushSync } from "react-dom";
 import { logoutAction } from "@/app/login/actions";
+import {
+  movePagesToCategoryAction,
+  restorePageCategoriesAction,
+} from "@/app/wikis/actions";
 import { useChatModal, useShortcutLabel } from "@/app/wikis/[slug]/chat/ChatModal";
 import { trashPagesFromTocAction } from "@/app/wikis/[slug]/knowledge-controls-actions";
 import { useWikiActions } from "@/app/wikis/[slug]/WikiActions";
 import { useQuickNav } from "@/app/wikis/[slug]/QuickNav";
 import { RecentPopover } from "@/app/wikis/[slug]/RecentList";
 import { EmptyState } from "@/components/EmptyState";
+import { Modal } from "@/components/Modal";
 import { PageKebabMenu } from "@/components/PageKebabMenu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { TocSection, TocEntry } from "@/lib/kinds";
@@ -33,6 +39,18 @@ import {
   wikiTocViewportMax,
 } from "@/lib/wiki-toc-width";
 import { isReservedWikiPageSlug } from "@/lib/wiki-routes";
+import {
+  TOC_FOLDER_OPEN_DELAY_MS,
+  collectTocCategoryTargets,
+  hasCrossedTocPageDragThreshold,
+  tocDropTargetState,
+  tocEdgeAutoScrollDelta,
+  tocPageMovePayloadForHandle,
+  type TocDropTargetState,
+  type TocPageMovePayload,
+} from "@/lib/toc-page-move";
+import type { TocSelectionPage } from "@/lib/toc-selection";
+import type { PageCategoryMoveReceipt } from "@/lib/page-category-move";
 
 type PinnedItem =
   | { type: "page"; slug: string; title: string }
@@ -61,6 +79,50 @@ type TocSelectionView = {
   groupLabel: (name: string, count: number) => string;
 };
 
+type TocPageMoveGesture = {
+  pointerId: number;
+  handle: HTMLButtonElement;
+  grabbed: TocSelectionPage;
+  startX: number;
+  startY: number;
+  clientX: number;
+  clientY: number;
+  started: boolean;
+  payload: TocPageMovePayload | null;
+  targetCategory: string | null | undefined;
+  targetState: TocDropTargetState;
+  frame: number | null;
+  autoScrollDirection: -1 | 0 | 1;
+  autoScrollStartedAt: number | null;
+};
+
+type TocPageMoveView = {
+  pages: TocSelectionPage[];
+  clientX: number;
+  clientY: number;
+  targetCategory: string | null | undefined;
+  targetState: TocDropTargetState;
+};
+
+type TocPageMoveController = {
+  pending: boolean;
+  dragging: boolean;
+  targetCategory: string | null | undefined;
+  targetState: (category: string | null) => TocDropTargetState;
+  openSingle: (page: TocSelectionPage) => void;
+  handleLabel: (title: string) => string;
+  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>, page: TocSelectionPage) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerCancel: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onLostPointerCapture: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  suppressClick: (event: ReactMouseEvent<HTMLButtonElement>) => boolean;
+};
+
+// 폴더를 가리킨 첫 animation frame에 그 폴더를 밀어내지 않도록 짧게 대기한다.
+// edge를 계속 잡고 있으면 스크롤하되, 빠른 drop은 사용자가 본 highlight를 확정한다.
+const TOC_PAGE_MOVE_AUTO_SCROLL_DELAY_MS = 180;
+
 function linkCls(active: boolean, mobileTwoLines = false) {
   const overflow = mobileTwoLines ? "line-clamp-2 md:block md:truncate" : "truncate";
   return `block ${overflow} rounded-md py-1 pr-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
@@ -80,16 +142,16 @@ function leafCount(e: TocEntry): number {
 // 페이지 리프와 폴더를 컴포넌트로 분리 — 훅이 early return 뒤에 오면(rules-of-hooks 위반)
 // hydration이 통째로 죽어 사이드바 전체가 클릭 불능이 된다.
 // newKind: 이 섹션에서 "+ 새 노트" 버튼이 만들 kind(personal|concept). undefined면 "+" 없음(원문/소스).
-// movable: 개인 노트처럼 폴더 이동 항목을 붙일지. canTrash: 휴지통 항목(역할 조건, 행별 trashable과 AND).
-// parentPath: 이동 시 프리필할 현재 폴더 경로.
+// canMove/canTrash는 역할 조건이고 실제 eligibility는 server-derived leaf 필드와 AND한다.
 type NodeCtx = {
   slug: string;
   current: string | undefined;
   newKind?: string;
-  movable?: boolean;
+  canMove: boolean;
   canTrash: boolean;
   newInFolderLabel: (name: string) => string;
   selection?: TocSelectionView;
+  move?: TocPageMoveController;
 };
 
 type EntryNodeProps = {
@@ -156,11 +218,143 @@ function SelectionCheckbox({
   );
 }
 
+function PageMoveHandle({ page, move }: { page: TocSelectionPage; move: TocPageMoveController }) {
+  return (
+    <button
+      type="button"
+      aria-label={move.handleLabel(page.title)}
+      aria-haspopup="dialog"
+      disabled={move.pending}
+      onClick={(event) => {
+        if (!move.suppressClick(event)) move.openSingle(page);
+      }}
+      onPointerDown={(event) => move.onPointerDown(event, page)}
+      onPointerMove={move.onPointerMove}
+      onPointerUp={move.onPointerUp}
+      onPointerCancel={move.onPointerCancel}
+      onLostPointerCapture={move.onLostPointerCapture}
+      className="toc-page-drag-handle absolute right-8 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 touch-none select-none items-center justify-center rounded-md border border-transparent bg-white/90 text-sm font-bold tracking-[-0.15em] text-stone-400 opacity-0 shadow-sm transition-[opacity,color,border-color,background-color] motion-reduce:transition-none hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 active:border-indigo-300 active:bg-indigo-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-30 md:flex md:group-hover/leaf:opacity-100 md:group-focus-within/leaf:opacity-100 [@media(pointer:coarse)]:!hidden"
+    >
+      <span aria-hidden="true">⠿</span>
+    </button>
+  );
+}
+
+// root의 pinned map에서 ref-backed gesture controller를 직접 펼치지 않게 컴포넌트 경계를 둔다.
+function PinnedPageMoveHandle({ page, move }: { page: TocSelectionPage; move: TocPageMoveController }) {
+  return <PageMoveHandle page={page} move={move} />;
+}
+
+function PinnedTocEntry({
+  item,
+  slug,
+  current,
+  selectionMode,
+  selected,
+  canonical,
+  pending,
+  canWrite,
+  move,
+  moveView,
+  selectLabel,
+  onToggle,
+}: {
+  item: PinnedItem;
+  slug: string;
+  current: string | undefined;
+  selectionMode: boolean;
+  selected: boolean;
+  canonical: TocSelectionPage | undefined;
+  pending: boolean;
+  canWrite: boolean;
+  move: TocPageMoveController | undefined;
+  moveView: TocPageMoveView | null;
+  selectLabel: string;
+  onToggle: (shiftKey: boolean) => void;
+}) {
+  if (item.type === "folder") {
+    const folderName = item.category.split("/").pop() ?? item.category;
+    const folderDropState = moveView ? tocDropTargetState(moveView.pages, item.category) : "invalid";
+    const folderTargeted = moveView !== null && moveView.targetCategory === item.category;
+    const folderDropClass = folderTargeted && folderDropState === "valid"
+      ? "border-indigo-300 bg-indigo-100 text-indigo-900 ring-2 ring-indigo-400 ring-offset-1"
+      : folderTargeted
+        ? "border-stone-200 bg-stone-100 text-stone-400"
+        : "border-transparent";
+    return (
+      <li>
+        <Tooltip label={folderName}>
+          {selectionMode ? (
+            <div
+              data-toc-drop-category={canWrite ? item.category : undefined}
+              className={`flex min-h-8 items-center gap-1 rounded-md border px-2 text-sm transition-[background-color,border-color,color,box-shadow] motion-reduce:transition-none ${folderDropClass}`}
+              aria-disabled={folderTargeted && folderDropState !== "valid" ? true : undefined}
+            >
+              <span className="shrink-0" aria-hidden="true">📁</span>
+              <span className="min-w-0 flex-1 truncate">{folderName}</span>
+            </div>
+          ) : (
+            <Link
+              href={`/wikis/${slug}/category/${item.category.split("/").map(encodeURIComponent).join("/")}`}
+              data-toc-drop-category={canWrite ? item.category : undefined}
+              aria-disabled={folderTargeted && folderDropState !== "valid" ? true : undefined}
+              className={`flex items-center gap-1 border transition-[background-color,border-color,color,box-shadow] motion-reduce:transition-none ${folderDropClass} ${linkCls(false)}`}
+              style={{ paddingLeft: 20 }}
+            >
+              <span className="shrink-0 text-stone-400" aria-hidden="true">📁</span>
+              <span className="min-w-0 flex-1 truncate">{folderName}</span>
+            </Link>
+          )}
+        </Tooltip>
+      </li>
+    );
+  }
+
+  return (
+    <li className={selectionMode && selected ? "rounded-md bg-indigo-50" : undefined}>
+      <Tooltip label={item.title}>
+        {selectionMode && canonical && (canonical.trashable || canonical.movable) ? (
+          <div className="group/leaf relative flex min-h-8 items-center gap-1.5 rounded-md px-1">
+            <SelectionCheckbox
+              checked={selected}
+              label={selectLabel}
+              disabled={pending}
+              onClick={(event) => onToggle(event.shiftKey)}
+            />
+            <button
+              type="button"
+              disabled={pending}
+              onClick={(event) => onToggle(event.shiftKey)}
+              className="min-w-0 flex-1 rounded px-1 py-1 text-left text-sm text-stone-700 hover:bg-indigo-100 active:bg-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed"
+            >
+              <span className="mr-1 text-amber-500" aria-hidden="true">★</span>
+              <span className="line-clamp-2 md:inline md:truncate">{item.title}</span>
+            </button>
+            {canWrite && canonical.movable && move ? <PinnedPageMoveHandle page={canonical} move={move} /> : null}
+          </div>
+        ) : selectionMode ? (
+          <div className="flex min-h-8 items-center gap-1 rounded-md px-2 text-sm text-stone-400" aria-disabled="true">
+            <span className="shrink-0 text-amber-400" aria-hidden="true">★</span>
+            <span className="min-w-0 flex-1 line-clamp-2 md:block md:truncate">{item.title}</span>
+          </div>
+        ) : (
+          <div className="group/leaf relative">
+            <Link href={`/wikis/${slug}/${item.slug}`} className={`flex items-center gap-1 !pr-10 ${linkCls(item.slug === current)}`} style={{ paddingLeft: 20 }}>
+              <span className="shrink-0 text-amber-500" aria-hidden="true">★</span>
+              <span className="min-w-0 flex-1 whitespace-normal line-clamp-2 md:block md:truncate">{item.title}</span>
+            </Link>
+            {canWrite && canonical?.movable && move ? <PinnedPageMoveHandle page={canonical} move={move} /> : null}
+          </div>
+        )}
+      </Tooltip>
+    </li>
+  );
+}
+
 function EntryNode({
   entry,
   ctx,
   depth,
-  parentPath,
   onTogglePage,
   onToggleGroup,
   onCheckboxPointerDown,
@@ -173,36 +367,38 @@ function EntryNode({
   if (entry.type === "page") {
     if (ctx.selection) {
       const selected = ctx.selection.selected.has(entry.slug);
+      const selectable = entry.trashable || entry.movable;
       return (
         <li
-          data-toc-select-slug={entry.trashable ? entry.slug : undefined}
-          className={`relative rounded-md border-l-2 transition-colors motion-reduce:transition-none ${
+          data-toc-select-slug={selectable ? entry.slug : undefined}
+          className={`group/leaf relative rounded-md border-l-2 transition-colors motion-reduce:transition-none ${
             selected ? "border-indigo-500 bg-indigo-50 text-indigo-950" : "border-transparent hover:bg-stone-50"
           }`}
         >
           <div className="flex min-h-9 items-center gap-1.5 pr-1" style={{ paddingLeft: depth * 12 + 4 }}>
             <SelectionCheckbox
               checked={selected}
-              label={entry.trashable ? ctx.selection.pageLabel(entry.title) : ctx.selection.unavailableLabel(entry.title)}
-              disabled={!entry.trashable || ctx.selection.pending}
-              draggable={entry.trashable}
+              label={selectable ? ctx.selection.pageLabel(entry.title) : ctx.selection.unavailableLabel(entry.title)}
+              disabled={!selectable || ctx.selection.pending}
+              draggable={selectable}
               onClick={(event) => onCheckboxClick?.(event, entry.slug)}
-              onPointerDown={entry.trashable ? (event) => onCheckboxPointerDown?.(event, entry.slug) : undefined}
-              onPointerMove={entry.trashable ? onCheckboxPointerMove : undefined}
-              onPointerUp={entry.trashable ? onCheckboxPointerUp : undefined}
-              onPointerCancel={entry.trashable ? onCheckboxPointerCancel : undefined}
-              onLostPointerCapture={entry.trashable ? onCheckboxLostPointerCapture : undefined}
+              onPointerDown={selectable ? (event) => onCheckboxPointerDown?.(event, entry.slug) : undefined}
+              onPointerMove={selectable ? onCheckboxPointerMove : undefined}
+              onPointerUp={selectable ? onCheckboxPointerUp : undefined}
+              onPointerCancel={selectable ? onCheckboxPointerCancel : undefined}
+              onLostPointerCapture={selectable ? onCheckboxLostPointerCapture : undefined}
             />
             <button
               type="button"
-              disabled={!entry.trashable || ctx.selection.pending}
+              disabled={!selectable || ctx.selection.pending}
               onClick={(event) => onTogglePage?.(entry.slug, event.shiftKey, true)}
-              className={`min-w-0 flex-1 rounded px-1 py-1 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:bg-indigo-100 disabled:cursor-not-allowed ${
-                entry.trashable ? "text-stone-700 hover:text-stone-950" : "text-stone-400"
+              className={`min-w-0 flex-1 rounded py-1 pl-1 pr-9 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:bg-indigo-100 disabled:cursor-not-allowed ${
+                selectable ? "text-stone-700 hover:text-stone-950" : "text-stone-400"
               }`}
             >
               <span className="line-clamp-2 md:block md:truncate">{entry.title}</span>
             </button>
+            {ctx.canMove && entry.movable && ctx.move ? <PageMoveHandle page={entry} move={ctx.move} /> : null}
           </div>
         </li>
       );
@@ -210,16 +406,17 @@ function EntryNode({
     return (
       <li className="group/leaf relative">
         <Tooltip label={entry.title}>
-          <Link href={`/wikis/${ctx.slug}/${entry.slug}`} className={linkCls(entry.slug === ctx.current, true)} style={{ paddingLeft: depth * 12 + 20 }}>
+          <Link href={`/wikis/${ctx.slug}/${entry.slug}`} className={`${linkCls(entry.slug === ctx.current, true)} !pr-16`} style={{ paddingLeft: depth * 12 + 20 }}>
             {entry.title}
           </Link>
         </Tooltip>
+        {ctx.canMove && entry.movable && ctx.move ? <PageMoveHandle page={entry} move={ctx.move} /> : null}
         <PageKebabMenu
           wikiSlug={ctx.slug}
           pageSlug={entry.slug}
           currentVersion={entry.currentVersion}
-          currentCategory={parentPath || null}
-          canMove={!!ctx.movable}
+          currentCategory={entry.category}
+          canMove={ctx.canMove && entry.movable && !ctx.move?.pending}
           canTrash={ctx.canTrash && entry.trashable}
           afterTrash={entry.slug === ctx.current ? "goHome" : "refresh"}
           triggerClassName="absolute right-0.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-sm text-stone-400"
@@ -261,8 +458,19 @@ function FolderNode({
   const active = entryHasSlug(entry, ctx.current);
   const [override, setOverride] = useState<{ open: boolean; whenActive: boolean } | null>(null);
   const open = override && override.whenActive === active ? override.open : active || depth < 1;
-  const selectableSlugs = selectableSlugsInEntries(entry.children);
+  const selectableSlugs = selectableSlugsInEntries(entry.children, "either");
   const selectionState = ctx.selection ? tocGroupSelectionState(ctx.selection.selected, selectableSlugs) : null;
+  const dropState = ctx.move?.targetState(entry.path) ?? "invalid";
+  const targeted = ctx.move?.dragging && ctx.move.targetCategory === entry.path;
+
+  useEffect(() => {
+    if (!targeted || dropState !== "valid" || open) return;
+    const timer = window.setTimeout(() => {
+      setOverride({ open: true, whenActive: active });
+    }, TOC_FOLDER_OPEN_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [active, dropState, open, targeted]);
+
   return (
     <li>
       <div className="group/folder flex items-center">
@@ -281,8 +489,16 @@ function FolderNode({
           <button
             type="button"
             aria-expanded={open}
+            data-toc-drop-category={ctx.move ? entry.path : undefined}
+            aria-disabled={targeted && dropState !== "valid" ? true : undefined}
             onClick={() => setOverride({ open: !open, whenActive: active })}
-            className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-1 pr-2 text-sm text-stone-500 hover:bg-stone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className={`flex min-w-0 flex-1 items-center gap-1 rounded-md border py-1 pr-2 text-sm transition-[background-color,border-color,color,box-shadow] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+              targeted && dropState === "valid"
+                ? "border-indigo-300 bg-indigo-100 text-indigo-900 ring-2 ring-indigo-400 ring-offset-1"
+                : targeted
+                  ? "border-stone-200 bg-stone-100 text-stone-400"
+                  : "border-transparent text-stone-500 hover:bg-stone-100"
+            }`}
             style={{ paddingLeft: ctx.selection ? 4 : depth * 12 + 4 }}
           >
             <span className="w-3 shrink-0 text-xs text-stone-400">{open ? "▾" : "▸"}</span>
@@ -365,7 +581,7 @@ function SecondarySection({
 >) {
   const [open, setOpen] = useState(false);
   const count = section.entries.reduce((total, entry) => total + leafCount(entry), 0);
-  const selectableSlugs = selectableSlugsInEntries(section.entries);
+  const selectableSlugs = selectableSlugsInEntries(section.entries, "either");
   const selectionState = ctx.selection ? tocGroupSelectionState(ctx.selection.selected, selectableSlugs) : null;
   return (
     <div className="group/secondary">
@@ -452,8 +668,18 @@ export function WikiToc({
   const canWrite = role !== "viewer";
   const canonicalPages = useMemo(() => flattenTocPages(sections), [sections]);
   const pageBySlug = useMemo(() => new Map(canonicalPages.map((page) => [page.slug, page])), [canonicalPages]);
-  const selectablePages = useMemo(() => canonicalPages.filter((page) => page.trashable), [canonicalPages]);
+  const selectablePages = useMemo(
+    () => canonicalPages.filter((page) => page.trashable || page.movable),
+    [canonicalPages],
+  );
   const selectableSlugSet = useMemo(() => new Set(selectablePages.map((page) => page.slug)), [selectablePages]);
+  const categoryTargets = useMemo(
+    () => collectTocCategoryTargets(
+      sections,
+      pinned.flatMap((item) => item.type === "folder" ? [item.category] : []),
+    ),
+    [pinned, sections],
+  );
   const personalSection = sections.find((section) => section.key === "personal");
   const primarySections = sections.filter((section) => section.key === "documents" || section.key === "knowledge");
 
@@ -475,8 +701,20 @@ export function WikiToc({
     showTrash: boolean;
   } | null>(null);
   const [bulkPending, startBulkTransition] = useTransition();
+  const [movePending, startMoveTransition] = useTransition();
+  const [movePendingCount, setMovePendingCount] = useState(0);
+  const [movePickerOpen, setMovePickerOpen] = useState(false);
+  const [moveView, setMoveView] = useState<TocPageMoveView | null>(null);
+  const [moveNotice, setMoveNotice] = useState<{
+    tone: "success" | "warning" | "error";
+    message: string;
+    undo?: { receipts: PageCategoryMoveReceipt[]; expiresAt: number };
+  } | null>(null);
+  const interactionPending = bulkPending || movePending;
   const selectionDragRef = useRef<TocSelectionDrag | null>(null);
   const suppressCheckboxClickRef = useRef(false);
+  const pageMoveGestureRef = useRef<TocPageMoveGesture | null>(null);
+  const suppressMoveHandleClickRef = useRef(false);
   const [preferredTocWidth, setPreferredTocWidth] = useState(DEFAULT_WIKI_TOC_WIDTH);
   const [viewportWidth, setViewportWidth] = useState<number | null>(null);
   const [resizingToc, setResizingToc] = useState(false);
@@ -487,6 +725,11 @@ export function WikiToc({
     ? DEFAULT_WIKI_TOC_WIDTH
     : displayedWikiTocWidth(preferredTocWidth, viewportWidth);
   const desktopTocMax = viewportWidth === null ? MAX_WIKI_TOC_WIDTH : wikiTocViewportMax(viewportWidth);
+  const selectedRef = useRef(selected);
+  const canonicalPagesRef = useRef(canonicalPages);
+  const selectedPages = canonicalPages.filter((page) => selected.has(page.slug));
+  const selectedCanMove = selectedPages.length === selected.size && selectedPages.length > 0 && selectedPages.every((page) => page.movable);
+  const selectedCanTrash = selectedPages.length === selected.size && selectedPages.length > 0 && selectedPages.every((page) => page.trashable);
 
   const visibleSelectableSlugs = () =>
     [...(navRef.current?.querySelectorAll<HTMLElement>("[data-toc-select-slug]") ?? [])]
@@ -494,7 +737,7 @@ export function WikiToc({
       .filter((value): value is string => !!value && selectableSlugSet.has(value));
 
   const toggleSelectedPage = (pageSlug: string, shiftKey: boolean, allowRange: boolean) => {
-    if (bulkPending || !selectableSlugSet.has(pageSlug)) return;
+    if (interactionPending || !selectableSlugSet.has(pageSlug)) return;
     setStoredSelected((previous) => {
       const clean = reconcileTocSelection(previous, selectableSlugSet);
       if (shiftKey && allowRange) {
@@ -508,7 +751,7 @@ export function WikiToc({
   };
 
   const toggleSelectedGroup = (slugs: readonly string[], value: boolean) => {
-    if (bulkPending) return;
+    if (interactionPending) return;
     setStoredSelected((previous) =>
       setTocGroupSelected(reconcileTocSelection(previous, selectableSlugSet), slugs, value),
     );
@@ -565,7 +808,7 @@ export function WikiToc({
   };
 
   const onCheckboxPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, pageSlug: string) => {
-    if (bulkPending || event.pointerType === "touch" || !event.isPrimary || event.button !== 0) return;
+    if (interactionPending || event.pointerType === "touch" || !event.isPrimary || event.button !== 0) return;
     event.preventDefault();
     event.currentTarget.focus();
     if (event.shiftKey) {
@@ -621,10 +864,306 @@ export function WikiToc({
     toggleSelectedPage(pageSlug, event.shiftKey, true);
   };
 
+  const finishPageMoveGesture = (suppressClick: boolean): TocPageMoveGesture | null => {
+    const gesture = pageMoveGestureRef.current;
+    if (!gesture) return null;
+    if (gesture.frame !== null) window.cancelAnimationFrame(gesture.frame);
+    pageMoveGestureRef.current = null;
+    setMoveView(null);
+    if (suppressClick) {
+      suppressMoveHandleClickRef.current = true;
+      window.setTimeout(() => {
+        suppressMoveHandleClickRef.current = false;
+      }, 0);
+    }
+    return gesture;
+  };
+
+  const hitTestPageMove = () => {
+    const gesture = pageMoveGestureRef.current;
+    if (!gesture?.started || !gesture.payload) return;
+    const element = document
+      .elementFromPoint(gesture.clientX, gesture.clientY)
+      ?.closest<HTMLElement>("[data-toc-drop-category]");
+    let category: string | null | undefined;
+    if (element?.hasAttribute("data-toc-drop-category")) {
+      const value = element.getAttribute("data-toc-drop-category");
+      category = value === "" ? null : value ?? undefined;
+    }
+    const targetState = category === undefined
+      ? "invalid"
+      : tocDropTargetState(gesture.payload.pages, category);
+    gesture.targetCategory = category;
+    gesture.targetState = targetState;
+    setMoveView({
+      pages: gesture.payload.pages,
+      clientX: gesture.clientX,
+      clientY: gesture.clientY,
+      targetCategory: category,
+      targetState,
+    });
+  };
+
+  const runPageMoveAutoScroll = (timestamp: number) => {
+    const gesture = pageMoveGestureRef.current;
+    const nav = navRef.current;
+    if (!gesture?.started || !nav) return;
+    const rect = nav.getBoundingClientRect();
+    if (gesture.clientX < rect.left || gesture.clientX > rect.right) {
+      gesture.autoScrollDirection = 0;
+      gesture.autoScrollStartedAt = null;
+      gesture.frame = null;
+      return;
+    }
+    const delta = tocEdgeAutoScrollDelta(gesture.clientY, rect.top, rect.bottom);
+    if (delta === 0) {
+      gesture.autoScrollDirection = 0;
+      gesture.autoScrollStartedAt = null;
+      gesture.frame = null;
+      return;
+    }
+    const direction = delta < 0 ? -1 : 1;
+    if (gesture.autoScrollDirection !== direction || gesture.autoScrollStartedAt === null) {
+      gesture.autoScrollDirection = direction;
+      gesture.autoScrollStartedAt = timestamp;
+      gesture.frame = window.requestAnimationFrame(runPageMoveAutoScroll);
+      return;
+    }
+    if (timestamp - gesture.autoScrollStartedAt < TOC_PAGE_MOVE_AUTO_SCROLL_DELAY_MS) {
+      gesture.frame = window.requestAnimationFrame(runPageMoveAutoScroll);
+      return;
+    }
+    const before = nav.scrollTop;
+    nav.scrollTop += delta;
+    if (nav.scrollTop === before) {
+      gesture.autoScrollDirection = 0;
+      gesture.autoScrollStartedAt = null;
+      gesture.frame = null;
+      return;
+    }
+    hitTestPageMove();
+    gesture.frame = window.requestAnimationFrame(runPageMoveAutoScroll);
+  };
+
+  const schedulePageMoveAutoScroll = () => {
+    const gesture = pageMoveGestureRef.current;
+    if (gesture?.started && gesture.frame === null) {
+      gesture.frame = window.requestAnimationFrame(runPageMoveAutoScroll);
+    }
+  };
+
+  const requestPageMove = (
+    items: readonly { slug: string; expectedVersion: number }[],
+    category: string | null,
+  ) => {
+    if (interactionPending || items.length === 0) return;
+    setMovePickerOpen(false);
+    setBulkNotice(null);
+    setMoveNotice(null);
+    setMovePendingCount(items.length);
+    startMoveTransition(async () => {
+      try {
+        const result = await movePagesToCategoryAction(slug, items, category, current ?? null);
+        if (result.status === "error") {
+          const message = result.code === "versionConflict"
+            ? t("moveConflict")
+            : result.code === "uncertain"
+              ? t("moveUncertain")
+              : t("moveFailed");
+          setMoveNotice({ tone: "error", message });
+          router.refresh();
+          return;
+        }
+        setStoredSelected(new Set());
+        setSelectionAnchor(null);
+        setSelectionMode(false);
+        setMoveNotice({
+          tone: result.refreshRequired ? "warning" : "success",
+          message: result.refreshRequired
+            ? t("moveCleanupPending", { count: result.moved.length })
+            : t("moveSuccess", { count: result.moved.length }),
+          ...(result.moved.length > 0
+            ? { undo: { receipts: result.moved, expiresAt: Date.now() + 10_000 } }
+            : {}),
+        });
+        router.refresh();
+      } catch {
+        setMoveNotice({ tone: "error", message: t("moveUncertain") });
+        router.refresh();
+      }
+    });
+  };
+
+  const requestPageMoveUndo = (receipts: readonly PageCategoryMoveReceipt[]) => {
+    if (interactionPending || receipts.length === 0) return;
+    setMovePendingCount(receipts.length);
+    startMoveTransition(async () => {
+      try {
+        const result = await restorePageCategoriesAction(
+          slug,
+          receipts.map((item) => ({
+            slug: item.slug,
+            expectedVersion: item.newVersion,
+            originalCategory: item.originalCategory,
+          })),
+          current ?? null,
+        );
+        if (result.status === "error") {
+          setMoveNotice({
+            tone: "error",
+            message: result.code === "versionConflict" || result.code === "invalidUndo"
+              ? t("undoConflict")
+              : t("moveUncertain"),
+          });
+          router.refresh();
+          return;
+        }
+        setMoveNotice({
+          tone: result.refreshRequired ? "warning" : "success",
+          message: result.refreshRequired ? t("undoCleanupPending") : t("undoSuccess"),
+        });
+        router.refresh();
+      } catch {
+        setMoveNotice({ tone: "error", message: t("moveUncertain") });
+        router.refresh();
+      }
+    });
+  };
+
+  const onPageMovePointerDown = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    page: TocSelectionPage,
+  ) => {
+    if (
+      interactionPending ||
+      event.pointerType === "touch" ||
+      !event.isPrimary ||
+      event.button !== 0 ||
+      !page.movable
+    ) return;
+    event.currentTarget.focus();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    suppressMoveHandleClickRef.current = false;
+    pageMoveGestureRef.current = {
+      pointerId: event.pointerId,
+      handle: event.currentTarget,
+      grabbed: page,
+      startX: event.clientX,
+      startY: event.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      started: false,
+      payload: null,
+      targetCategory: undefined,
+      targetState: "invalid",
+      frame: null,
+      autoScrollDirection: 0,
+      autoScrollStartedAt: null,
+    };
+  };
+
+  const onPageMovePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const gesture = pageMoveGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    gesture.clientX = event.clientX;
+    gesture.clientY = event.clientY;
+    if (!gesture.started) {
+      if (!hasCrossedTocPageDragThreshold(
+        { x: gesture.startX, y: gesture.startY },
+        { x: event.clientX, y: event.clientY },
+      )) return;
+      const payload = tocPageMovePayloadForHandle(
+        gesture.grabbed,
+        canonicalPagesRef.current,
+        selectedRef.current,
+        selectionMode,
+      );
+      if (!payload) return;
+      event.preventDefault();
+      gesture.started = true;
+      gesture.payload = payload;
+      // 드래그 시작과 함께 root drop slot이 nav 위 flex 흐름에 삽입된다. 같은 pointermove에서
+      // hit-test하면 삽입 전 좌표로 폴더를 강조한 뒤 다른 category로 drop할 수 있으므로,
+      // 이 한 번의 시작 render만 동기 확정한다. 이후 pointer hop을 RAF까지 무시하지 않으면서
+      // elementFromPoint가 표시된 레이아웃과 같은 좌표계를 사용하게 한다.
+      flushSync(() => {
+        if (payload.replaceSelection) {
+          setStoredSelected(new Set([gesture.grabbed.slug]));
+          setSelectionAnchor(gesture.grabbed.slug);
+        }
+        setMoveView({
+          pages: payload.pages,
+          clientX: gesture.clientX,
+          clientY: gesture.clientY,
+          targetCategory: undefined,
+          targetState: "invalid",
+        });
+      });
+      hitTestPageMove();
+      schedulePageMoveAutoScroll();
+      return;
+    }
+    hitTestPageMove();
+    schedulePageMoveAutoScroll();
+  };
+
+  const onPageMovePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const gesture = pageMoveGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const started = gesture.started;
+    const payload = gesture.payload;
+    const category = gesture.targetCategory;
+    const state = gesture.targetState;
+    finishPageMoveGesture(started);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (started && payload && category !== undefined && state === "valid") {
+      requestPageMove(payload.items, category);
+    }
+  };
+
+  const onPageMovePointerCancel = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (pageMoveGestureRef.current?.pointerId !== event.pointerId) return;
+    finishPageMoveGesture(pageMoveGestureRef.current.started);
+  };
+
+  const onPageMoveLostPointerCapture = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (pageMoveGestureRef.current?.pointerId === event.pointerId) {
+      finishPageMoveGesture(pageMoveGestureRef.current.started);
+    }
+  };
+
+  const moveController: TocPageMoveController | undefined = canWrite
+    ? {
+        pending: interactionPending,
+        dragging: moveView !== null,
+        targetCategory: moveView?.targetCategory,
+        targetState: (category) => moveView ? tocDropTargetState(moveView.pages, category) : "invalid",
+        openSingle: (page) => quick?.openMove(page.slug, page.category, page.currentVersion),
+        handleLabel: (pageTitle) => t("moveHandle", { title: pageTitle }),
+        onPointerDown: onPageMovePointerDown,
+        onPointerMove: onPageMovePointerMove,
+        onPointerUp: onPageMovePointerUp,
+        onPointerCancel: onPageMovePointerCancel,
+        onLostPointerCapture: onPageMoveLostPointerCapture,
+        suppressClick: (event) => {
+          if (suppressMoveHandleClickRef.current && event.detail > 0) {
+            suppressMoveHandleClickRef.current = false;
+            event.preventDefault();
+            event.stopPropagation();
+            return true;
+          }
+          suppressMoveHandleClickRef.current = false;
+          return false;
+        },
+      }
+    : undefined;
+
   const selectionView: TocSelectionView | undefined = selectionMode
     ? {
         selected,
-        pending: bulkPending,
+        pending: interactionPending,
         pageLabel: (pageTitle) => t("selectPage", { title: pageTitle }),
         unavailableLabel: (pageTitle) => t("unavailablePage", { title: pageTitle }),
         groupLabel: (name, count) => t("selectGroup", { name, count }),
@@ -632,7 +1171,7 @@ export function WikiToc({
     : undefined;
 
   const toggleSelectionMode = () => {
-    if (bulkPending) return;
+    if (interactionPending) return;
     setSelectionMode((value) => !value);
     setStoredSelected(new Set());
     setSelectionAnchor(null);
@@ -640,8 +1179,12 @@ export function WikiToc({
     finishSelectionDrag();
   };
 
+  const closeMovePicker = useCallback(() => {
+    if (!movePending) setMovePickerOpen(false);
+  }, [movePending]);
+
   const requestBulkTrash = () => {
-    if (bulkPending || selected.size === 0) return;
+    if (interactionPending || selected.size === 0 || !selectedCanTrash) return;
     const items = [...selected].flatMap((pageSlug) => {
       const page = pageBySlug.get(pageSlug);
       return page ? [{ slug: page.slug, expectedVersion: page.currentVersion }] : [];
@@ -731,6 +1274,11 @@ export function WikiToc({
   };
 
   useEffect(() => {
+    selectedRef.current = selected;
+    canonicalPagesRef.current = canonicalPages;
+  }, [canonicalPages, selected]);
+
+  useEffect(() => {
     const updateViewport = () => setViewportWidth(window.innerWidth);
     const restoreStoredWidth = (raw: string | null) => {
       const restored = parseStoredWikiTocWidth(raw);
@@ -760,6 +1308,11 @@ export function WikiToc({
       window.cancelAnimationFrame(selectionDrag.frame);
     }
     selectionDragRef.current = null;
+    const pageMove = pageMoveGestureRef.current;
+    if (pageMove?.frame !== null && pageMove?.frame !== undefined) {
+      window.cancelAnimationFrame(pageMove.frame);
+    }
+    pageMoveGestureRef.current = null;
     if (resizeDragRef.current) {
       try {
         localStorage.setItem(WIKI_TOC_WIDTH_STORAGE_KEY, String(preferredTocWidthRef.current));
@@ -773,6 +1326,16 @@ export function WikiToc({
     document.body.style.userSelect = previous.userSelect;
     resizeBodyStyleRef.current = null;
   }, []);
+
+  useEffect(() => {
+    const undo = moveNotice?.undo;
+    if (!undo) return;
+    const remaining = Math.max(0, undo.expiresAt - Date.now());
+    const timer = window.setTimeout(() => {
+      setMoveNotice((notice) => notice?.undo?.expiresAt === undo.expiresAt ? null : notice);
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [moveNotice?.undo]);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -898,9 +1461,18 @@ export function WikiToc({
         role={open ? "dialog" : undefined}
         aria-modal={open ? true : undefined}
         aria-label={open ? title : undefined}
-        aria-busy={bulkPending}
+        aria-busy={interactionPending}
         tabIndex={open ? -1 : undefined}
         onKeyDown={(event) => {
+          const pageMove = pageMoveGestureRef.current;
+          if (event.key === "Escape" && pageMove) {
+            event.preventDefault();
+            event.stopPropagation();
+            const { handle, pointerId, started } = pageMove;
+            finishPageMoveGesture(started);
+            if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+            return;
+          }
           if (!selectionMode) return;
           if (event.key === "Escape") {
             event.preventDefault();
@@ -909,7 +1481,7 @@ export function WikiToc({
             if (selected.size > 0) {
               setStoredSelected(new Set());
               setSelectionAnchor(null);
-            } else if (!bulkPending) {
+            } else if (!interactionPending) {
               setSelectionMode(false);
             }
             return;
@@ -946,7 +1518,7 @@ export function WikiToc({
               <button
                 type="button"
                 aria-pressed={selectionMode}
-                disabled={selectablePages.length === 0 || bulkPending}
+                disabled={selectablePages.length === 0 || interactionPending}
                 onClick={toggleSelectionMode}
                 className={`rounded-md border px-2 py-1 text-xs font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 ${
                   selectionMode
@@ -975,8 +1547,42 @@ export function WikiToc({
       </div>
 
       <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {bulkPending ? t("bulkTrashPending", { count: selected.size }) : ""}
+        {movePending
+          ? t("movePending", { count: movePendingCount })
+          : moveView
+            ? moveView.targetCategory === undefined
+              ? t("draggingPages", { count: moveView.pages.length })
+              : moveView.targetState === "valid"
+                ? t("dragTarget", { target: moveView.targetCategory ?? t("inboxName") })
+                : t("dragTargetUnavailable", { target: moveView.targetCategory ?? t("inboxName") })
+            : bulkPending
+              ? t("bulkTrashPending", { count: selected.size })
+              : ""}
       </div>
+      {moveNotice ? (
+        <div
+          role={moveNotice.tone === "error" ? "alert" : "status"}
+          className={`mx-2 mt-2 flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-xs leading-5 ${
+            moveNotice.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : moveNotice.tone === "warning"
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+        >
+          <span className="min-w-0 flex-1">{moveNotice.message}</span>
+          {moveNotice.undo ? (
+            <button
+              type="button"
+              disabled={interactionPending}
+              onClick={() => requestPageMoveUndo(moveNotice.undo!.receipts)}
+              className="shrink-0 rounded-md border border-current/20 bg-white/70 px-2 py-1 font-semibold underline-offset-2 hover:bg-white hover:underline active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {movePending ? t("undoPending") : t("undo")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {bulkNotice ? (
         <div
           role={bulkNotice.tone === "error" ? "alert" : "status"}
@@ -1000,76 +1606,58 @@ export function WikiToc({
         </div>
       ) : null}
 
+      {moveView ? (() => {
+        const rootState = tocDropTargetState(moveView.pages, null);
+        const rootTargeted = moveView.targetCategory === null;
+        return (
+          <div className="mx-2 mt-3 shrink-0">
+            <button
+              type="button"
+              tabIndex={-1}
+              data-toc-drop-category=""
+              aria-disabled={rootState !== "valid"}
+              className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition-[background-color,border-color,color,box-shadow] motion-reduce:transition-none ${
+                rootTargeted && rootState === "valid"
+                  ? "border-indigo-300 bg-indigo-100 text-indigo-900 ring-2 ring-indigo-400 ring-offset-1"
+                  : rootTargeted
+                    ? "border-stone-200 bg-stone-100 text-stone-400"
+                    : "border-dashed border-indigo-200 bg-indigo-50/60 text-indigo-700"
+              }`}
+            >
+              <span aria-hidden="true">↥</span>
+              <span>{t("moveToInboxDrop")}</span>
+            </button>
+          </div>
+        );
+      })() : null}
+
       <nav ref={navRef} className="flex-1 overflow-x-hidden overflow-y-auto px-2 py-3">
         {/* 고정 문서와 안정적인 사용자용 목차. 최근 기록은 헤더 팝오버에 격리한다. */}
         {pinned.length > 0 && (
           <div className="mb-3">
             <div className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-stone-400">{t("pinnedHeading")}</div>
             <ul className="space-y-0.5">
-              {pinned.map((p) => {
-                if (p.type === "folder") {
-                  const folderName = p.category.split("/").pop() ?? p.category;
-                  return (
-                    <li key={`f:${p.category}`}>
-                      <Tooltip label={folderName}>
-                        {selectionMode ? (
-                          <div className="flex min-h-8 items-center gap-1 rounded-md px-2 text-sm text-stone-400" aria-disabled="true">
-                            <span className="shrink-0">📁</span>
-                            <span className="min-w-0 flex-1 truncate">{folderName}</span>
-                          </div>
-                        ) : (
-                          <Link
-                            href={`/wikis/${slug}/category/${p.category.split("/").map(encodeURIComponent).join("/")}`}
-                            className={`flex items-center gap-1 ${linkCls(false)}`}
-                            style={{ paddingLeft: 20 }}
-                          >
-                            <span className="shrink-0 text-stone-400">📁</span>
-                            <span className="min-w-0 flex-1 truncate">{folderName}</span>
-                          </Link>
-                        )}
-                      </Tooltip>
-                    </li>
-                  );
-                }
-                const canonical = pageBySlug.get(p.slug);
-                const pinnedSelected = selected.has(p.slug);
+              {pinned.map((item) => {
+                const canonical = item.type === "page" ? pageBySlug.get(item.slug) : undefined;
+                const itemSelected = item.type === "page" && selected.has(item.slug);
                 return (
-                  <li
-                    key={`p:${p.slug}`}
-                    className={selectionMode && pinnedSelected ? "rounded-md bg-indigo-50" : undefined}
-                  >
-                    <Tooltip label={p.title}>
-                      {selectionMode && canonical?.trashable ? (
-                        <div className="flex min-h-8 items-center gap-1.5 rounded-md px-1">
-                          <SelectionCheckbox
-                            checked={pinnedSelected}
-                            label={t("selectPage", { title: p.title })}
-                            disabled={bulkPending}
-                            onClick={(event) => toggleSelectedPage(p.slug, event.shiftKey, false)}
-                          />
-                          <button
-                            type="button"
-                            disabled={bulkPending}
-                            onClick={(event) => toggleSelectedPage(p.slug, event.shiftKey, false)}
-                            className="min-w-0 flex-1 rounded px-1 py-1 text-left text-sm text-stone-700 hover:bg-indigo-100 active:bg-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed"
-                          >
-                            <span className="mr-1 text-amber-500" aria-hidden="true">★</span>
-                            <span className="line-clamp-2 md:inline md:truncate">{p.title}</span>
-                          </button>
-                        </div>
-                      ) : selectionMode ? (
-                        <div className="flex min-h-8 items-center gap-1 rounded-md px-2 text-sm text-stone-400" aria-disabled="true">
-                          <span className="shrink-0 text-amber-400">★</span>
-                          <span className="min-w-0 flex-1 line-clamp-2 md:block md:truncate">{p.title}</span>
-                        </div>
-                      ) : (
-                        <Link href={`/wikis/${slug}/${p.slug}`} className={`flex items-center gap-1 ${linkCls(p.slug === current)}`} style={{ paddingLeft: 20 }}>
-                          <span className="shrink-0 text-amber-500">★</span>
-                          <span className="min-w-0 flex-1 whitespace-normal line-clamp-2 md:block md:truncate">{p.title}</span>
-                        </Link>
-                      )}
-                    </Tooltip>
-                  </li>
+                  <PinnedTocEntry
+                    key={item.type === "folder" ? `f:${item.category}` : `p:${item.slug}`}
+                    item={item}
+                    slug={slug}
+                    current={current}
+                    selectionMode={selectionMode}
+                    selected={itemSelected}
+                    canonical={canonical}
+                    pending={interactionPending}
+                    canWrite={canWrite}
+                    move={moveController}
+                    moveView={moveView}
+                    selectLabel={item.type === "page" ? t("selectPage", { title: item.title }) : ""}
+                    onToggle={(shiftKey) => {
+                      if (item.type === "page") toggleSelectedPage(item.slug, shiftKey, false);
+                    }}
+                  />
                 );
               })}
             </ul>
@@ -1085,16 +1673,17 @@ export function WikiToc({
             {primarySections.map((s) => {
               const newKind = canWrite ? SECTION_NEW_KIND[s.key] : undefined;
               const sectionLabel = t(`section.${s.key}`);
-              const sectionSlugs = selectableSlugsInEntries(s.entries);
+              const sectionSlugs = selectableSlugsInEntries(s.entries, "either");
               const sectionSelection = tocGroupSelectionState(selected, sectionSlugs);
               const ctx: NodeCtx = {
                 slug,
                 current,
                 newKind,
-                movable: canWrite && s.key === "personal",
+                canMove: canWrite,
                 canTrash: canWrite,
                 newInFolderLabel: (name) => t("newKindInFolder", { kind: t(`newKind.${s.key}`), name }),
                 selection: selectionView,
+                move: moveController,
               };
               return (
                 <div key={s.key} className="group/section">
@@ -1104,7 +1693,7 @@ export function WikiToc({
                         checked={sectionSelection.checked}
                         mixed={sectionSelection.mixed}
                         label={selectionView.groupLabel(sectionLabel, sectionSlugs.length)}
-                        disabled={sectionSlugs.length === 0 || bulkPending}
+                        disabled={sectionSlugs.length === 0 || interactionPending}
                         onClick={() => toggleSelectedGroup(sectionSlugs, !sectionSelection.checked)}
                       />
                     ) : null}
@@ -1152,10 +1741,11 @@ export function WikiToc({
                   slug,
                   current,
                   newKind: canWrite ? SECTION_NEW_KIND.personal : undefined,
-                  movable: canWrite,
+                  canMove: canWrite,
                   canTrash: canWrite,
                   newInFolderLabel: (name) => t("newKindInFolder", { kind: t("newKind.personal"), name }),
                   selection: selectionView,
+                  move: moveController,
                 }}
                 onTogglePage={toggleSelectedPage}
                 onToggleGroup={toggleSelectedGroup}
@@ -1193,7 +1783,7 @@ export function WikiToc({
           <div className="mt-2 grid grid-cols-2 gap-1.5">
             <button
               type="button"
-              disabled={bulkPending || selectablePages.length === 0}
+              disabled={interactionPending || selectablePages.length === 0}
               onClick={() =>
                 toggleSelectedGroup(
                   selectablePages.map((page) => page.slug),
@@ -1206,7 +1796,7 @@ export function WikiToc({
             </button>
             <button
               type="button"
-              disabled={bulkPending || selected.size === 0}
+              disabled={interactionPending || selected.size === 0}
               onClick={() => {
                 setStoredSelected(new Set());
                 setSelectionAnchor(null);
@@ -1218,7 +1808,15 @@ export function WikiToc({
           </div>
           <button
             type="button"
-            disabled={bulkPending || selected.size === 0}
+            disabled={interactionPending || !selectedCanMove}
+            onClick={() => setMovePickerOpen(true)}
+            className="mt-2 flex w-full items-center justify-center rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm font-semibold text-indigo-700 transition-colors motion-reduce:transition-none hover:border-indigo-300 hover:bg-indigo-100 active:bg-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {movePending ? t("movePending", { count: selected.size }) : t("bulkMoveButton", { count: selected.size })}
+          </button>
+          <button
+            type="button"
+            disabled={interactionPending || !selectedCanTrash}
             onClick={requestBulkTrash}
             className="mt-2 flex w-full items-center justify-center rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition-colors motion-reduce:transition-none hover:border-rose-300 hover:bg-rose-100 active:bg-rose-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-not-allowed disabled:opacity-45"
           >
@@ -1427,6 +2025,54 @@ export function WikiToc({
         />
       </div>
       </aside>
+      <Modal open={movePickerOpen} onClose={closeMovePicker} title={t("movePickerTitle", { count: selected.size })}>
+        <p className="mb-3 text-sm leading-6 text-stone-500">{t("movePickerDescription")}</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {categoryTargets.map((category, index) => {
+            const targetState = tocDropTargetState(selectedPages, category);
+            const disabled = interactionPending || targetState !== "valid";
+            return (
+              <button
+                key={category ?? "__root__"}
+                type="button"
+                data-autofocus={index === 0 && !disabled ? true : undefined}
+                disabled={disabled}
+                onClick={() => requestPageMove(
+                  selectedPages.map((page) => ({ slug: page.slug, expectedVersion: page.currentVersion })),
+                  category,
+                )}
+                className={`flex min-h-12 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-[background-color,border-color,color,transform] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                  targetState === "valid"
+                    ? "border-stone-200 bg-white text-stone-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-800 active:translate-y-px active:bg-indigo-100"
+                    : "cursor-not-allowed border-stone-100 bg-stone-50 text-stone-400"
+                }`}
+              >
+                <span aria-hidden="true" className="shrink-0 text-stone-400">{category ? "▸" : "↥"}</span>
+                <span className="min-w-0 flex-1 truncate">{category ?? t("inboxName")}</span>
+                {targetState === "current" ? <span className="text-[10px] font-medium">{t("currentFolder")}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      </Modal>
+      {moveView ? (
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none fixed z-[60] flex max-w-64 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold shadow-xl backdrop-blur-sm ${
+            moveView.targetState === "valid"
+              ? "border-indigo-300 bg-indigo-600/95 text-white ring-2 ring-indigo-200"
+              : "border-stone-300 bg-stone-100/95 text-stone-500"
+          }`}
+          style={{ left: moveView.clientX + 14, top: moveView.clientY + 14 }}
+        >
+          <span className="truncate">
+            {moveView.pages.length === 1 ? moveView.pages[0].title : t("dragPreviewCount", { count: moveView.pages.length })}
+          </span>
+          {moveView.pages.length > 1 ? (
+            <span className="rounded-full bg-white/20 px-1.5 py-0.5 font-mono text-[10px] tabular-nums">{moveView.pages.length}</span>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }

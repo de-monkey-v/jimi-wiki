@@ -4,7 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/session";
 import { getWikiForUser, getWikiToc, isFolderPinned } from "@/lib/wiki";
-import { isPageTrashEligible } from "@/lib/kinds";
+import { isPageMoveEligible, isPageTrashEligible } from "@/lib/kinds";
 import { categoryTocSlugOrder, resolveFolderSortMode, sortFolderSubtreePages } from "@/lib/folder-sort";
 import { listFolderSortPreferences } from "@/lib/folder-sort.server";
 import { CategoryBreadcrumb } from "@/components/CategoryBreadcrumb";
@@ -94,7 +94,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             title: p.title,
             categoryLabel: p.category && p.category !== prefix ? p.category : null,
             kindLabel: tk(p.kind),
-            movable: canWrite && p.kind === "personal",
+            movable: canWrite && isPageMoveEligible(p),
             canTrash: canWrite && isPageTrashEligible(p),
             currentCategory: p.category,
             currentVersion: p.currentVersion,

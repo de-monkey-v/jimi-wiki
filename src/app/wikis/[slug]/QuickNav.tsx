@@ -1,16 +1,26 @@
 "use client";
-import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Modal } from "@/components/Modal";
-import { quickCaptureAction, movePageAction } from "@/app/wikis/actions";
+import {
+  movePageFromPickerAction,
+  quickCaptureAction,
+  restorePageCategoriesAction,
+} from "@/app/wikis/actions";
 import { quickNavSearchAction, type QuickNavSearchItem } from "./quick-nav-actions";
+import type { PageCategoryMoveReceipt } from "@/lib/page-category-move";
 
 type Ctx = {
   openSwitcher: (initialQuery?: string) => void;
   openCapture: (initialBody?: string) => void;
   openMove: (pageSlug: string, currentCategory: string | null, currentVersion: number) => void;
+};
+type QuickMoveNotice = {
+  tone: "success" | "warning" | "error";
+  message: string;
+  undo?: { receipts: PageCategoryMoveReceipt[]; expiresAt: number };
 };
 const QuickNavCtx = createContext<Ctx | null>(null);
 /** 위키 레이아웃 안 어디서든 빠른 이동/캡처/이동 모달을 여는 훅. Provider 밖에서는 null. */
@@ -33,6 +43,7 @@ export function QuickNavProvider({
   children: React.ReactNode;
 }) {
   const t = useTranslations("WikiQuickNav");
+  const tMove = useTranslations("WikiToc");
   const td = useTranslations("DocumentTypes");
   const tk = useTranslations("Kinds");
   const router = useRouter();
@@ -45,6 +56,10 @@ export function QuickNavProvider({
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureInitial, setCaptureInitial] = useState(""); // 선택 툴바 등에서 넘어온 프리필 본문
   const [move, setMove] = useState<{ pageSlug: string; category: string; currentVersion: number } | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const [movePending, startMoveTransition] = useTransition();
+  const [moveNotice, setMoveNotice] = useState<QuickMoveNotice | null>(null);
+  const moveNoticeStorageKey = `jimi:page-category-move-undo:${slug}`;
 
   // 빈 질의는 Page 목록, 입력 중엔 서버 local FTS 결과(Page+Source).
   const [results, setResults] = useState<QuickNavSearchItem[]>([]);
@@ -67,8 +82,15 @@ export function QuickNavProvider({
     setCaptureOpen(true);
   }, []);
   const openMove = useCallback((pageSlug: string, currentCategory: string | null, currentVersion: number) => {
+    setMoveError(null);
+    setMoveNotice(null);
+    try {
+      sessionStorage.removeItem(`jimi:page-category-move-undo:${slug}`);
+    } catch {
+      // 저장소가 차단돼도 단건 이동 자체는 계속 동작한다.
+    }
     setMove({ pageSlug, category: currentCategory ?? "", currentVersion });
-  }, []);
+  }, [slug]);
 
   const ctx = useMemo<Ctx>(() => ({ openSwitcher, openCapture, openMove }), [openSwitcher, openCapture, openMove]);
 
@@ -154,6 +176,147 @@ export function QuickNavProvider({
     : error
       ? t("switcherError")
       : t("switcherResultCount", { count: results.length });
+
+  const persistMoveNotice = (notice: QuickMoveNotice | null) => {
+    try {
+      if (notice?.undo) sessionStorage.setItem(moveNoticeStorageKey, JSON.stringify(notice));
+      else sessionStorage.removeItem(moveNoticeStorageKey);
+    } catch {
+      // sessionStorage가 차단되면 현재 mount 안에서만 Undo를 제공한다.
+    }
+  };
+
+  const requestSingleMove = (form: HTMLFormElement) => {
+    if (!move || movePending) return;
+    const request = { ...move };
+    const category = String(new FormData(form).get("category") ?? "");
+    setMoveError(null);
+    startMoveTransition(async () => {
+      try {
+        const result = await movePageFromPickerAction(
+          slug,
+          request.pageSlug,
+          request.currentVersion,
+          category,
+        );
+        if (result.status === "error") {
+          const message = result.code === "versionConflict"
+            ? tMove("moveConflict")
+            : result.code === "uncertain"
+              ? tMove("moveUncertain")
+              : tMove("moveFailed");
+          setMoveError(message);
+          if (result.actualVersion) {
+            setMove((current) => current?.pageSlug === request.pageSlug
+              ? { ...current, currentVersion: result.actualVersion! }
+              : current);
+          }
+          router.refresh();
+          return;
+        }
+        setMove(null);
+        const notice: QuickMoveNotice = {
+          tone: result.refreshRequired ? "warning" : "success",
+          message: result.refreshRequired
+            ? tMove("moveCleanupPending", { count: result.moved.length })
+            : tMove("moveSuccess", { count: result.moved.length }),
+          ...(result.moved.length > 0
+            ? { undo: { receipts: result.moved, expiresAt: Date.now() + 10_000 } }
+            : {}),
+        };
+        setMoveNotice(notice);
+        persistMoveNotice(notice);
+        router.refresh();
+      } catch {
+        setMoveError(tMove("moveUncertain"));
+        router.refresh();
+      }
+    });
+  };
+
+  const requestSingleMoveUndo = (receipts: readonly PageCategoryMoveReceipt[]) => {
+    if (movePending || receipts.length === 0) return;
+    persistMoveNotice(null);
+    startMoveTransition(async () => {
+      try {
+        const result = await restorePageCategoriesAction(
+          slug,
+          receipts.map((item) => ({
+            slug: item.slug,
+            expectedVersion: item.newVersion,
+            originalCategory: item.originalCategory,
+          })),
+          receipts[0]?.slug ?? null,
+        );
+        if (result.status === "error") {
+          setMoveNotice({
+            tone: "error",
+            message: result.code === "versionConflict" || result.code === "invalidUndo"
+              ? tMove("undoConflict")
+              : tMove("moveUncertain"),
+          });
+          router.refresh();
+          return;
+        }
+        setMoveNotice({
+          tone: result.refreshRequired ? "warning" : "success",
+          message: result.refreshRequired ? tMove("undoCleanupPending") : tMove("undoSuccess"),
+        });
+        router.refresh();
+      } catch {
+        setMoveNotice({ tone: "error", message: tMove("moveUncertain") });
+        router.refresh();
+      }
+    });
+  };
+
+  useEffect(() => {
+    let restoredNotice: QuickMoveNotice | null = null;
+    try {
+      const raw = sessionStorage.getItem(moveNoticeStorageKey);
+      if (!raw) return;
+      const restored = JSON.parse(raw) as Partial<QuickMoveNotice>;
+      const undo = restored.undo;
+      if (
+        (restored.tone !== "success" && restored.tone !== "warning") ||
+        typeof restored.message !== "string" ||
+        !undo ||
+        !Array.isArray(undo.receipts) ||
+        !Number.isFinite(undo.expiresAt) ||
+        undo.expiresAt <= Date.now()
+      ) {
+        sessionStorage.removeItem(moveNoticeStorageKey);
+        return;
+      }
+      restoredNotice = restored as QuickMoveNotice;
+    } catch {
+      try {
+        sessionStorage.removeItem(moveNoticeStorageKey);
+      } catch {
+        // 차단된 저장소는 무시한다.
+      }
+    }
+    if (!restoredNotice) return;
+    const frame = window.requestAnimationFrame(() => setMoveNotice(restoredNotice));
+    return () => window.cancelAnimationFrame(frame);
+  }, [moveNoticeStorageKey]);
+
+  useEffect(() => {
+    const undo = moveNotice?.undo;
+    if (!undo) return;
+    const timer = window.setTimeout(() => {
+      setMoveNotice((notice) => notice?.undo?.expiresAt === undo.expiresAt ? null : notice);
+      try {
+        const stored = sessionStorage.getItem(moveNoticeStorageKey);
+        if ((JSON.parse(stored ?? "null") as QuickMoveNotice | null)?.undo?.expiresAt === undo.expiresAt) {
+          sessionStorage.removeItem(moveNoticeStorageKey);
+        }
+      } catch {
+        // 만료 정리 실패는 Undo 서버 검증에 영향을 주지 않는다.
+      }
+    }, Math.max(0, undo.expiresAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [moveNotice?.undo, moveNoticeStorageKey]);
 
   return (
     <QuickNavCtx.Provider value={ctx}>
@@ -301,28 +464,67 @@ export function QuickNavProvider({
 
       {/* 폴더로 이동(refile) */}
       {canWrite && move && (
-        <Modal open onClose={() => setMove(null)} title={t("moveTitle")}>
-          <form action={movePageAction} onSubmit={() => setMove(null)}>
-            <input type="hidden" name="wikiSlug" value={slug} />
-            <input type="hidden" name="pageSlug" value={move.pageSlug} />
-            <input type="hidden" name="expectedVersion" value={move.currentVersion} />
+        <Modal open onClose={() => { if (!movePending) setMove(null); }} title={t("moveTitle")}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              requestSingleMove(event.currentTarget);
+            }}
+          >
             <label htmlFor="quick-nav-move-category" className="mb-1 block text-sm text-stone-600">{t("moveLabel")}</label>
             <input
               id="quick-nav-move-category"
               name="category"
               defaultValue={move.category}
+              disabled={movePending}
+              aria-describedby={moveError ? "quick-nav-move-error" : undefined}
               placeholder={t("movePlaceholder")}
-              className="field-control text-sm"
+              autoComplete="off"
+              spellCheck={false}
+              className="field-control text-sm disabled:cursor-not-allowed disabled:opacity-60"
             />
+            {moveError ? (
+              <p id="quick-nav-move-error" role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-5 text-rose-700">
+                {moveError}
+              </p>
+            ) : null}
             <div className="mt-2 flex items-center justify-between">
               <span className="text-[11px] text-stone-400">{t("moveToInboxHint")}</span>
-              <button type="submit" className="btn-primary text-sm">
-                {t("moveSubmit")}
+              <button type="submit" disabled={movePending} className="btn-primary text-sm disabled:cursor-not-allowed disabled:opacity-55">
+                {movePending ? tMove("movePending", { count: 1 }) : t("moveSubmit")}
               </button>
             </div>
+            <span role="status" aria-live="polite" className="sr-only">
+              {movePending ? tMove("movePending", { count: 1 }) : ""}
+            </span>
           </form>
         </Modal>
       )}
+
+      {moveNotice ? (
+        <div
+          role={moveNotice.tone === "error" ? "alert" : "status"}
+          className={`fixed bottom-3 left-3 right-3 z-[70] mx-auto flex max-w-xl items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-sm leading-5 shadow-xl sm:left-1/2 sm:right-auto sm:w-[min(36rem,calc(100vw-2rem))] sm:-translate-x-1/2 ${
+            moveNotice.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : moveNotice.tone === "warning"
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+        >
+          <span className="min-w-0 flex-1">{moveNotice.message}</span>
+          {moveNotice.undo ? (
+            <button
+              type="button"
+              disabled={movePending}
+              onClick={() => requestSingleMoveUndo(moveNotice.undo!.receipts)}
+              className="shrink-0 rounded-md border border-current/20 bg-white/70 px-2.5 py-1.5 font-semibold hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {movePending ? tMove("undoPending") : tMove("undo")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </QuickNavCtx.Provider>
   );
 }

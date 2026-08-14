@@ -1,6 +1,9 @@
 import type { TocEntry, TocLeaf, TocSection } from "@/lib/kinds";
 
-export type TocSelectionPage = Pick<TocLeaf, "slug" | "title" | "currentVersion" | "trashable">;
+export type TocSelectionPage = Pick<
+  TocLeaf,
+  "slug" | "title" | "category" | "currentVersion" | "movable" | "trashable"
+>;
 
 /** 목차의 canonical 순서로 페이지를 평탄화한다. 고정 항목 같은 alias는 이 목록에 섞지 않는다. */
 export function flattenTocPages(sections: readonly TocSection[]): TocSelectionPage[] {
@@ -15,13 +18,20 @@ export function flattenTocPages(sections: readonly TocSection[]): TocSelectionPa
   return pages;
 }
 
-/** 접혀 있어도 폴더 명시 선택에는 모든 자손이 포함된다. 삭제 불가 leaf는 제외한다. */
-export function selectableSlugsInEntries(entries: readonly TocEntry[]): string[] {
+/** 접혀 있어도 폴더 명시 선택에는 모든 자손이 포함된다. 작업별 eligibility를 섞지 않는다. */
+export function selectableSlugsInEntries(
+  entries: readonly TocEntry[],
+  eligibility: "trash" | "move" | "either" = "trash",
+): string[] {
   const slugs: string[] = [];
   const walk = (nodes: readonly TocEntry[]) => {
     for (const node of nodes) {
       if (node.type === "page") {
-        if (node.trashable) slugs.push(node.slug);
+        if (
+          (eligibility === "trash" && node.trashable) ||
+          (eligibility === "move" && node.movable) ||
+          (eligibility === "either" && (node.trashable || node.movable))
+        ) slugs.push(node.slug);
       } else {
         walk(node.children);
       }

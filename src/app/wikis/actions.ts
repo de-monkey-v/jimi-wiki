@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/session";
-import { createWiki, getWikiForUser, getPage, createPage, updatePage, setPageCategory, listPages } from "@/lib/wiki";
+import { createWiki, getWikiForUser, getPage, createPage, updatePage, listPages } from "@/lib/wiki";
 import { MANUAL_KINDS } from "@/lib/kinds";
 import { hasRole } from "@/lib/api-gate";
 import { createIngestRun, createFileIngestRun, reapStaleRuns } from "@/lib/ingest";
@@ -19,6 +19,14 @@ import { parseDocumentDate, parseDocumentType, writeDocument } from "@/lib/docum
 import { saveSavedLink, trashSavedLink } from "@/lib/saved-links";
 import { saveFolderSortPreference } from "@/lib/folder-sort.server";
 import type { FolderSortSelection } from "@/lib/folder-sort";
+import {
+  PageCategoryMoveError,
+  movePagesToCategory,
+  refreshPageCategoryMoveProjection,
+  restorePageCategories,
+  type PageCategoryMoveErrorCode,
+  type PageCategoryMoveReceipt,
+} from "@/lib/page-category-move";
 
 function formModelAccess(formData: FormData): ModelAccess {
   return String(formData.get("modelAccess") ?? "external") === "internalOnly" ? "internalOnly" : "external";
@@ -246,20 +254,132 @@ export async function toggleFolderPinAction(wikiSlug: string, category: string):
   return true;
 }
 
-/** 페이지를 폴더로 이동(refile). 빈 카테고리면 미분류(Inbox)로. 리다이렉트 없이 revalidate만(모달이 닫힘). */
-export async function movePageAction(formData: FormData) {
-  const userId = await getCurrentUserId();
-  const wikiSlug = String(formData.get("wikiSlug"));
-  const pageSlug = String(formData.get("pageSlug"));
-  if (isReservedSlug(pageSlug)) throw new Error("system page는 이동할 수 없습니다");
-  const wiki = await requireWriteAccess(userId, wikiSlug);
-  const catRaw = String(formData.get("category") ?? "").trim();
-  const category = catRaw ? await normalizeCategoryForWrite(wiki.id, catRaw) : null;
-  const expectedVersion = Number(formData.get("expectedVersion"));
-  if (!Number.isSafeInteger(expectedVersion) || expectedVersion <= 0) throw new Error("유효한 page version이 필요합니다");
-  await setPageCategory(wiki.id, pageSlug, category, expectedVersion, userId);
-  revalidatePath(`/wikis/${wikiSlug}`, "layout"); // 이동(refile) 후 사이드바 폴더 위치 갱신
-  revalidatePath(`/wikis/${wikiSlug}/${pageSlug}`);
+export type PageCategoryMoveActionResult =
+  | { status: "success"; moved: PageCategoryMoveReceipt[]; refreshRequired: boolean }
+  | {
+      status: "error";
+      code: PageCategoryMoveErrorCode | "uncertain";
+      slug?: string;
+      actualVersion?: number;
+    };
+
+async function revalidatePageCategoryMove(
+  wikiSlug: string,
+  currentPageSlug: string | null,
+  wikiId: string,
+  moved: readonly PageCategoryMoveReceipt[],
+): Promise<boolean> {
+  let refreshRequired = false;
+  try {
+    await refreshPageCategoryMoveProjection(wikiId, moved);
+  } catch {
+    refreshRequired = true;
+  }
+  try {
+    const encodedWiki = encodeURIComponent(wikiSlug);
+    revalidatePath(`/wikis/${encodedWiki}`, "layout");
+    if (currentPageSlug && moved.some((item) => item.slug === currentPageSlug)) {
+      revalidatePath(`/wikis/${encodedWiki}/${encodeURIComponent(currentPageSlug)}`);
+    }
+  } catch {
+    refreshRequired = true;
+  }
+  return refreshRequired;
+}
+
+async function categoryMoveWiki(userId: string, wikiSlug: string) {
+  const wiki = await getWikiForUser(userId, wikiSlug);
+  if (!wiki || !hasRole(wiki.role, "editor")) return null;
+  return wiki;
+}
+
+/** DnD/선택 툴바용 원자적 일괄 이동. 알려진 거부는 전 항목 rollback 뒤 구조화해 반환한다. */
+export async function movePagesToCategoryAction(
+  wikiSlug: string,
+  items: unknown,
+  category: unknown,
+  currentPageSlug?: string | null,
+): Promise<PageCategoryMoveActionResult> {
+  try {
+    const userId = await getCurrentUserId();
+    const wiki = await categoryMoveWiki(userId, wikiSlug);
+    if (!wiki) return { status: "error", code: "forbidden" };
+    const result = await movePagesToCategory({ wikiId: wiki.id, userId, items, category });
+    const refreshRequired = await revalidatePageCategoryMove(
+      wikiSlug,
+      typeof currentPageSlug === "string" ? currentPageSlug : null,
+      wiki.id,
+      result.moved,
+    );
+    return { status: "success", moved: result.moved, refreshRequired };
+  } catch (error) {
+    if (error instanceof PageCategoryMoveError) {
+      return { status: "error", code: error.code, slug: error.slug, actualVersion: error.actualVersion };
+    }
+    return { status: "error", code: "uncertain" };
+  }
+}
+
+/** 10초 Undo UI가 전달한 각 원래 category와 이동 후 version을 원자적으로 복원한다. */
+export async function restorePageCategoriesAction(
+  wikiSlug: string,
+  items: unknown,
+  currentPageSlug?: string | null,
+): Promise<PageCategoryMoveActionResult> {
+  try {
+    const userId = await getCurrentUserId();
+    const wiki = await categoryMoveWiki(userId, wikiSlug);
+    if (!wiki) return { status: "error", code: "forbidden" };
+    const result = await restorePageCategories({ wikiId: wiki.id, userId, items });
+    const refreshRequired = await revalidatePageCategoryMove(
+      wikiSlug,
+      typeof currentPageSlug === "string" ? currentPageSlug : null,
+      wiki.id,
+      result.moved,
+    );
+    return { status: "success", moved: result.moved, refreshRequired };
+  } catch (error) {
+    if (error instanceof PageCategoryMoveError) {
+      return { status: "error", code: error.code, slug: error.slug, actualVersion: error.actualVersion };
+    }
+    return { status: "error", code: "uncertain" };
+  }
+}
+
+/** 단건 메뉴/키보드 모달용 구조화 Action. 이 경로만 새 category 경로 생성을 허용한다. */
+export async function movePageFromPickerAction(
+  wikiSlug: string,
+  pageSlug: string,
+  expectedVersion: unknown,
+  rawCategory: unknown,
+): Promise<PageCategoryMoveActionResult> {
+  try {
+    const userId = await getCurrentUserId();
+    const wiki = await categoryMoveWiki(userId, wikiSlug);
+    if (!wiki) return { status: "error", code: "forbidden" };
+    if (typeof rawCategory !== "string") return { status: "error", code: "invalidInput" };
+    const categoryText = rawCategory.trim();
+    const category = categoryText ? await normalizeCategoryForWrite(wiki.id, categoryText) : null;
+    const result = await movePagesToCategory({
+      wikiId: wiki.id,
+      userId,
+      items: [{ slug: pageSlug, expectedVersion }],
+      category,
+      allowNewCategory: true,
+    });
+    const refreshRequired = await revalidatePageCategoryMove(
+      wikiSlug,
+      pageSlug,
+      wiki.id,
+      result.moved,
+    );
+    return { status: "success", moved: result.moved, refreshRequired };
+  } catch (error) {
+    if (error instanceof PageCategoryMoveError) {
+      return { status: "error", code: error.code, slug: error.slug, actualVersion: error.actualVersion };
+    }
+    return { status: "error", code: "uncertain" };
+  }
 }
 
 /** 핀 토글(개인 즐겨찾기). editor 아니라 멤버면 누구나 — 자기 사이드바 정리용. 반환: 토글 후 고정 상태. */

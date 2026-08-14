@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/releases/jimi-wiki/current
+WorkingDirectory=%h/.local/share/jimi-wiki/current
 EnvironmentFile=%h/.config/jimi-wiki/app.env
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/node --require ./scripts/server-only-shim.cjs --import tsx ./scripts/worker.ts

@@ -623,7 +623,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--phase", required=True, choices=("current", "prepared", "promoted", "built", "active"))
     result.add_argument("--tag", help="target annotated version tag (required except for current)")
     result.add_argument("--repo", default=".", help="repository checkout (default: current directory)")
-    result.add_argument("--state-dir", default=str(Path.home() / "releases" / "jimi-wiki"))
+    result.add_argument(
+        "--state-dir",
+        default=os.environ.get("JIMI_STATE_DIR") or str(Path.home() / ".local" / "share" / "jimi-wiki"),
+    )
     result.add_argument("--previous-snapshot", type=Path, help="JSON emitted by --phase current --json")
     result.add_argument(
         "--attestation-key",

@@ -4,7 +4,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 config_dir="$HOME/.config/jimi-wiki"
 user_units="$HOME/.config/systemd/user"
-state_dir="${JIMI_STATE_DIR:-$HOME/releases/jimi-wiki}"
+state_dir="${JIMI_STATE_DIR:-$HOME/.local/share/jimi-wiki}"
 start_timers="${JIMI_START_TIMERS:-1}"
 [[ "$start_timers" == "0" || "$start_timers" == "1" ]] \
   || { echo "JIMI_START_TIMERS must be 0 or 1" >&2; exit 2; }

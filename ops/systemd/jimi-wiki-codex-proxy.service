@@ -6,7 +6,7 @@ ConditionPathExists=%h/.codex/auth.json
 
 [Service]
 Type=simple
-WorkingDirectory=%h/releases/jimi-wiki/current/ops/codex-proxy
+WorkingDirectory=%h/.local/share/jimi-wiki/current/ops/codex-proxy
 ExecStart=/usr/bin/node ./node_modules/openai-oauth/dist/cli.js --host 127.0.0.1 --port 10531 --oauth-file %h/.codex/auth.json
 Restart=always
 RestartSec=5

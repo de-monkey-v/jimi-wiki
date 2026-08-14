@@ -3,9 +3,9 @@ Description=Verify latest Jimi Wiki backup by real PostgreSQL restore
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/releases/jimi-wiki/current
-Environment=JIMI_STATE_DIR=%h/releases/jimi-wiki
-ExecStart=%h/releases/jimi-wiki/current/ops/restore-verify.sh
+WorkingDirectory=%h/.local/share/jimi-wiki/current
+Environment=JIMI_STATE_DIR=%h/.local/share/jimi-wiki
+ExecStart=%h/.local/share/jimi-wiki/current/ops/restore-verify.sh
 TimeoutStartSec=3h
 UMask=0077
 StandardOutput=journal

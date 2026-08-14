@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-state_dir="${JIMI_STATE_DIR:-$HOME/releases/jimi-wiki}"
+state_dir="${JIMI_STATE_DIR:-$HOME/.local/share/jimi-wiki}"
 env_file="${JIMI_ENV_FILE:-$HOME/.config/jimi-wiki/app.env}"
 passphrase_file="${JIMI_BACKUP_PASSPHRASE_FILE:-$HOME/.config/jimi-wiki/backup-passphrase}"
 local_dir="$state_dir/backups"

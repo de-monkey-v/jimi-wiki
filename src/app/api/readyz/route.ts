@@ -4,6 +4,7 @@ import { geminiEnabled } from "@/lib/gemini";
 import { embeddingReadiness } from "@/lib/embedding";
 import { authMode } from "@/lib/auth-mode";
 import { tailscaleConfigProblems } from "@/lib/tailscale-auth-core";
+import { releaseSha } from "@/lib/release-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export async function GET() {
     await prisma.$queryRaw`SELECT 1`;
   } catch (e) {
     return NextResponse.json(
-      { ok: false, db: false, missing, error: (e as Error).message },
+      { ok: false, db: false, release: releaseSha(), missing, error: (e as Error).message },
       { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -29,7 +30,7 @@ export async function GET() {
   const embedding = await embeddingReadiness();
   const ok = missing.length === 0 && embedding.ready;
   return NextResponse.json(
-    { ok, db: true, gemini: geminiEnabled(), embedding, missing },
+    { ok, db: true, release: releaseSha(), gemini: geminiEnabled(), embedding, missing },
     { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } },
   );
 }

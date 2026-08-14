@@ -141,7 +141,7 @@ printf '%s\n' "$build_output"
 release="$(printf '%s\n' "$build_output" | tail -n 1)"
 python3 "$skill_dir/scripts/release_status.py" --phase built --tag "$tag"
 target_sha="$(git rev-parse "$tag^{commit}")"
-expected_release="${JIMI_STATE_DIR:-$HOME/releases/jimi-wiki}/releases/$target_sha"
+expected_release="${JIMI_STATE_DIR:-$HOME/.local/share/jimi-wiki}/releases/$target_sha"
 [[ "$(readlink -f "$release")" == "$(readlink -f "$expected_release")" ]] || {
   echo "build returned an unexpected release path: $release" >&2
   exit 1
@@ -152,7 +152,7 @@ release="$(readlink -f "$release")"
 Never build a branch, bare SHA, dirty tree, or an unpushed tag. Do not set
 `JIMI_SKIP_REMOTE_CHECK=1` in routine work. `built` must verify `.jimi-release`,
 `.jimi-tag`, the Next build, and the pinned Codex proxy artifact under the exact
-`~/releases/jimi-wiki/releases/<sha>` directory.
+`~/.local/share/jimi-wiki/releases/<sha>` directory.
 
 Do not rerun first-install actions (`ops/prepare-env.sh`, account reset, blob
 copy, password rotation, or initial Tailscale setup) during an ordinary release

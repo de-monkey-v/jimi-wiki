@@ -9,7 +9,7 @@ usage() {
 
 command_name="${1:-}"
 argument="${2:-}"
-state_dir="${JIMI_STATE_DIR:-$HOME/releases/jimi-wiki}"
+state_dir="${JIMI_STATE_DIR:-$HOME/.local/share/jimi-wiki}"
 releases_dir="$state_dir/releases"
 current_link="$state_dir/current"
 previous_link="$state_dir/previous"
@@ -167,7 +167,27 @@ prune_releases() {
 
 # 재시작이 실제로 떴는지 확인한다. 전체 health-check.sh는 funnel·키 만료처럼 이 릴리스와
 # 무관한 항목까지 보므로 게이트로 쓰면 멀쩡한 배포가 남의 사정으로 롤백된다.
+#
+# 인자로 기대 릴리스 sha를 주면 200만으로는 ready로 인정하지 않는다. 포트에서 200이 온다는
+# 것은 "무언가 살아 있다"일 뿐이라, 재시작이 실패해 옛 릴리스가 계속 응답하는 경우와
+# 구분되지 않는다 — 그때 배포는 아무것도 바꾸지 못한 채 "성공"으로 보고된다.
+# /api/readyz가 자기 릴리스 디렉터리의 .jimi-release를 그대로 돌려주므로, 그 값을 기대값과
+# 대조해야 비로소 "이 릴리스가 서비스 중"이 확인된다. 인자가 없으면 예전처럼 도달성만 본다.
 wait_ready() {
+  # 신원 대조 여부는 "인자를 줬는가"로 정한다. "인자가 비지 않았는가"로 정하면 빈 값이
+  # 흘러들었을 때 게이트가 조용히 도달성 검사로 되돌아간다 — 이 변경이 없애려는 실패
+  # 유형 그대로다. 호출부가 검증을 빠뜨려도 빈 기대값은 어떤 응답과도 일치하지 않아
+  # 타임아웃 뒤 롤백된다(fail-closed).
+  local check_identity=0
+  (( $# > 0 )) && check_identity=1
+  local expected_sha="${1:-}"
+  # 빈 기대값으로는 대조할 수 없다. 그대로 두면 파싱 불가 응답의 served 도 빈 문자열이라
+  # 빈 값끼리 일치해 ready 가 된다 — 게이트를 켜달라고 부른 호출이 오히려 게이트를 끄는
+  # 셈이다. 요청받은 검사를 수행할 수 없으면 통과시키지 말고 즉시 실패한다.
+  if (( check_identity == 1 )) && [[ -z "$expected_sha" ]]; then
+    echo "wait_ready: identity check requested with an empty expected sha" >&2
+    return 1
+  fi
   local timeout="${JIMI_READY_TIMEOUT:-120}"
   # 비정수면 산술 확장이 set -u 아래에서 스크립트를 즉시 죽여, 호출부의 "rolling back"
   # 안내조차 나오지 않는다. 복구는 trap이 하더라도 운영자가 원인을 오판한다.
@@ -180,13 +200,36 @@ wait_ready() {
   # codex 프록시는 여기서 보지 않는다. 그것은 pr-review-bot 도 쓰는 공용 인프라라,
   # 그쪽이 아플 때 이 앱의 멀쩡한 배포까지 롤백시킬 이유가 없다. 프록시 상태는
   # ops/health-check.sh 가 계속 감시한다.
+  local body served=""
   # 최소 한 번은 실제로 찔러본다. 조건을 앞에 두면 timeout=0에서 한 번도 확인하지
   # 않고 실패로 단정해 멀쩡한 배포가 항상 롤백된다.
   while :; do
-    if curl --fail --silent --max-time 5 "$web" >/dev/null 2>&1; then
-      return 0
+    # --fail 이므로 200 응답의 본문만 여기 들어온다.
+    if body="$(curl --fail --silent --max-time 5 "$web" 2>/dev/null)"; then
+      if (( check_identity == 0 )); then
+        return 0
+      fi
+      # 파싱 실패(비 JSON, release 필드 없음, node 부재)는 빈 문자열이 되어 불일치로
+      # 취급된다 — 신원을 확인하지 못한 응답을 ready로 인정하면 게이트가 없는 것과 같다.
+      # 문자열이 아닌 release(숫자·객체·배열)는 신원으로 인정하지 않는다. String() 으로
+      # 강제하면 ["<sha>"] 같은 값이 sha 와 같아져 통과한다.
+      served="$(printf '%s' "$body" | /usr/bin/node -e \
+        'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{try{const r=JSON.parse(s).release;process.stdout.write(typeof r==="string"?r:"")}catch{}})' \
+        2>/dev/null || true)"
+      # served 가 비면 신원을 읽지 못한 것이다. 빈 값을 비교에 태우면 "둘 다 비었으니
+      # 일치"라는 결론이 나올 수 있으므로, 읽어낸 신원이 있을 때만 일치를 따진다.
+      if [[ -n "$served" && "$served" == "$expected_sha" ]]; then
+        return 0
+      fi
+      # 불일치라도 바로 실패시키지 않는다. 재시작 직후 옛 프로세스가 잠깐 더 응답하는
+      # 구간이 정상적으로 존재하므로, 새 릴리스로 넘어올 때까지 deadline까지 기다린다.
     fi
-    ((SECONDS < deadline)) || return 1
+    ((SECONDS < deadline)) || {
+      if (( check_identity == 1 )); then
+        echo "readyz is served by '${served:-unknown}', expected '$expected_sha'" >&2
+      fi
+      return 1
+    }
     sleep 2
   done
 }
@@ -265,6 +308,12 @@ case "$command_name" in
     ;;
   activate)
     [[ -n "$argument" && -d "$argument" && -f "$argument/.jimi-release" ]] || usage
+    # 존재만으로는 부족하다. 이 값이 비었거나 깨져 있으면 wait_ready 가 기대 sha 없이 불려
+    # 도달성만 보는 예전 동작으로 조용히 되돌아간다 — 신원 게이트가 스스로 꺼지는 것이다.
+    # 서비스를 멈추고 마이그레이션을 적용하기 **전에** 확인해야 되돌릴 것이 없다.
+    release_sha="$(cat "$argument/.jimi-release")"
+    [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] \
+      || { echo "release identity is missing or malformed in $argument/.jimi-release" >&2; exit 1; }
     state_lock
     [[ -f "$env_file" ]] || { echo "missing production env: $env_file" >&2; exit 1; }
     [[ "$(stat -c %a "$env_file")" == "600" ]] || { echo "production env must be mode 600" >&2; exit 1; }
@@ -343,7 +392,10 @@ case "$command_name" in
     systemctl --user restart jimi-wiki-web.service jimi-wiki-worker.service
     # 여기서 실패하면 stopped/swapped가 아직 1이므로 recover_old가 이전 릴리스를 되살린다.
     # 재시작만 하고 끝내면 "배포 성공"이라고 말한 뒤 서비스가 죽어 있는 상태가 남는다.
-    wait_ready || { echo "release did not become ready in time; rolling back" >&2; exit 1; }
+    # 기대 sha를 넘겨 "포트가 200을 준다"가 아니라 "이 릴리스가 서비스 중"을 게이트로 삼는다.
+    # release_sha는 activate 진입부에서 형식까지 검증됐으므로 여기서 빈 값일 수 없다.
+    wait_ready "$release_sha" \
+      || { echo "release did not become ready in time; rolling back" >&2; exit 1; }
     # Hermes는 MCP child process와 wiki-ingest 스킬을 gateway 시작 때 읽는다. 앱 current만
     # 바꾸면 둘이 이전 릴리스에 남아 도구 선택이 REST/execute_code로 우회할 수 있으므로,
     # 구성된 프로필에 한해 같은 릴리스의 번들을 원자적으로 맞추고 gateway를 재시작한다.

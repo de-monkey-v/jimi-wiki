@@ -62,3 +62,9 @@ next-env.d.ts
 
 # Claude Code 머신 로컬 설정(권한 허용 목록 등). 공유 설정은 .agents/에 둔다.
 /.claude/settings.local.json
+
+# 릴리스 스킬의 python 스크립트를 실행하면 남는 바이트코드 캐시.
+# .agents/skills/*/scripts 는 추적 대상이라 이것들이 그대로 커밋에 딸려 들어간다.
+__pycache__/
+*.py[cod]
+.pytest_cache/

@@ -7,6 +7,11 @@ Type=oneshot
 WorkingDirectory=%h/.local/share/jimi-wiki/current
 EnvironmentFile=%h/.config/jimi-wiki/app.env
 Environment=NODE_ENV=production
+# tailscale 은 Windows 쪽 노드가 이 앱을 서브한다(WSL 의 리눅스 tailscaled 는 쓰지 않는다).
+# 그 CLI 는 %h/.local/bin/tailscale 심링크로만 잡히는데 systemd 기본 PATH 에는 그 디렉터리가
+# 없어 /usr/bin/tailscale(리눅스, 데몬 없음)이 잡힌다. 그러면 서비스가 멀쩡한데도 serve 검사가
+# 매번 실패해 경보 피로가 쌓이고 진짜 장애가 묻힌다. 대화형 셸과 같은 순서로 맞춘다.
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=%h/.local/share/jimi-wiki/current/ops/health-check.sh
 UMask=0077
 StandardOutput=journal

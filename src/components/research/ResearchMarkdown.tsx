@@ -19,6 +19,7 @@ import { remarkWikiLink } from "@/lib/markdown";
 import { ResearchCodePre, type ResearchCodeLabels } from "./ResearchCodeBlock";
 import {
   guardResearchMermaid,
+  normalizeResearchMermaid,
   remarkResearchCallouts,
   remarkResearchCitations,
   remarkResearchHeadingIds,
@@ -76,7 +77,7 @@ export function ResearchMarkdown({
   const [pending, startTransition] = useTransition();
   const root = useRef<HTMLDivElement>(null);
   const existing = useMemo(() => new Set(existingSlugs), [existingSlugs]);
-  const guarded = useMemo(() => guardResearchMermaid(body).body, [body]);
+  const guarded = useMemo(() => normalizeResearchMermaid(guardResearchMermaid(body).body), [body]);
   const codeLabels: ResearchCodeLabels = {
     copy: t("copy"),
     download: t("download"),

@@ -125,6 +125,38 @@ export function guardResearchMermaid(body: string): { body: string; issues: Rese
   return { body: guarded, issues };
 }
 
+function quoteLeadingSlashLabel(label: string): string {
+  return label.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Mermaid에서 노드 라벨 첫 글자의 /는 도형 문법으로 해석된다. 보고서 생성기가 흔히
+ * 쓰는 경로 라벨은 인용해 일반 텍스트로 유지한다. 위험 블록은 guard 이후 text가 되어
+ * 이 단계에 도달하지 않는다.
+ */
+export function normalizeResearchMermaid(body: string): string {
+  const tree = parse(body);
+  const replacements: { start: number; end: number; value: string }[] = [];
+  visit(tree, "code", (node: Code) => {
+    if (node.lang?.toLowerCase() !== "mermaid") return;
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (typeof start !== "number" || typeof end !== "number") return;
+    const valueStart = body.indexOf(node.value, start);
+    if (valueStart < start || valueStart >= end) return;
+    const value = node.value.replace(
+      /(\b[A-Za-z_][\w-]*\s*)\[\s*(\/[^\]\r\n]*)\]/g,
+      (_match, nodeId: string, label: string) => `${nodeId}["${quoteLeadingSlashLabel(label)}"]`,
+    );
+    if (value !== node.value) replacements.push({ start: valueStart, end: valueStart + node.value.length, value });
+  });
+  let normalized = body;
+  for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
+    normalized = `${normalized.slice(0, replacement.start)}${replacement.value}${normalized.slice(replacement.end)}`;
+  }
+  return normalized;
+}
+
 function textContent(node: unknown): string {
   if (!node || typeof node !== "object") return "";
   const value = node as { value?: unknown; children?: unknown[] };

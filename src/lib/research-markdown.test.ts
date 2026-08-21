@@ -4,6 +4,7 @@ import {
   MAX_RESEARCH_MERMAID_BYTES,
   guardResearchMermaid,
   inspectResearchMarkdown,
+  normalizeResearchMermaid,
   safeResearchUrl,
 } from "./research-markdown";
 
@@ -56,6 +57,22 @@ test("Mermaid init/click/개수/UTF-8 크기를 검사하고 위험 블록은 �
     tooMany.mermaidIssues.map((issue) => [issue.code, issue.index]),
     [["research_mermaid_too_many", 13]],
   );
+});
+
+test("Mermaid 경로 라벨의 선행 slash는 일반 텍스트 라벨로 인용한다", () => {
+  const body = [
+    "```mermaid",
+    "flowchart LR",
+    "  C --> F[/workspace / shell]",
+    "  F --> G[regular / label]",
+    "```",
+  ].join("\n");
+  const normalized = normalizeResearchMermaid(guardResearchMermaid(body).body);
+  assert.match(normalized, /F\["\/workspace \/ shell"\]/);
+  assert.match(normalized, /G\[regular \/ label\]/);
+
+  const unsafe = ["```mermaid", "%%{init: { 'theme': 'dark' }}%%", "F[/workspace]", "```"].join("\n");
+  assert.match(normalizeResearchMermaid(guardResearchMermaid(unsafe).body), /```text[\s\S]*F\[\/workspace\]/);
 });
 
 test("research URL 변환은 안전한 프로토콜과 내부 anchor만 허용한다", () => {
